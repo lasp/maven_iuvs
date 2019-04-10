@@ -3,7 +3,7 @@ import spiceypy as spice
 import glob
 import os
 import re
-from iuvs.startup import iuvs_spice_dir
+from .startup import iuvs_spice_dir
 
 mvn_kpath = iuvs_spice_dir+'/mvn/'
 generic_kpath = iuvs_spice_dir+'/generic_kernels/'

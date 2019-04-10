@@ -7,8 +7,9 @@ from matplotlib.colors import LinearSegmentedColormap
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from mpl_toolkits.axes_grid1.colorbar import colorbar
 from matplotlib.collections import PolyCollection
-from iuvs.startup import idl_cmap_directory
+from .startup import idl_cmap_directory
 import warnings
+
 
 def getcmap(no):
     if idl_cmap_directory == '':
