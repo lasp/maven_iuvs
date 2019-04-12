@@ -3,10 +3,12 @@ import spiceypy as spice
 import glob
 import os
 import re
-from .startup import iuvs_spice_dir
+from .paths import spice_dir
 
-mvn_kpath = iuvs_spice_dir+'/mvn/'
-generic_kpath = iuvs_spice_dir+'/generic_kernels/'
+mvn_kpath = os.path.join(spice_dir,'mvn')
+generic_kpath = os.path.join(spice_dir,'generic_kernels')
+ck_path=os.path.join(mvn_kpath,'ck')
+spk_path=os.path.join(mvn_kpath+'spk/')
 
 
 def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
@@ -41,26 +43,26 @@ def furnsh_array(kernel_array):
 
 def load_sc_ck_type(kerntype, load_predicts=False, load_all_longterm=False):
     # Load the long kernels first
-    f = glob.glob(mvn_kpath+'ck/mvn_'+kerntype+'_rel_*.bc')
+    f = glob.glob(os.path.join(ck_path,'mvn_'+kerntype+'_rel_*.bc'))
     lastlong = None
     if len(f) > 0:
         # use the second date in the week
-        long, lastlong = find_latest_kernel(f, 4, getlast=True)
+        longterm_kernels, lastlong = find_latest_kernel(f, 4, getlast=True)
 
     # Now the daily kernels
-    f = glob.glob(mvn_kpath+'ck/mvn_'+kerntype+'_red_*.bc')
+    f = glob.glob(os.path.join(ck_path,'mvn_'+kerntype+'_red_*.bc'))
     lastday = None
     if len(f) > 0:
         day, lastday = find_latest_kernel(f, 3, after=lastlong, getlast=True)
 
     # Finally the "normal" kernels
-    f = glob.glob(mvn_kpath+'ck/mvn_'+kerntype+'_rec_*.bc')
+    f = glob.glob(os.path.join(ck_path,'mvn_'+kerntype+'_rec_*.bc'))
     if len(f) > 0:
         norm = find_latest_kernel(f, 3, after=lastday)
 
     if load_predicts:
         # When we load predictions, they will go here
-        f = glob.glob(mvn_kpath+'ck/mvn_'+kerntype+'_pred_*.bc')
+        f = glob.glob(os.path.join(ckpath,'/mvn_'+kerntype+'_pred_*.bc'))
         if len(f) > 0:
             pred_list = find_latest_kernel(f, 3, after=lastday)
             # use the last day, because normal kernels are irregular.
@@ -69,14 +71,14 @@ def load_sc_ck_type(kerntype, load_predicts=False, load_all_longterm=False):
 
     # unless the /all keyword is set, only load the last 10 long-term kernels
     if not load_all_longterm:
-        long = long[-10:]
+        longterm_kernels = longterm_kernels[-10:]
 
     # Furnish things in the following order so that they are in proper
     # priority weekly has highest, then daily, then normal (then
     # predictions, if any) so load [pred,]norm,day,week
     furnsh_array(norm)
     furnsh_array(day)
-    furnsh_array(long)
+    furnsh_array(longterm_kernels)
     if load_predicts:
         furnsh_array(pred_list)
 
@@ -91,7 +93,7 @@ def load_sc_ck(load_cruise=False, load_all_longterm=False):
     f = []
     if load_cruise:
         # all the 2013 kernels
-        this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_2013????_v*.bc')
+        this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_2013????_v*.bc'))
         f.extend(this_f)
         # all the 2014 cruise kernels
         this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_20140[1-8]??_v*.bc')
@@ -99,19 +101,19 @@ def load_sc_ck(load_cruise=False, load_all_longterm=False):
 
     # Load only mirror kernels after the last combined mirror kernel in the meta kernel !ANC+"spice/mvn/mvn.tm"
     # Mid August 2017 kernels
-    this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_2017081[56789]_v*.bc')
+    this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_2017081[56789]_v*.bc'))
     f.extend(this_f)
     # Late August 2017 kernels
-    this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_201708[23]?_v*.bc')
+    this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_201708[23]?_v*.bc'))
     f.extend(this_f)
     # September 2017 kernels
-    this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_201709??_v*.bc')
+    this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_201709??_v*.bc'))
     f.extend(this_f)
     # Late 2017 kernels
-    this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_20171???_v*.bc')
+    this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_20171???_v*.bc'))
     f.extend(this_f)
     # 2018-2019 kernels
-    this_f = glob.glob(mvn_kpath+'ck/mvn_iuv_all_l0_201[89]????_v*.bc')
+    this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_201[89]????_v*.bc'))
     f.extend(this_f)
 
     if len(f) > 0:
@@ -119,15 +121,15 @@ def load_sc_ck(load_cruise=False, load_all_longterm=False):
 
 
 def load_sc_spk():
-    f = glob.glob(
-        mvn_kpath+'spk/trj_orb_[0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]_rec*.bsp')
+    f = glob.glob(os.path.join(spk_path,
+                               'trj_orb_[0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]_rec*.bsp'))
     lastorb = None
     rec = []
     if len(f) > 0:
         rec, lastorb = find_latest_kernel(f, 3, getlast=True)
 
-    f = glob.glob(
-        mvn_kpath+'spk/trj_orb_[0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9]*.bsp')
+    f = glob.glob(os.path.join(spk_path,
+                               'trj_orb_[0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9]*.bsp'))
     pred = []
     if len(f) > 0:
         pred = find_latest_kernel(f, 4, after=lastorb)
@@ -137,7 +139,7 @@ def load_sc_spk():
 
 
 def load_sc_sclk():
-    f = glob.glob(mvn_kpath+'sclk/MVN_SCLKSCET.[0-9][0-9][0-9][0-9][0-9].tsc')
+    f = glob.glob(os.path.join(mvn_kpath,'sclk','MVN_SCLKSCET.[0-9][0-9][0-9][0-9][0-9].tsc'))
     f.sort()
     furnsh_array(f)
 
