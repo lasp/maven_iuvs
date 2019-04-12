@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import glob
-from .startup import iuvs_l1b_files_directory
+from .paths import l1b_files_directory
 
 
 def filetag(fname):  # get tag for files, omitting directiory and version/revision number
@@ -47,7 +47,7 @@ def latestfiles(files):
     return uniquefilenames
 
 
-def getfilenames(tag, iuvs_dir=iuvs_l1b_files_directory):
+def getfilenames(tag,  iuvs_dir=l1b_files_directory):
     iuvs_dir = iuvs_dir+'*/'
     # print(dir)
     orbfiles = sorted(glob.glob(iuvs_dir+tag))
