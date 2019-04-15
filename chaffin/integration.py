@@ -2,12 +2,11 @@ import numpy as np
 from scipy.io.idl import readsav
 from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
-from inspect import getsourcefile
 import os
 import matplotlib.pyplot as plt
+from .paths import anc_dir
 
-fuv_lsf_seven_segment = readsav(os.path.join(
-    os.path.dirname(__file__), 'anc', 'mvn_iuv_psf_fuv_2017APR24.sav'))
+fuv_lsf_seven_segment = readsav(os.path.join(anc_dir, 'mvn_iuv_psf_fuv_2017APR24.sav'))
 
 fuv_lsf_seven_segment_interp = []
 for k in fuv_lsf_seven_segment.keys():

@@ -8,7 +8,7 @@ from .paths import spice_dir
 mvn_kpath = os.path.join(spice_dir,'mvn')
 generic_kpath = os.path.join(spice_dir,'generic_kernels')
 ck_path=os.path.join(mvn_kpath,'ck')
-spk_path=os.path.join(mvn_kpath+'spk/')
+spk_path=os.path.join(mvn_kpath,'spk')
 
 
 def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
@@ -181,6 +181,9 @@ def load_iuvs_spice(load_all_longterm=False):
     load_sc_ck(load_all_longterm=load_all_longterm)
     load_sc_spk()
     load_sc_sclk()
+
+    spice.furnsh(os.path.join(generic_kpath,'spk','mar097.bsp'))
+    
     count = spice.ktotal("ALL")
     if count > 800:
         print("Warning! "+str(count) +
