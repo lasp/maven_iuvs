@@ -11,7 +11,7 @@ from .paths import idl_cmap_directory
 import warnings
 
 
-def getcmap(no,reverse=False):
+def getcmap(no,reverse=False,vmin=0,vmax=1):
     if idl_cmap_directory == '':
         warnings.warn('No IDL Colorbars directory defined, using Magma')
         cm = mpl.cm.magma()
@@ -20,6 +20,15 @@ def getcmap(no,reverse=False):
         data = np.loadtxt(fnames[0],delimiter=',')
         if reverse:
             data=np.flip(data,axis=0)
+        datalength=len(data)
+        dmin=int(datalength*vmin)
+        dmax=int(datalength*vmax)
+        if dmax==datalength:
+            dmax=datalength-1
+        if dmin==datalength:
+            dmin=datalength-1
+        data=data[dmin:dmax+1]
+        
         cm = LinearSegmentedColormap.from_list('my_cmap',data)
     return cm
 
