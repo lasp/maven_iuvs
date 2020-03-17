@@ -5,7 +5,7 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
-from mpl_toolkits.axes_grid1.colorbar import colorbar
+from matplotlib import colorbar
 from matplotlib.collections import PolyCollection
 from .paths import idl_cmap_directory
 import warnings
