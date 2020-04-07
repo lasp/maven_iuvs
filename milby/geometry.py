@@ -11,6 +11,7 @@ from skimage.transform import resize
 
 from .data import get_files
 from .graphics import color_dict
+from .miscellaneous import rotation_matrix
 from .variables import R_Mars_km, data_directory, pyuvs_directory
 
 
@@ -501,7 +502,7 @@ def resize_data(data, xdim, ydim):
 def highres_NearsidePerspective(projection, altitude, r=R_Mars_km * 1e3):
     """
     Increases the resolution of the circular outline in cartopy.crs.NearsidePerspective projection.
-    
+
     Parameters
     ----------
     projection : obj
@@ -510,7 +511,7 @@ def highres_NearsidePerspective(projection, altitude, r=R_Mars_km * 1e3):
         Apoapse altitude in meters.
     r : float
         The radius of the globe in meters (e.g., for Mars this is the radius of Mars in meters).
-    
+
     Returns
     -------
     None. Changes the resolution of an existing projection.
@@ -741,7 +742,6 @@ def orbit_path(a, e, theta):
     return xr, yr
 
 
-#
 def orbit_position(a, e, solar_longitude):
     """
     Generates orbital path from Ls=0 to given solar longitude position.
@@ -836,7 +836,7 @@ def plot_solar_longitude(ax, solar_longitude):
     # label Mars
     xl, yl = orbit_position(a * 0.87, e, solar_longitude)
     ax.text(xl[-1], yl[-1], '$\u2642$', ha='center', va='center', fontsize=8, zorder=3,
-            bbox=dict(color='white', linewidth=0))
+            bbox=dict(color='white', linewidth=0, pad=0.1))
 
     # set plot aspect
     ax.set_aspect('equal')
@@ -861,8 +861,8 @@ def find_maven_apsis(segment='periapse'):
     """
 
     # set starting and ending times
-    et_str_start = 464623267  # MAVEN orbital insertion
-    et_str_end = spice.datetime2et(datetime.utcnow())  # right now
+    et_start = 464623267  # MAVEN orbital insertion
+    et_end = spice.datetime2et(datetime.utcnow())  # right now
 
     # do very complicated SPICE stuff
     target = 'Mars'
@@ -878,7 +878,7 @@ def find_maven_apsis(segment='periapse'):
         refval = 3396. + 6200.
     adjust = 0.
     step = 60.  # 1 minute steps, since we are only looking within periapse segment for periapsis
-    et = [et_str_start, et_str_end]
+    et = [et_start, et_end]
     cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
     spice.wninsd(et[0], et[1], cnfine)
     ninterval = round((et[1] - et[0]) / step)
@@ -901,6 +901,59 @@ def find_maven_apsis(segment='periapse'):
 
     # return orbit numbers and array of ephemeris times
     return orbit_numbers, et_array
+
+
+def find_segment_et(orbit_number, segment='apoapse'):
+    """
+    Calculates the ephemeris time at the moment of apoapsis or periapsis for an orbit. Requires data files exist for
+    the choice of orbit and segment. If not, use the full-mission "find_maven_apsis" function.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    segment : str
+        For which orbit segment you want to calculate the ephemeris time. Options are 'apoapse' and 'periapse." Default
+        choice is 'apoapse'.
+
+    Returns
+    -------
+    et : float
+        The ephemeris time for the chosen segment/orbit number.
+    """
+
+    # load files
+    files = get_files(orbit_number, segment=segment)
+    if len(files) == 0:
+        raise Exception('No %s files for orbit %i.' % (segment, orbit_number))
+    else:
+        hdul = fits.open(files[0])
+        et_start = hdul['integration'].data['et'][0]
+
+    # do very complicated SPICE stuff
+    target = 'Mars'
+    abcorr = 'NONE'
+    observer = 'MAVEN'
+    relate = ''
+    refval = 0.
+    if segment == 'periapse':
+        relate = 'LOCMIN'
+        refval = 3396. + 500.
+    elif segment == 'apoapse':
+        relate = 'LOCMAX'
+        refval = 3396. + 6200.
+    adjust = 0.
+    step = 60.
+    et = [et_start, et_start + 4800]
+    cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
+    spice.wninsd(et[0], et[1], cnfine)
+    ninterval = 100
+    result = spice.utils.support_types.SPICEDOUBLE_CELL(100)
+    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
+    et = spice.wnfetd(result, 0)[0]
+
+    # return the ephemeris time of the orbit segment
+    return et
 
 
 def spice_positions(et):
@@ -980,13 +1033,13 @@ def get_orbit_positions():
     n_orbits = len(orbit_numbers)
 
     # make arrays to hold information
-    et = np.zeros((n_orbits, 3))
-    subsc_lat = np.zeros((n_orbits, 3))
-    subsc_lon = np.zeros((n_orbits, 3))
-    sc_alt_km = np.zeros((n_orbits, 3))
-    solar_longitude = np.zeros((n_orbits, 3))
-    subsolar_lat = np.zeros((n_orbits, 3))
-    subsolar_lon = np.zeros((n_orbits, 3))
+    et = np.zeros((n_orbits+1, 3)) * np.nan
+    subsc_lat = np.zeros((n_orbits+1, 3)) * np.nan
+    subsc_lon = np.zeros((n_orbits+1, 3)) * np.nan
+    sc_alt_km = np.zeros((n_orbits+1, 3)) * np.nan
+    solar_longitude = np.zeros((n_orbits+1, 3)) * np.nan
+    subsolar_lat = np.zeros((n_orbits+1, 3)) * np.nan
+    subsolar_lon = np.zeros((n_orbits+1, 3)) * np.nan
 
     # loop through orbit numbers and calculate positions
     for i in range(n_orbits):
@@ -1009,23 +1062,16 @@ def get_orbit_positions():
                     apoapse_et[i])
 
             # place calculations into arrays
-            et[i, j] = tet
-            subsc_lat[i, j] = tsubsc_lat
-            subsc_lon[i, j] = tsubsc_lon
-            sc_alt_km[i, j] = tsc_alt_km
-            solar_longitude[i, j] = tls
-            subsolar_lat[i, j] = tsubsolar_lat
-            subsolar_lon[i, j] = tsubsolar_lon
+            et[i+1, j] = tet
+            subsc_lat[i+1, j] = tsubsc_lat
+            subsc_lon[i+1, j] = tsubsc_lon
+            sc_alt_km[i+1, j] = tsc_alt_km
+            solar_longitude[i+1, j] = tls
+            subsolar_lat[i+1, j] = tsubsolar_lat
+            subsolar_lon[i+1, j] = tsubsolar_lon
 
-    # add a first entry for cruise/orbit 0, that way you can index by [orbit number] instead of [orbit number - 1]
-    orbit_numbers = np.insert(orbit_numbers, 0, 0)
-    et = np.insert(et, 0, np.nan)
-    subsc_lat.insert(subsc_lat, 0, np.nan)
-    subsc_lon.insert(subsc_lon, 0, np.nan)
-    sc_alt_km.insert(sc_alt_km, 0, np.nan)
-    solar_longitude.insert(solar_longitude, 0, np.nan)
-    subsolar_lat.insert(subsolar_lat, 0, np.nan)
-    subsolar_lon.insert(subsolar_lon, 0, np.nan)
+    # reset orbit numbers
+    orbit_numbers = np.arange(0, n_orbits+1, 1)
 
     # make a dictionary of the calculations
     orbit_data = {

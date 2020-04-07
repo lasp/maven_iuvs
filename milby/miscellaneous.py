@@ -66,18 +66,47 @@ class ProgressMeter:
 
 
 def reset_symlog_labels(fig, axes):
+    """
+    Changes 10^0 to 1 in the axis labels in a symmetric-logarithmic axis.
+
+    Parameters
+    ----------
+    fig : object
+        The figure in which the axis resides.
+    axes : object, array-like
+        The axes in need of a good reset.
+
+    Returns
+    -------
+    None.
+    """
+
+    # draw canvas to place the labels
     fig.canvas.draw()
 
+    # loop through axes
     for ax in axes:
+
+        # get the horizontal axis tick labels
         labels = ax.get_xticklabels()
+
+        # loop through the labels
         for label in labels:
+
+            # if it's the label for -1, reset it
             if label.get_text() == r'$\mathdefault{-10^{0}}$':
                 label.set_text(r'$\mathdefault{-1}$')
+
+            # if it's the label for +1, reset it
             elif label.get_text() == r'$\mathdefault{10^{0}}$':
                 label.set_text(r'$\mathdefault{1}$')
+
+        # reset alignment to bottom instead of top
         ax.set_xticklabels(labels, va='bottom')
+
+        # set tick padding above the label
         for tick in ax.get_xaxis().get_major_ticks():
-            tick.set_pad(10)
+            tick.set_pad(11)
 
 
 def rotation_matrix(axis, theta):

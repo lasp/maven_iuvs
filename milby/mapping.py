@@ -2,6 +2,8 @@ import numpy as np
 import spiceypy as spice
 from shapely.geometry import box, Polygon
 
+from .geometry import haversine
+
 
 def altitude_mask(altitude, disk=True):
     """
