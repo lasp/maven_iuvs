@@ -348,10 +348,3 @@ def load_iuvs_spice(load_all_longterm=False):
 
     # furnish some important kernel that does who-knows-what
     spice.furnsh(os.path.join(generic_kpath, 'spk', 'mar097.bsp'))
-
-    # determine how many kernels we've furnished, and warn if it's a lot
-    count = spice.ktotal('ALL')
-    if count > 800:
-        print(
-            'Warning! %i of the allowed 1000 kernels have been furnished. Consider combining daily mirror kernels.' % (
-                count))

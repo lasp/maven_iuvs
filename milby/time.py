@@ -3,6 +3,9 @@ from datetime import datetime
 import julian
 import pytz
 import spiceypy as spice
+from astropy.io import fits
+
+from .data import get_files
 
 
 def utc_to_sol(utc):
@@ -63,3 +66,56 @@ def et2datetime(et):
 
     # return the datetime object version of the input ephemeris time
     return datetime.strptime(result, isoformat).replace(tzinfo=pytz.utc)
+
+
+def find_segment_et(orbit_number, segment='apoapse'):
+    """
+    Calculates the ephemeris time at the moment of apoapsis or periapsis for an orbit. Requires data files exist for
+    the choice of orbit and segment. If not, use the full-mission "find_maven_apsis" function.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    segment : str
+        For which orbit segment you want to calculate the ephemeris time. Options are 'apoapse' and 'periapse." Default
+        choice is 'apoapse'.
+
+    Returns
+    -------
+    et : float
+        The ephemeris time for the chosen segment/orbit number.
+    """
+
+    # load files
+    files = get_files(orbit_number, segment=segment)
+    if len(files) == 0:
+        raise Exception('No %s files for orbit %i.' % (segment, orbit_number))
+    else:
+        hdul = fits.open(files[0])
+        et_start = hdul['integration'].data['et'][0]
+
+    # do very complicated SPICE stuff
+    target = 'Mars'
+    abcorr = 'NONE'
+    observer = 'MAVEN'
+    relate = ''
+    refval = 0.
+    if segment == 'periapse':
+        relate = 'LOCMIN'
+        refval = 3396. + 500.
+    elif segment == 'apoapse':
+        relate = 'LOCMAX'
+        refval = 3396. + 6200.
+    adjust = 0.
+    step = 60.
+    et = [et_start, et_start + 4800]
+    cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
+    spice.wninsd(et[0], et[1], cnfine)
+    ninterval = 100
+    result = spice.utils.support_types.SPICEDOUBLE_CELL(100)
+    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
+    et = spice.wnfetd(result, 0)[0]
+
+    # return the ephemeris time of the orbit segment
+    return et
