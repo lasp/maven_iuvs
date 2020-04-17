@@ -65,82 +65,66 @@ class ProgressMeter:
               end=end)
 
 
-def reset_symlog_labels(fig, axes):
+def mirror_dn_to_deg(dn, inverse=False):
     """
-    Changes 10^0 to 1 in the axis labels in a symmetric-logarithmic axis.
+    Converts IUVS mirror angle from data numbers (DN) to degrees.
 
     Parameters
     ----------
-    fig : object
-        The figure in which the axis resides.
-    axes : object, array-like
-        The axes in need of a good reset.
+    dn : int
+        Mirror angle in DN.
+    inverse : bool
+        If True, reverses the conversion (mirror angle back to DN).
 
     Returns
     -------
-    None.
+    value : int, float
+        The converted value.
     """
 
-    # draw canvas to place the labels
-    fig.canvas.draw()
+    # constants
+    a0 = 12939.0
+    a1 = 364.0889
 
-    # loop through axes
-    for ax in axes:
+    # if converting from degrees to DN...
+    if inverse:
+        value = int(a0 + a1 * dn)
 
-        # get the horizontal axis tick labels
-        labels = ax.get_xticklabels()
+    # otherwise, convert from DN to degrees
+    else:
+        value = (dn - a0)/a1
 
-        # loop through the labels
-        for label in labels:
-
-            # if it's the label for -1, reset it
-            if label.get_text() == r'$\mathdefault{-10^{0}}$':
-                label.set_text(r'$\mathdefault{-1}$')
-
-            # if it's the label for +1, reset it
-            elif label.get_text() == r'$\mathdefault{10^{0}}$':
-                label.set_text(r'$\mathdefault{1}$')
-
-        # reset alignment to bottom instead of top
-        ax.set_xticklabels(labels, va='bottom')
-
-        # set tick padding above the label
-        for tick in ax.get_xaxis().get_major_ticks():
-            tick.set_pad(11)
+    # return the conversion
+    return value
 
 
-def rotation_matrix(axis, theta):
+def mirror_step_deg(hdul):
     """
-    Return the rotation matrix associated with counterclockwise rotation about the given axis by theta radians.
-    To transform a vector, calculate its dot-product with the rotation matrix.
-    
+    Calculates the mirror angle step size of an integration independently of the given angles.
+
     Parameters
     ----------
-    axis : 3-element list, array, or tuple
-        The rotation axis in Cartesian coordinates. Does not have to be a unit vector.
-    theta : float
-        The angle (in radians) to rotate about the rotation axis. Positive angles rotate counter-clockwise.
-        
+    hdul : HDUList
+        Opened FITS file.
+
     Returns
     -------
-    matrix : array
-        The 3D rotation matrix with dimensions (3,3).
+    value : float
+        The mirror step size between integrations in degrees.
     """
 
-    # convert the axis to a numpy array and normalize it
-    axis = np.array(axis)
-    axis = axis / np.linalg.norm(axis)
+    # get the starting mirror position
+    mirror_pos = hdul['engineering'].data['mirror_pos']
 
-    # calculate components of the rotation matrix elements
-    a = np.cos(theta / 2)
-    b, c, d = -axis * np.sin(theta / 2)
-    aa, bb, cc, dd = a * a, b * b, c * c, d * d
-    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+    # step it by one
+    mirror_stepped = mirror_pos + hdul['engineering'].data['step_size']
 
-    # build the rotation matrix
-    matrix = np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                       [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                       [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+    # convert the initial and final mirror positions to degrees
+    ang0 = mirror_dn_to_deg(mirror_pos)
+    ang1 = mirror_dn_to_deg(mirror_stepped)
 
-    # return the rotation matrix
-    return matrix
+    # find their difference for the step size
+    value = abs((ang1 - ang0) * 2)
+
+    # return the step size
+    return value

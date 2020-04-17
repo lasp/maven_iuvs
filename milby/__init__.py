@@ -1,7 +1,6 @@
 from . import data
 from . import geometry
 from . import graphics
-from . import mapping
 from . import miscellaneous
 from . import spice
 from . import statistics

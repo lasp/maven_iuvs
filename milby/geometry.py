@@ -9,9 +9,7 @@ import spiceypy as spice
 from astropy.io import fits
 from skimage.transform import resize
 
-from .data import get_files
-from .graphics import color_dict
-from .miscellaneous import rotation_matrix
+from .miscellaneous import mirror_step_deg
 from .variables import R_Mars_km, data_directory, pyuvs_directory
 
 
@@ -23,7 +21,7 @@ def beta_flip(hdul):
 
     Parameters
     ----------
-    hdul : object
+    hdul : HDUList
         Opened FITS file.
 
     Returns
@@ -54,109 +52,51 @@ def beta_flip(hdul):
     return beta_flipped
 
 
-def swath_geometry(orbit_number, directory=data_directory):
+def haversine(subsolar_latitude, subsolar_longitude, lat_dim=1800, lon_dim=3600):
     """
-    Determine how many swaths taken during a MAVEN/IUVS apoapse disk scan, which swath each file belongs to,
-    whether the MUV settings were for daytime or nighttime, and the beta-angle orientation of the APP.
-    
+    Calculates surface solar zenith angles from a given subsolar latitude and longitude.
+
     Parameters
     ----------
-    orbit_number : int
-        The MAVEN orbit number.
-    directory : str
-        Absolute path to your IUVS level 1B data directory which has the orbit blocks, e.g., "orbit03400, orbit03500,"
-        etc.
-    
+    subsolar_latitude : float
+        Subsolar latitude position in degrees.
+    subsolar_longitude : float
+        Subsolar longitude position in degrees.
+    lat_dim : int
+        Vertical resolution of the map. Defaults to 0.1 degrees (1800 vertical positions).
+    lon_dim : int
+        Horizontal resolution of the map. Defaults to 0.1 degrees (3600 horizontal positions).
+
     Returns
     -------
-    swath_info : dict
-        A dictionary containing filepaths to the requested data files, the number of swaths, the swath number
-        for each data file, whether or not the file is a dayside file, and whether the APP was beta-flipped
-        during this orbit.
-
+    longitudes : array
+        Meshgrid of longitudes in degrees.
+    latitudes : array
+        Meshgrid of latitudes in degrees.
+    solar_zenith_angles : array
+        Surface solar zenith angles in degrees.
     """
 
-    # get list of FITS files for given orbit number
-    files, n_files = get_files(orbit_number, directory=directory, segment='apoapse', channel='muv',
-                               count=True)
+    # convert subsolar position to radians
+    subsolar_latitude = np.radians(subsolar_latitude)
+    subsolar_longitude = np.radians(subsolar_longitude)
 
-    # make sure there are files for the requested orbit.
-    if n_files != 0:
+    # calculate cylindrical meshgrid of latitudes and longitudes
+    longitudes, latitudes = np.meshgrid(np.linspace(np.radians(-180), np.radians(180), lon_dim),
+                                        np.linspace(np.radians(-90), np.radians(90), lat_dim))
 
-        # set initial counters
-        n_swaths = 0
-        prev_ang = 999
+    # calculate solar zenith angles using haversine function
+    solar_zenith_angles = 2 * np.arcsin(np.sqrt(np.sin(
+        (subsolar_latitude - latitudes) / 2) ** 2 + np.cos(latitudes) * np.cos(subsolar_latitude) *
+                                                np.sin((subsolar_longitude - longitudes) / 2) ** 2))
 
-        # arrays to hold final file paths, etc.
-        filepaths = []
-        daynight = []
-        swath = []
-        flipped = 'unknown'
+    # convert to degrees
+    longitudes = np.degrees(longitudes)
+    latitudes = np.degrees(latitudes)
+    solar_zenith_angles = np.degrees(solar_zenith_angles)
 
-        # loop through files...
-        for i in range(len(files)):
-
-            # open FITS file
-            hdul = fits.open(files[i])
-
-            # check for and skip single integrations
-            if hdul[0].data.ndim == 2:
-                continue
-
-            # and if not...
-            else:
-
-                # determine if beta-flipped
-                flipped = beta_flip(hdul)
-
-                # store filepath
-                filepaths.append(files[i])
-
-                # determine if dayside or nightside
-                if hdul['observation'].data['mcp_volt'] > 700:
-                    daynight.append(False)
-                else:
-                    daynight.append(True)
-
-                # extract integration extension
-                integration = hdul['integration'].data
-
-                # calcualte mirror direction
-                mirror_dir = np.sign(integration['mirror_deg'][-1] - integration['mirror_deg'][0])
-                if prev_ang == 999:
-                    prev_ang *= mirror_dir
-
-                # check the angles by seeing if the mirror is still scanning in the same direction
-                ang0 = integration['mirror_deg'][0]
-                if ((mirror_dir == 1) & (prev_ang > ang0)) | ((mirror_dir == -1) & (prev_ang < ang0)):
-                    # increment the swath count
-                    n_swaths += 1
-
-                # store swath number
-                swath.append(n_swaths - 1)
-
-                # change the previous angle comparison value
-                prev_ang = integration['mirror_deg'][-1]
-
-    # if there are no files, then return empty lists
-    else:
-        filepaths = []
-        n_swaths = 0
-        swath = []
-        daynight = []
-        flipped = 'unknown'
-
-    # make a dictionary to hold all this shit
-    swath_info = {
-        'filepaths': np.array(filepaths),
-        'n_swaths': n_swaths,
-        'swath_number': np.array(swath),
-        'dayside': np.array(daynight),
-        'beta_flip': flipped
-    }
-
-    # return the dictionary
-    return swath_info
+    # return the meshgrids and SZA
+    return longitudes, latitudes, solar_zenith_angles
 
 
 def highres_swath_geometry(hdul, res=200):
@@ -165,7 +105,7 @@ def highres_swath_geometry(hdul, res=200):
 
     Parameters
     ----------
-    hdul : object
+    hdul : HDUList
         Opened FITS file.
     res : int, optional
         The desired number of artificial elements along the slit. Defaults to 200.
@@ -197,7 +137,7 @@ def highres_swath_geometry(hdul, res=200):
     """
 
     # get the slit width in degrees
-    from .variables import slit_width as slit_width
+    from .variables import slit_width_deg as slit_width_deg
 
     # calculate beta-flip state
     flipped = beta_flip(hdul)
@@ -206,12 +146,11 @@ def highres_swath_geometry(hdul, res=200):
     vec = hdul['pixelgeometry'].data['pixel_vec']
     et = hdul['integration'].data['et']
     angles = hdul['integration'].data['mirror_deg'] * 2  # convert from mirror angles to FOV angles
-    dang = np.mean(np.diff(angles[:-1]))  # calculate the average mirror step size
+    dang = mirror_step_deg(hdul) * 2  # convert from mirror angle to FOV angle
 
     # get dimensions of the input data
-    dims = np.shape(hdul['primary'].data)
-    n_int = dims[0]
-    n_spa = dims[1]
+    n_int = hdul['integration'].data.shape[0]
+    n_spa = len(hdul['binning'].data['spapixlo'][0])
 
     # set the high-resolution slit width and calculate the number of high-resolution integrations
     hifi_spa = res
@@ -320,15 +259,15 @@ def highres_swath_geometry(hdul, res=200):
                 pass
 
     # create an meshgrid of angular coordinates for the high-resolution pixel edges
-    x, y = np.meshgrid(np.linspace(0, slit_width, hifi_spa + 1),
+    x, y = np.meshgrid(np.linspace(0, slit_width_deg, hifi_spa + 1),
                        np.linspace(angles[0] - dang / 2, angles[-1] + dang / 2, hifi_int + 1))
 
     # calculate the angular separation between pixels
-    dslit = slit_width / hifi_spa
+    dslit = slit_width_deg / hifi_spa
 
     # create an meshgrid of angular coordinates for the high-resolution pixel centers
     cx, cy = np.meshgrid(
-        np.linspace(0 + dslit, slit_width - dslit, hifi_spa),
+        np.linspace(0 + dslit, slit_width_deg - dslit, hifi_spa),
         np.linspace(angles[0], angles[-1], hifi_int))
 
     # beta-flip the coordinate arrays if necessary
@@ -337,6 +276,9 @@ def highres_swath_geometry(hdul, res=200):
         y = (np.fliplr(y) - 90) / (-1) + 90
         cx = np.fliplr(cx)
         cy = (np.fliplr(cy) - 90) / (-1) + 90
+
+    # convert longitude to [-180,180)
+    longitude[np.where(longitude > 180)] -= 360
 
     # return the geometry and coordinate arrays
     return latitude, longitude, sza, local_time, x, y, cx, cy, context_map
@@ -480,13 +422,13 @@ def get_orbit_positions():
     n_orbits = len(orbit_numbers)
 
     # make arrays to hold information
-    et = np.zeros((n_orbits+1, 3)) * np.nan
-    subsc_lat = np.zeros((n_orbits+1, 3)) * np.nan
-    subsc_lon = np.zeros((n_orbits+1, 3)) * np.nan
-    sc_alt_km = np.zeros((n_orbits+1, 3)) * np.nan
-    solar_longitude = np.zeros((n_orbits+1, 3)) * np.nan
-    subsolar_lat = np.zeros((n_orbits+1, 3)) * np.nan
-    subsolar_lon = np.zeros((n_orbits+1, 3)) * np.nan
+    et = np.zeros((n_orbits, 3)) * np.nan
+    subsc_lat = np.zeros((n_orbits, 3)) * np.nan
+    subsc_lon = np.zeros((n_orbits, 3)) * np.nan
+    sc_alt_km = np.zeros((n_orbits, 3)) * np.nan
+    solar_longitude = np.zeros((n_orbits, 3)) * np.nan
+    subsolar_lat = np.zeros((n_orbits, 3)) * np.nan
+    subsolar_lon = np.zeros((n_orbits, 3)) * np.nan
 
     # loop through orbit numbers and calculate positions
     for i in range(n_orbits):
@@ -509,16 +451,13 @@ def get_orbit_positions():
                     apoapse_et[i])
 
             # place calculations into arrays
-            et[i+1, j] = tet
-            subsc_lat[i+1, j] = tsubsc_lat
-            subsc_lon[i+1, j] = tsubsc_lon
-            sc_alt_km[i+1, j] = tsc_alt_km
-            solar_longitude[i+1, j] = tls
-            subsolar_lat[i+1, j] = tsubsolar_lat
-            subsolar_lon[i+1, j] = tsubsolar_lon
-
-    # reset orbit numbers
-    orbit_numbers = np.arange(0, n_orbits+1, 1)
+            et[i, j] = tet
+            subsc_lat[i, j] = tsubsc_lat
+            subsc_lon[i, j] = tsubsc_lon
+            sc_alt_km[i, j] = tsc_alt_km
+            solar_longitude[i, j] = tls
+            subsolar_lat[i, j] = tsubsolar_lat
+            subsolar_lon[i, j] = tsubsolar_lon
 
     # make a dictionary of the calculations
     orbit_data = {
@@ -535,3 +474,40 @@ def get_orbit_positions():
 
     # return the calculations
     return orbit_data
+
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about the given axis by theta radians.
+    To transform a vector, calculate its dot-product with the rotation matrix.
+
+    Parameters
+    ----------
+    axis : 3-element list, array, or tuple
+        The rotation axis in Cartesian coordinates. Does not have to be a unit vector.
+    theta : float
+        The angle (in radians) to rotate about the rotation axis. Positive angles rotate counter-clockwise.
+
+    Returns
+    -------
+    matrix : array
+        The 3D rotation matrix with dimensions (3,3).
+    """
+
+    # convert the axis to a numpy array and normalize it
+    axis = np.array(axis)
+    axis = axis / np.linalg.norm(axis)
+
+    # calculate components of the rotation matrix elements
+    a = np.cos(theta / 2)
+    b, c, d = -axis * np.sin(theta / 2)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+
+    # build the rotation matrix
+    matrix = np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+                       [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                       [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+    # return the rotation matrix
+    return matrix

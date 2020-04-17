@@ -3,11 +3,16 @@ import glob
 import os
 import time
 
+import numpy as np
 import paramiko
+from astropy.io import fits
+from scipy.io import readsav
 import sysrsync as rsync
 
+from .geometry import beta_flip
 from .miscellaneous import clear_line
-from .variables import vm_username, vm_password, data_directory, spice_directory
+from .variables import vm_username, vm_password, data_directory, pyuvs_directory, spice_directory, slit_width_mm, \
+    pixel_width_mm, pixel_height_mm, focal_length_mm, muv_dispersion, slit_pix_min, slit_pix_max
 
 
 def ignore_hidden_folder(folder_list):
@@ -161,8 +166,6 @@ def make_block_directory(location):
         # put in the damn try statement to avoid race conditions and locking
         try:
             os.makedirs(location)
-            clear_line()
-            print('Made directory ' + location, end='\r')
         except OSError:
             raise Exception('There was an OSError when trying to make ' + location)
 
@@ -189,8 +192,6 @@ def make_blank_file(file_name, file_path):
         # put in the damn try statement to avoid race conditions and locking
         try:
             open(file_path + file_name, 'a').close()
-            clear_line()
-            print('Made ' + file_name, end='\r')
         except OSError:
             raise Exception('There was an OSError when trying to make ' + location)
 
@@ -565,6 +566,98 @@ def get_files(orbit_number, directory=data_directory, segment='apoapse', channel
         return files, n_files
 
 
+def get_apoapse_files(orbit_number, directory=data_directory):
+    """
+    Convenience function for apoapse data. In addition to returning file paths to the data, it determines how many
+    swaths were taken, which swath each file belongs to since there are often 2-3 files per swath, whether the MCP
+    voltage settings were for daytime or nighttime, the mirror step between integrations, and the beta-angle orientation
+    of the APP.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    directory : str
+        Absolute path to your IUVS level 1B data directory which has the orbit blocks, e.g., "orbit03400, orbit03500,"
+        etc.
+
+    Returns
+    -------
+    swath_info : dict
+        A dictionary containing filepaths to the requested data files, the number of swaths, the swath number
+        for each data file, whether or not the file is a dayside file, and whether the APP was beta-flipped
+        during this orbit.
+
+    """
+
+    # get list of FITS files for given orbit number
+    files, n_files = get_files(orbit_number, directory=directory, segment='apoapse', channel='muv',
+                               count=True)
+
+    # set initial counters
+    n_swaths = 0
+    prev_ang = 999
+
+    # arrays to hold final file paths, etc.
+    filepaths = []
+    daynight = []
+    swath = []
+    flipped = 'unknown'
+    mirror_step_day = np.nan
+    mirror_step_night = np.nan
+
+    # loop through files...
+    for i in range(n_files):
+
+        # open FITS file
+        hdul = fits.open(files[i])
+
+        # skip single integrations, they are more trouble than they're worth
+        if hdul['primary'].data.ndim == 2:
+            continue
+
+        # determine if beta-flipped
+        flipped = beta_flip(hdul)
+
+        # store filepath
+        filepaths.append(files[i])
+
+        # determine if dayside or nightside
+        if hdul['observation'].data['mcp_volt'] > 700:
+            daynight.append(False)
+        else:
+            daynight.append(True)
+
+        # calcualte mirror direction
+        mirror_dir = np.sign(hdul['integration'].data['mirror_deg'][-1] - hdul['integration'].data['mirror_deg'][0])
+        if prev_ang == 999:
+            prev_ang *= mirror_dir
+
+        # check the angles by seeing if the mirror is still scanning in the same direction
+        ang0 = hdul['integration'].data['mirror_deg'][0]
+        if ((mirror_dir == 1) & (prev_ang > ang0)) | ((mirror_dir == -1) & (prev_ang < ang0)):
+            # increment the swath count
+            n_swaths += 1
+
+        # store swath number
+        swath.append(n_swaths - 1)
+
+        # change the previous angle comparison value
+        prev_ang = hdul['integration'].data['mirror_deg'][-1]
+
+    # make a dictionary to hold all this shit
+    swath_info = {
+        'files': np.array(filepaths),
+        'n_swaths': n_swaths,
+        'swath_number': np.array(swath),
+        'dayside': np.array(daynight),
+        'beta_flip': flipped,
+    }
+
+    # return the dictionary
+    return swath_info
+
+
 def get_file_version(orbit_number, directory=data_directory, segment='apoapse', channel='muv'):
     """
     Return file version and revision of FITS files for a given orbit number.
@@ -596,3 +689,49 @@ def get_file_version(orbit_number, directory=data_directory, segment='apoapse', 
 
     # return data version string
     return data_version
+
+
+def calculate_calibration_curve(hdul, wavelengths):
+    """
+    Generates a spectral calibration curve in DN/kR. The FITS file (from which the spectrum comes) provides the
+    necessary calibration factors.
+
+    Parameters
+    ----------
+    hdul : HDUList
+        Opened FITS file.
+    wavelengths : array-like
+        The wavelengths of the spectrum.
+
+    Returns
+    -------
+    calibration_curve : array
+        The calibration curve in DN/kR.
+    """
+
+    # get integration information
+    gain = hdul['observation'].data['mcp_gain'][0]
+    int_time = hdul['observation'].data['int_time'][0]
+    dwavelength = hdul['observation'].data[0]['wavelength_width'][0, 0]
+    spa_bin_width = hdul['primary'].header['spa_size']
+
+    # calculate pixel angular dispersion along the slit
+    pixel_omega = pixel_height_mm/focal_length_mm * slit_width_mm/focal_length_mm
+
+    # load IUVS sensitivity curve
+    sensitivity_curve = np.load(os.path.join(pyuvs_directory, 'ancillary/muv_sensitivity_curve.npy'))
+
+    # shift wavelength by 7 nm redward and interpolate sensitivity curve to given wavelengths
+    wavelength_shift = 7.0
+    line_effective_area = np.interp(wavelengths, sensitivity_curve.item().get('wavelength') - wavelength_shift,
+                                    sensitivity_curve.item().get('sensitivity_curve'))
+
+    # calculate bin angular and spectral dispersion
+    bin_omega = pixel_omega * spa_bin_width  # sr / spatial bin
+
+    # calculate calibration curve
+    kR = 1e9 / (4 * np.pi)  # [photon/kR]
+    calibration_curve = dwavelength * gain * int_time * kR * line_effective_area * bin_omega  # [DN/kR]
+
+    # return the calibration curve
+    return calibration_curve
