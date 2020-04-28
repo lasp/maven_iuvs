@@ -185,7 +185,7 @@ def highres_swath_geometry(hdul, res=200):
     context_map = np.zeros((hifi_int, hifi_spa, 3))*np.nan
 
     # load Mars surface map and switch longitude domain from [-180,180) to [0, 360)
-    mars_surface_map = plt.imread(os.path.join(pyuvs_directory, 'ancillary/surface_map.jpg'))
+    mars_surface_map = plt.imread(os.path.join(pyuvs_directory, 'ancillary/mars_surface_map.jpg'))
     offset_map = np.zeros_like(mars_surface_map)
     offset_map[:, :1800, :] = mars_surface_map[:, 1800:, :]
     offset_map[:, 1800:, :] = mars_surface_map[:, :1800, :]

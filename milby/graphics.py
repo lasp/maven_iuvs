@@ -22,7 +22,7 @@ color_dict = {'red': '#D62728', 'orange': '#FF7F0E', 'yellow': '#FDB813',
               'darkgrey': '#3F3F3F', 'grey': '#7F7F7F', 'lightgrey': '#BFBFBF'}
 
 
-def JGR_format(dpi=300, display_widths=True, return_blue=False):
+def JGR_format(dpi=300, display_widths=False, return_blue=False):
     """
     Sets matplotlib.pyplot parameters to match fonts and sizes to those of AGU's JGR and GRL journals.
     
@@ -33,7 +33,6 @@ def JGR_format(dpi=300, display_widths=True, return_blue=False):
         Defaults to 300.
     display_widths : bool
         Whether or not to print out the widths of the various types of JGR figures. Reference for figure creation.
-        Defaults to True because it does not return these widths as variables.
     return_blue : bool
         If True, returns the hexadecimal color string for the dark blue color used in JGR publications.
         
@@ -334,11 +333,11 @@ def get_flatfield(n_integrations, n_spatial):
 
     # load the flatfield, interpolate if required using the 133-bin flatfield
     if n_spatial == 133:
-        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/flatfield_133.npy'))[:, :18]
+        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
     elif n_spatial == 50:
-        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/flatfield_50.npy'))[:, :18]
+        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
     else:
-        detector_full = np.load(os.path.join(pyuvs_directory, 'ancillary/flatfield_133.npy'))[:, :18]
+        detector_full = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
         detector_flat = np.zeros((n_spatial, 18))
         for i in range(18):
             detector_flat[:, i] = np.interp(np.linspace(0, 132, n_spatial), np.arange(133), detector_full[:, i])
@@ -559,7 +558,7 @@ def colorize_pixel(pixel, rgb_histogram):
     return pixel_rgb
 
 
-def dayside_pixels(hdul, heqs, mask=None, flat=True, sharpen=False):
+def dayside_pixels(hdul, heqs, mask=None, flat=True, flat2=False, sharpen=False):
     """
     Process dayside apoapse pixels and return arrays for pcolormesh display.
 
@@ -573,6 +572,8 @@ def dayside_pixels(hdul, heqs, mask=None, flat=True, sharpen=False):
         Bad pixels from latlon_meshgrid().
     flat : bool
         Whether or not to flatten the color array.
+    flat2 : bool
+        Very bad gradient removal along the slit. Don't use this.
     sharpen : bool
         Whether or not to apply sharpening to the image. Defaults to False.
 
@@ -656,6 +657,12 @@ def dayside_pixels(hdul, heqs, mask=None, flat=True, sharpen=False):
     # set the display grid to be on-disk data only
     phil[np.where(altitude != 0)] = np.nan
 
+    # try to remove the slit gradient
+    if flat2:
+        ff2 = np.repeat(np.repeat(np.linspace(1, 0.9, n_spatial)[None, :], n_integrations, axis=0)[:, :, None],
+                        3, axis=2)
+        pixel_colors *= ff2
+
     # reform the colors array for display with pcolormesh
     # it needs the shape (n_pixels, 3)
     if flat:
@@ -701,7 +708,7 @@ def nightside_pixels(hdul, feature='NO'):
     # load spectral bin templates, and account for weird binning early-on in the mission
     spectral_bins = 1024/spe_bin_width
     if (spectral_bins == 256) or (spectral_bins == 512) or (spectral_bins == 1024):
-        template_filepath = os.path.join(pyuvs_directory, 'ancillary/muv_templates_%i.npy' % spectral_bins)
+        template_filepath = os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_templates-%ispe-muv.npy' % spectral_bins)
         templates = np.load(template_filepath)
         template_wavelength = templates.item().get('wavelength')
         template_solar_continuum = templates.item().get('solar_continuum')
@@ -712,15 +719,21 @@ def nightside_pixels(hdul, feature='NO'):
         template_no_nightglow = templates.item().get('no_nightglow')
     else:
         wavelength = hdul['observation'].data[0]['wavelength'][0]
-        template_filepath = os.path.join(pyuvs_directory, 'ancillary/muv_templates_1024.npy')
+        template_filepath = os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_templates-1024spe-muv.npy')
         templates = np.load(template_filepath)
         template_wavelength = wavelength
-        template_solar_continuum = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('solar_continuum'))
-        template_co_cameron = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('co_cameron'))
-        template_co2p_uvd = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('co2p_uvd'))
-        template_o2972 = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('o2972'))
-        template_co2p_fdb = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('co2p_fdb'))
-        template_no_nightglow = np.interp(wavelength, templates.item().get('wavelength'), templates.item().get('no_nightglow'))
+        template_solar_continuum = np.interp(wavelength, templates.item().get('wavelength'),
+                                             templates.item().get('solar_continuum'))
+        template_co_cameron = np.interp(wavelength, templates.item().get('wavelength'),
+                                        templates.item().get('co_cameron'))
+        template_co2p_uvd = np.interp(wavelength, templates.item().get('wavelength'),
+                                      templates.item().get('co2p_uvd'))
+        template_o2972 = np.interp(wavelength, templates.item().get('wavelength'),
+                                   templates.item().get('o2972'))
+        template_co2p_fdb = np.interp(wavelength, templates.item().get('wavelength'),
+                                      templates.item().get('co2p_fdb'))
+        template_no_nightglow = np.interp(wavelength, templates.item().get('wavelength'),
+                                          templates.item().get('no_nightglow'))
 
     # generate calibration curve
     calibration_curve = calculate_calibration_curve(hdul, template_wavelength)
@@ -1276,6 +1289,10 @@ def latlon_meshgrid(hdul):
     X[np.where(~np.isfinite(X))] = 0
     Y[np.where(~np.isfinite(Y))] = 0
 
+    # set to domain [-180,180)
+    X[np.where(X > 180)] -= 360
+
+    # return the coordinate arrays and the mask
     return X, Y, mask
 
 
@@ -1713,6 +1730,7 @@ def checkerboard():
 
     # return the array
     return grid
+
 
 def reset_symlog_labels(fig, axes):
     """

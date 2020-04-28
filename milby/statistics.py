@@ -23,12 +23,6 @@ def multiple_linear_regression(templates, spectrum, spectrum_error):
         The constant term from the fitting.
     """
 
-    # this is Justin's DN threshold for valid data
-    dn_threshold = 3600 * 4 * 16
-
-    # find all the data that are less than the DN threshold
-    good = np.where(spectrum < dn_threshold)
-
     # ensure input templates are an array with two dimensions
     X = np.array(templates)
     if X.ndim == 1:
@@ -41,21 +35,15 @@ def multiple_linear_regression(templates, spectrum, spectrum_error):
     Y = np.array(spectrum)
     Yerr = np.array(spectrum_error)
 
-    # make sure at least one point is good in order to perform the fit
-    if np.size(good) != 0:
+    # convert uncertainty to sample weight
+    Yw = (1/Yerr)**2
 
-        # make a linear regression model and fit the spectra with templates
-        lm = linear_model.LinearRegression()
-        model = lm.fit(X, Y, sample_weight=1 / Yerr ** 2)
+    # make a linear regression model and fit the spectra with templates
+    fit = linear_model.LinearRegression().fit(X, Y, sample_weight=Yw)
 
-        # extract the coefficients and constant term
-        coeff = model.coef_
-        const = model.intercept_
-
-    # if no good points, set both the coefficient and constant to NaN
-    else:
-        coeff = np.nan
-        const = np.nan
+    # extract the coefficients and constant term
+    coeff = fit.coef_
+    const = fit.intercept_
 
     # return the coefficient and constant
     return coeff, const

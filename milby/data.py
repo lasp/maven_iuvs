@@ -12,7 +12,7 @@ import sysrsync as rsync
 from .geometry import beta_flip
 from .miscellaneous import clear_line
 from .variables import vm_username, vm_password, data_directory, pyuvs_directory, spice_directory, slit_width_mm, \
-    pixel_width_mm, pixel_height_mm, focal_length_mm, muv_dispersion, slit_pix_min, slit_pix_max
+    pixel_size_mm, focal_length_mm, muv_dispersion, slit_pix_min, slit_pix_max
 
 
 def ignore_hidden_folder(folder_list):
@@ -398,12 +398,7 @@ def find_all(pattern, path):
         The complete paths containing the pattern.
     """
 
-    result = []
-    for root, dirs, files in os.walk(path):
-        for name in files:
-            if fnm.fnmatch(name, pattern):
-                result.append(os.path.join(root, name))
-    return result
+    return sorted(glob.glob(os.path.join(path, pattern)))
 
 
 def exclude_old_files(path, files):
@@ -603,8 +598,6 @@ def get_apoapse_files(orbit_number, directory=data_directory):
     daynight = []
     swath = []
     flipped = 'unknown'
-    mirror_step_day = np.nan
-    mirror_step_night = np.nan
 
     # loop through files...
     for i in range(n_files):
@@ -716,15 +709,15 @@ def calculate_calibration_curve(hdul, wavelengths):
     spa_bin_width = hdul['primary'].header['spa_size']
 
     # calculate pixel angular dispersion along the slit
-    pixel_omega = pixel_height_mm/focal_length_mm * slit_width_mm/focal_length_mm
+    pixel_omega = pixel_size_mm/focal_length_mm * slit_width_mm/focal_length_mm
 
     # load IUVS sensitivity curve
-    sensitivity_curve = np.load(os.path.join(pyuvs_directory, 'ancillary/muv_sensitivity_curve.npy'))
+    muv_sensitivity = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_sensitivity-muv.npy'))
 
     # shift wavelength by 7 nm redward and interpolate sensitivity curve to given wavelengths
     wavelength_shift = 7.0
-    line_effective_area = np.interp(wavelengths, sensitivity_curve.item().get('wavelength') - wavelength_shift,
-                                    sensitivity_curve.item().get('sensitivity_curve'))
+    line_effective_area = np.interp(wavelengths, muv_sensitivity.item().get('wavelength') - wavelength_shift,
+                                    muv_sensitivity.item().get('sensitivity_curve'))
 
     # calculate bin angular and spectral dispersion
     bin_omega = pixel_omega * spa_bin_width  # sr / spatial bin
