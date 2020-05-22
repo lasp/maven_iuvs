@@ -11,7 +11,6 @@ from shapely.geometry.polygon import LinearRing
 
 from .data import calculate_calibration_curve
 from .geometry import beta_flip, haversine, rotation_matrix
-from .miscellaneous import mirror_step_deg
 from .statistics import multiple_linear_regression, integrate_intensity
 from .variables import R_Mars_km, slit_width_deg, pyuvs_directory
 
@@ -1260,6 +1259,9 @@ def latlon_meshgrid(hdul):
     X = np.zeros((latitude.shape[0] + 1, latitude.shape[1] + 1))
     Y = np.zeros((longitude.shape[0] + 1, longitude.shape[1] + 1))
     mask = np.ones((latitude.shape[0], latitude.shape[1]))
+
+    # calculate beta-flip state
+    flipped = beta_flip(hdul)
 
     # loop through pixel geometry arrays
     for i in range(int(latitude.shape[0])):

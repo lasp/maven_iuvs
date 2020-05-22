@@ -8,8 +8,8 @@ spice_directory = '/Volumes/Samsung_T5/spice/'
 pyuvs_directory = '/Users/milby/Documents/Work/MAVEN/Python/PyUVS'
 
 # VM access info
-vm_username = 'username'
-vm_password = 'password'
+vm_username = 'milby'
+vm_password = 'Andromeda*0047'
 
 # physical variables
 R_Mars_km = 3.3895e3  # [km]
@@ -23,5 +23,6 @@ port_separation = 36  # [deg]
 pixel_size_mm = 0.018  # [mm]
 focal_length_mm = 100.  # [mm]
 muv_dispersion = 0.16325  # [nm/pix]
+fuv_dispersion = 0.08134  # [nm/pix]
 slit_pix_min = 77  # starting pixel position of slit
 slit_pix_max = 916  # ending pixel position of slit

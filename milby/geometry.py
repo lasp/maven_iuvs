@@ -9,7 +9,6 @@ import spiceypy as spice
 from astropy.io import fits
 from skimage.transform import resize
 
-from .miscellaneous import mirror_step_deg
 from .variables import R_Mars_km, data_directory, pyuvs_directory
 
 
@@ -145,8 +144,6 @@ def highres_swath_geometry(hdul, res=200):
     # get swath vectors, ephemeris times, and mirror angles
     vec = hdul['pixelgeometry'].data['pixel_vec']
     et = hdul['integration'].data['et']
-    angles = hdul['integration'].data['mirror_deg'] * 2  # convert from mirror angles to FOV angles
-    dang = mirror_step_deg(hdul) * 2  # convert from mirror angle to FOV angle
 
     # get dimensions of the input data
     n_int = hdul['integration'].data.shape[0]
@@ -162,10 +159,16 @@ def highres_swath_geometry(hdul, res=200):
     vec_arr = np.zeros((hifi_int + 1, hifi_spa + 1, 3))
 
     # make an artificially-divided slit and create new array of swath vectors
-    lower_left = vec[0, :, 0, 0]
-    upper_left = vec[-1, :, 0, 1]
-    lower_right = vec[0, :, -1, 2]
-    upper_right = vec[-1, :, -1, 3]
+    if flipped:
+        lower_left = vec[0, :, 0, 0]
+        upper_left = vec[-1, :, 0, 1]
+        lower_right = vec[0, :, -1, 2]
+        upper_right = vec[-1, :, -1, 3]
+    elif not flipped:
+        lower_left = vec[0, :, 0, 1]
+        upper_left = vec[-1, :, 0, 0]
+        lower_right = vec[0, :, -1, 3]
+        upper_right = vec[-1, :, -1, 2]
 
     for e in range(3):
         a = np.linspace(lower_left[e], upper_left[e], hifi_int + 1)
@@ -208,12 +211,11 @@ def highres_swath_geometry(hdul, res=200):
             try:
 
                 # calculate surface intercept
-                spoint, trgepc, srfvec = spice.sincpt('Ellipsoid', target, et, frame,
-                                                      abcorr, observer, frame, los_mid)
+                spoint, trgepc, srfvec = spice.sincpt('Ellipsoid', target, et, frame, abcorr, observer, frame, los_mid)
 
                 # calculate illumination angles
-                trgepc, srfvec, phase_for, solar, emissn = spice.ilumin('Ellipsoid', target, et, frame,
-                                                                        abcorr, observer, spoint)
+                trgepc, srfvec, phase_for, solar, emissn = spice.ilumin('Ellipsoid', target, et, frame, abcorr,
+                                                                        observer, spoint)
 
                 # convert from rectangular to spherical coordinates
                 rpoint, colatpoint, lonpoint = spice.recsph(spoint)
@@ -257,6 +259,10 @@ def highres_swath_geometry(hdul, res=200):
             # if the SPICE calculation fails, this (probably) means it didn't intercept the planet
             except:
                 pass
+
+    # get mirror angles
+    angles = hdul['integration'].data['mirror_deg'] * 2  # convert from mirror angles to FOV angles
+    dang = np.diff(angles)[0]
 
     # create an meshgrid of angular coordinates for the high-resolution pixel edges
     x, y = np.meshgrid(np.linspace(0, slit_width_deg, hifi_spa + 1),

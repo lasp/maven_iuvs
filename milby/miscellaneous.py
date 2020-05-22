@@ -51,35 +51,3 @@ def mirror_dn_to_deg(dn, inverse=False):
 
     # return the conversion
     return value
-
-
-def mirror_step_deg(hdul):
-    """
-    Calculates the mirror angle step size of an integration independently of the given angles.
-
-    Parameters
-    ----------
-    hdul : HDUList
-        Opened FITS file.
-
-    Returns
-    -------
-    value : float
-        The mirror step size between integrations in degrees.
-    """
-
-    # get the starting mirror position
-    mirror_pos = hdul['engineering'].data['mirror_pos']
-
-    # step it by one
-    mirror_stepped = mirror_pos + hdul['engineering'].data['step_size']
-
-    # convert the initial and final mirror positions to degrees
-    ang0 = mirror_dn_to_deg(mirror_pos)
-    ang1 = mirror_dn_to_deg(mirror_stepped)
-
-    # find their difference for the step size
-    value = abs((ang1 - ang0) * 2)
-
-    # return the step size
-    return value

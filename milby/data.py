@@ -12,7 +12,7 @@ import sysrsync as rsync
 from .geometry import beta_flip
 from .miscellaneous import clear_line
 from .variables import vm_username, vm_password, data_directory, pyuvs_directory, spice_directory, slit_width_mm, \
-    pixel_size_mm, focal_length_mm, muv_dispersion, slit_pix_min, slit_pix_max
+    pixel_size_mm, focal_length_mm, slit_pix_min, slit_pix_max
 
 
 def ignore_hidden_folder(folder_list):
@@ -269,9 +269,6 @@ def delete_data(location):
     # delete xml files
     delete_xml(location)
 
-    # remove any non-MUV files
-    delete_nonmuv(location)
-
     # now get the list of actual data files
     crappy_files = []
     all_files = find_all('*', location)
@@ -329,56 +326,6 @@ def delete_xml(location):
         exclude_old_files(location, get_file_names(xml_files))
         for i in xml_files:
             os.remove(i)
-
-
-def delete_nonmuv(location):
-    """
-    Delete the non-MUV files for an orbit.
-
-    Parameters
-    ----------
-    location : str
-        The file path to the files.
-
-    Returns
-    -------
-    None.
-    """
-
-    # get list of files to get rid of
-    files_list = []
-    files_list.extend(find_all('*star-orbit*.fits.gz', location + '/'))
-    files_list.extend(find_all('*phobos*.fits.gz', location + '/'))
-    files_list.extend(find_all('*periapsehifi*.fits.gz', location + '/'))
-    files_list.extend(find_all('*periapse*fuv*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outspace*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outlimb*fuv*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outlimb*ech*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outdisk*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outcoronahifi*.fits.gz', location + '/'))
-    files_list.extend(find_all('*outcorona*.fits.gz', location + '/'))
-    files_list.extend(find_all('*occultation*.fits.gz', location + '/'))
-    files_list.extend(find_all('*inspace*.fits.gz', location + '/'))
-    files_list.extend(find_all('*inlimb*fuv*.fits.gz', location + '/'))
-    files_list.extend(find_all('*inlimb*ech*.fits.gz', location + '/'))
-    files_list.extend(find_all('*indisk*.fits.gz', location + '/'))
-    files_list.extend(find_all('*incorona*.fits.gz', location + '/'))
-    files_list.extend(find_all('*early*.fits.gz', location + '/'))
-    files_list.extend(find_all('*comet*.fits.gz', location + '/'))
-    files_list.extend(find_all('*centroid*.fits.gz', location + '/'))
-    files_list.extend(find_all('*apoapse*fuv*.fits.gz', location + '/'))
-    files_list.extend(find_all('*APP2-orbit*.fits.gz', location + '/'))
-    files_list.extend(find_all('*APP1A-orbit*.fits.gz', location + '/'))
-    files_list.extend(find_all('*APP1-orbit*.fits.gz', location + '/'))
-
-    # empty lists are False; non-empty lists are True
-    if files_list:
-        exclude_old_files(location + '/', get_file_names(files_list))
-        for i in files_list:
-            try:
-                os.remove(i)
-            except OSError:
-                continue
 
 
 def find_all(pattern, path):
@@ -707,17 +654,20 @@ def calculate_calibration_curve(hdul, wavelengths):
     int_time = hdul['observation'].data['int_time'][0]
     dwavelength = hdul['observation'].data[0]['wavelength_width'][0, 0]
     spa_bin_width = hdul['primary'].header['spa_size']
+    xuv = hdul['observation'].data['channel'][0]
 
     # calculate pixel angular dispersion along the slit
     pixel_omega = pixel_size_mm/focal_length_mm * slit_width_mm/focal_length_mm
 
-    # load IUVS sensitivity curve
-    muv_sensitivity = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_sensitivity-muv.npy'))
+    # load IUVS sensitivity curve for given channel
+    sensitivity = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_sensitivity-%s.npy') % xuv.lower())
 
     # shift wavelength by 7 nm redward and interpolate sensitivity curve to given wavelengths
-    wavelength_shift = 7.0
-    line_effective_area = np.interp(wavelengths, muv_sensitivity.item().get('wavelength') - wavelength_shift,
-                                    muv_sensitivity.item().get('sensitivity_curve'))
+    wavelength_shift = 0.0
+    if xuv == 'MUV':
+        wavelength_shift = 7.0
+    line_effective_area = np.interp(wavelengths, sensitivity.item().get('wavelength') - wavelength_shift,
+                                    sensitivity.item().get('sensitivity_curve'))
 
     # calculate bin angular and spectral dispersion
     bin_omega = pixel_omega * spa_bin_width  # sr / spatial bin
@@ -728,3 +678,31 @@ def calculate_calibration_curve(hdul, wavelengths):
 
     # return the calibration curve
     return calibration_curve
+
+
+def relay_file(hdul):
+    """
+        Determines whether a particular file was taken during relay mode.
+
+        Parameters
+        ----------
+        hdul : HDUList
+            Opened FITS file.
+
+        Returns
+        -------
+        relay : bool
+            If a file was taken during a relay.
+        """
+
+    # get mirror angles
+    angles = hdul['integration'].data['mirror_deg']
+
+    # determine if relay by evaluating minimum and maximum mirror angles
+    min_ang = np.amin(angles)
+    max_ang = np.amax(angles)
+    relay = False
+    if min_ang == 30.2508544921875 and max_ang == 59.6502685546875:
+        relay = True
+
+    return relay
