@@ -6,6 +6,128 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from astropy.io import fits
 
 
+
+def get_pixel_vec_mso(myfits):
+    import spiceypy as spice
+    pixel_vecs=np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],(0,2,3,1))
+    pixel_vecs_shape=pixel_vecs.shape
+    rmat_iau_to_mso=np.array([spice.pxform('IAU_MARS','MAVEN_MSO',t) for t in myfits['Integration'].data['ET']])
+    pixel_vecs_mso=np.matmul(np.reshape(np.repeat(rmat_iau_to_mso[:,np.newaxis,:,:],5*pixel_vecs.shape[1],axis=1),(-1,3,3)),
+                             np.reshape(pixel_vecs,(-1,3))[:,:,np.newaxis])
+    pixel_vecs_mso=np.reshape(pixel_vecs_mso,pixel_vecs_shape)
+    return pixel_vecs_mso
+
+def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None, integration_cross_slit=None):
+    #return average pixel corners for input x and y arrays
+    n1,n2=pixel_x.shape[:2]
+    
+    #axis 0 of pixel_x, pixel_y corresponds to integration #
+    #axis 1 corresponds to slit position
+    #axis 3 corresponds to pixel corner
+    #  pixel_corner quantities look like this:
+    #  
+    #      ^
+    #      | along slit (towards big keyhole)
+    #   -------
+    #   |2   3|
+    #   |  4  |---> cross slit (dispersion direction?)
+    #   |0   1|      Note: whether this is in the direction of integration
+    #   -------            depends on the direction of slit motion on the sky
+    
+
+    if integration_cross_slit == None:
+        # attempt to determine if the 0-1 direction corresponds to the direction of integration or not
+        # use pixel_y to do this because 1) pixel_x is sometimes slit-relative and meaningless
+        #                                2) pixel_x is sometimes longitude with a branch cut
+        # there could still be problems with pixel_y latitude crossing the pole... ignoring this for now
+        pixel_corner_direction = pixel_y[0,0,1] - pixel_y[0,0,0]
+        integration_direction  = pixel_y[1,0,0] - pixel_y[0,0,0]
+        integration_cross_slit = (pixel_corner_direction*integration_direction > 0)
+    
+    #bottom/top = along slit
+    #left/right = along integration
+    if integration_cross_slit:
+        pixel_bottom_left=0
+        pixel_bottom_right=1
+        pixel_top_left=2
+        pixel_top_right=3
+    else:
+        pixel_bottom_left=1
+        pixel_bottom_right=0
+        pixel_top_left=3
+        pixel_top_right=2
+        
+    #join and transpose so we can do this once for x and y (and z)
+    if type(pixel_z)!=type(None):
+        pixelxy=np.transpose([pixel_x,pixel_y,pixel_z],(1,2,3,0))
+        n_dim=3
+    else:
+        pixelxy=np.transpose([pixel_x,pixel_y],(1,2,3,0))
+        n_dim=2
+        
+    #adds up the interior grid points to get an average grid
+    avgxy=(pixelxy[:-1,:-1,pixel_top_right]+pixelxy[1:,:-1,pixel_top_left]+pixelxy[:-1,1:,pixel_bottom_right]+pixelxy[1:,1:,pixel_top_left])/4
+    #now let's do the first/last integration
+    avgxy=np.concatenate(([(pixelxy[0,:-1,pixel_top_left]+pixelxy[0,1:,pixel_bottom_left])/2],
+                          avgxy,
+                          [(pixelxy[-1,:-1,pixel_top_right]+pixelxy[-1,1:,pixel_bottom_right])/2]),axis=0)
+    #now the top/bottom of the slit and observation corners
+    avgxy=np.concatenate((np.reshape(np.concatenate(([pixelxy[0,0,pixel_bottom_left]],(pixelxy[:-1,0,pixel_bottom_right]+pixelxy[1:,0,pixel_bottom_left])/2,[pixelxy[-1,0,pixel_bottom_right]]),axis=0),(n1+1,1,n_dim)),
+                          avgxy,
+                          np.reshape(np.concatenate(([pixelxy[0,-1,pixel_top_left]],(pixelxy[:-1,-1,pixel_top_right]+pixelxy[1:,-1,pixel_top_left])/2,[pixelxy[-1,-1,pixel_top_right]]),axis=0),(n1+1,1,n_dim))),
+                         axis=1)
+    
+    #now we have an array of dimensions [n_int+1, n_slit+1, 2-3] containing the averaged corners
+    #this lets us plot with pcolormesh without any gaps
+    
+    if type(pixel_z)!=type(None):
+        return avgxy[:,:,0], avgxy[:,:,1], avgxy[:,:,2]
+    else:
+        return avgxy[:,:,0], avgxy[:,:,1]
+
+
+def get_pixel_mrh_alt(scvec_iau,pixelvec_iau):
+    #for some reason this is giving different values from Chris' pixelgeometry, not using it
+    
+    mars_radii = spice.gdpool('BODY499_RADII',0,3)
+    
+    pt, alt = spice.npedln(mars_radii[0],mars_radii[1],mars_radii[2],
+                           scvec_iau,
+                           pixelvec_iau)
+    
+    if alt==0:
+        #the line intersects the ellipsoid
+        
+        #we need to find the intersection point 
+        #on the other side of the planet to get 
+        #the correct negative altitude
+        dist_add = 10000 #km     
+        
+        dist_to_tanpt = -np.sum(scvec_iau*pixelvec_iau)
+        if dist_to_tanpt > 0:
+            #the tangent point is along the look direction
+            pt_otherside, alt_otherside = spice.npedln(mars_radii[0],mars_radii[1],mars_radii[2],
+                                                       scvec_iau+dist_add*pixelvec_iau,
+                                                       -pixelvec_iau)
+        else:
+            #the tangent point is behind the observation
+            pt_otherside, alt_otherside = spice.npedln(mars_radii[0],mars_radii[1],mars_radii[2],
+                                                       scvec_iau-dist_add*pixelvec_iau,
+                                                       pixelvec_iau)
+        
+        pt = (pt+pt_otherside)/2
+        
+        #find the ellipsoid point directly above the tangent point
+        norm_pt = pt/np.linalg.norm(pt)
+        surf_pt = spice.surfpt(pt,norm_pt,mars_radii[0],mars_radii[1],mars_radii[2])
+        alt = np.linalg.norm(pt) - np.linalg.norm(surf_pt)
+        pt=surf_pt
+    
+    return alt
+
+
+
+
 def unit_vector(vector):
     """ Returns the unit vector of the vect?or.  """
     return vector / np.linalg.norm(vector)
