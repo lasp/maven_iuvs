@@ -52,7 +52,7 @@ def getfilenames(tag,  iuvs_dir=l1b_files_directory):
     # print(dir)
     orbfiles = sorted(glob.glob(iuvs_dir+tag))
     if len(orbfiles) == 0:
-        return ['']
+        return []
     else:
         return latestfiles(dropxml(orbfiles))
 
