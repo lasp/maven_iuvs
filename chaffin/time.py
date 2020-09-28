@@ -7,11 +7,18 @@ from .spice import load_iuvs_spice
 def check_et(et):
     if type(et)==str:
         et=spice.str2et(et)
+    return et
 
-def Ls(et):
-    check_et(et)
+def Ls(et, return_marsyear=False):
+    et = check_et(et)
     ls=spice.lspcn('MARS',et,'NONE')
-    return ls*180/np.pi
+    ls=ls*180/np.pi
+    if not return_marsyear:    
+        return ls
+    else:
+        marsyear = np.searchsorted(marsyearboundaries_et, et)
+        return ls, marsyear
+        
 
 def Ls_branch(et):
     ls=mars_Ls(et)
@@ -24,8 +31,8 @@ def et_to_utc(et):
 
 
 def make_ls_et_dictionary(et_start,et_end,n=10000):
-    check_et(et_start)
-    check_et(et_end)
+    et_start = check_et(et_start)
+    et_end = check_et(et_end)
 
     et_dictionary=np.array([[et,Ls(et)]
                      for et in np.linspace(et_start,
