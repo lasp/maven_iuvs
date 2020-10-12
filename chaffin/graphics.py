@@ -202,13 +202,14 @@ class line_fit_plot:
                                                          row_start_y/self.figure_size_y,
                                                          bin_plot_size/self.figure_size_x,
                                                          bin_plot_size/self.figure_size_y))
+            plot_start_x += bin_plot_size + detector_image_margin
             if self.correct_muv:
-                plot_start_x += bin_plot_size + detector_image_margin
                 self.detector_image_axes[iint][1] = self.fig.add_axes((plot_start_x/self.figure_size_x,
                                                              row_start_y/self.figure_size_y,
                                                              bin_plot_size/self.figure_size_x,
                                                              bin_plot_size/self.figure_size_y))
-                plot_start_x += bin_plot_size + detector_image_margin + image_lineplot_margin
+                plot_start_x += bin_plot_size + detector_image_margin
+            plot_start_x += image_lineplot_margin
             for ispa in range(n_spa):
                 self.counts_axes[iint][ispa] = self.fig.add_axes((plot_start_x/self.figure_size_x,
                                                          detector_image_row_start_y/self.figure_size_y,
