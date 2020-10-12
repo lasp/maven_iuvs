@@ -97,6 +97,22 @@ def get_lya(myfits):
         lyavals=fit_line(myfits,121.56)
         np.save(save_file_name,lyavals)
         return lyavals
+
+
+def get_muv_contamination_templates(myfits):
+    #find the filename of the matching muv file
+    fuv_filename=myfits.filename()
+    fuv_dir=os.path.dirname(fuv_filename)
+    muv_filename=os.path.basename(fuv_filename).replace('fuv','muv')
+    muv_filename=os.path.join(fuv_dir,muv_filename)
+    import astropy.io.fits as fits
+    myfits_muv=fits.open(muv_filename)
+
+    #get the MUV contamination templates
+    n_int,n_spa,n_spe = myfits['Primary'].data.shape
+    muv_contamination_templates = np.zeros((n_spa,n_spe))
+
+    return myfits_muv, muv_contamination_templates
     
 
 def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, correct_muv=False):
@@ -108,11 +124,10 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
         warnings.warn('correct_muv not implemented, this flag does not change output values')
         #get the muv counterpart of this observation, if it exists
         try:
-            fuv_filename=myfits.filename()
-            fuv_dir=os.path.dirname(fuv_filename)
-            muv_filename=os.path.basename(fuv_filename).replace('fuv','muv')
-            muv_filename=os.path.join(fuv_dir,muv_filename)
-            myfits_muv=fits.open(muv_filename)
+            # returns the partner FUV FITS object
+            # and an n_spa x n_spe array of MUV contamination
+            # templates from the corresponding MUV observation
+            myfits_muv, muv_contamination_templates = get_muv_contamination_templates(myfits)
         except FileNotFoundError:
             print('no matching MUV observation found, cannot correct MUV')
             correct_muv=False
@@ -154,11 +169,17 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
         for ispa in range(n_spa):
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
             DN = myfits['detector_dark_subtracted'].data[iint, ispa]
-
+            if correct_muv:
+                muv = muv_contamination_templates[ispa]
+            else:
+                muv=np.zeros_like(DN)
+            
             # subset the data to be fitted to the vicinity of the spectral line
             d_lambda = 2.5
-            fitwaves, fitDN = np.transpose([[w, d] for w, d in zip(waves, DN) if w > l0-d_lambda and w < l0+d_lambda])
-            lineDNmax = np.max([lineDNmax, np.max(fitDN)])
+            fitwaves, fitDN, fitmuv = np.transpose([[w, d, m]
+                                                    for w, d, m in zip(waves, DN, muv)
+                                                    if w > l0-d_lambda and w < l0+d_lambda])
+            lineDNmax = np.max([lineDNmax, np.max(fitDN)]) # for plotting
 
             # guess what the fit parameters should be
             DNguess = np.sum(fitDN)
@@ -167,20 +188,37 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
                 fitDN[-3:-1]-np.median(fitDN[0:3]))/(fitwaves[-1]-fitwaves[0])
 
             # define the line spread function for this spatial element
-            def this_spatial_element_lsf(x, scale=5e6, dl=1, x0=0, s=0, b=0, background_only=False):
+            def this_spatial_element_lsf(x, scale=5e6, dl=1, x0=0, s=0, b=0, muv_background_scale=0,
+                                         background_only=False):
                 unitlsf = lsf[ispa](dl*x-x0)
                 unitlsf /= np.sum(unitlsf)
 
-                if background_only:
-                    return s*(x-x0) + b
-                else:
-                    return scale*unitlsf + s*(x-x0) + b
+                lineshape = s*(x-x0) + b
+                
+                if correct_muv:
+                    lineshape += muv_background_scale*fitmuv[ispa]
+
+                if not background_only:
+                    lineshape += scale*unitlsf 
+
+                return lineshape
 
             # do the fit
             try:
                 from scipy.optimize import curve_fit
-                fit = curve_fit(this_spatial_element_lsf, fitwaves, fitDN, p0=( DNguess, 1.0, l0, slopeguess, backguess))
-                thislinevalue = fit[0][0]
+
+                parms_guess = ( DNguess, 1.0, l0, slopeguess, backguess)
+
+                if correct_muv:
+                    #we need to append a guess for the MUV background
+                    parms_guess=list(parms_guess)
+                    parms_guess.append(0)
+                    parms_guess=tuple(parms_guess)
+
+                fit = curve_fit(this_spatial_element_lsf, fitwaves, fitDN,
+                                p0=parms_guess)
+                
+                thislinevalue = fit[0][0] # keep only the total DN in the line
             except RuntimeError:
                 fit = [(DNguess, 1.0, l0, slopeguess, backguess)]
                 thislinevalue = np.nan
