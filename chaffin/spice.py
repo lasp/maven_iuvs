@@ -115,6 +115,9 @@ def load_sc_ck(load_cruise=False, load_all_longterm=False):
     # 2018-2019 kernels
     this_f = glob.glob(os.path.join(ck_path,'mvn_iuv_all_l0_201[89]????_v*.bc'))
     f.extend(this_f)
+    # 2020 kernels
+    this_f = glob.glob(os.path.join(ck_path, 'mvn_iuv_all_l0_2020????_v*.bc'))
+    f.extend(this_f)
 
     if len(f) > 0:
         furnsh_array(find_latest_kernel(f, 4))
