@@ -23,6 +23,8 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
     #
     # plot 1: image of the planet and swaths
     #
+
+    #planet was drawn when axes were set up
     
     #draw bounding box of each swath on top of planet
     all_pixel_corners_2d=[]
@@ -36,12 +38,23 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
         
         
         #to get the position of the pixel corner we could use the distance to the tangent point
-        pixel_corner_distance_mso=np.repeat(myfits['PixelGeometry'].data['PIXEL_CORNER_LOS'][:,:,:,np.newaxis],3,axis=3)*all_pixel_vecs_mso[idx]
+        pixel_corner_distance=myfits['PixelGeometry'].data['PIXEL_CORNER_LOS']
         
-        #or project out to the plane perpendicular to the look direction
-        #pixel_corner_distance_mso=-np.dot(spacecraft_pos_mso_reshaped,orbit_coords['camera_up'])/np.dot(all_pixel_vecs_mso[idx],orbit_coords['camera_up'])
-        #                         ^minus sign required here because pixel_vec points in opposite direction of spacecraft pos
-        #pixel_corner_distance_mso=np.repeat(pixel_corner_distance_mso[:,:,:,np.newaxis],3,axis=3)*all_pixel_vecs_mso[idx]
+
+        # TODO: get this part of the code working to make OK images. Right now it turns the limb into a really gross region
+        # probably we need to carefully account for the shape of the limb in drawing the pixels
+        # #we could also project out to the plane perpendicular to the look direction to get the position of the pixel corner
+        # perp_pixel_corner_distance=-np.dot(spacecraft_pos_mso_reshaped,orbit_coords['camera_up'])/np.dot(all_pixel_vecs_mso[idx],orbit_coords['camera_up'])
+        # #                          ^minus sign required here because pixel_vec points in opposite direction of spacecraft pos
+
+        # #but really we want the distance to the disk if the point is on the disk
+        # #or the distance to the plane when we're off disk
+        # on_disk=myfits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']==0
+        # pixel_corner_distance=np.where(on_disk,pixel_corner_distance,perp_pixel_corner_distance)
+
+        
+        #multiply by the MSO look direction to figure out where we end up in MSO space
+        pixel_corner_distance_mso=np.repeat(pixel_corner_distance[:,:,:,np.newaxis],3,axis=3)*all_pixel_vecs_mso[idx]
         
         #now project into the coordinate frame
         pixel_los_pos_mso=spacecraft_pos_mso_reshaped+pixel_corner_distance_mso
@@ -65,7 +78,7 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
         text_anchor=[0,0]
         if np.mean(pixel_corners_2d[-1,:,1])>np.mean(pixel_corners_2d[0,:,1]):
             if pixel_corners_2d[-1,-1,0]>pixel_corners_2d[-1,0,0]:
-                #secondare if structure is here to support left/right alignment if desired
+                #secondary if structure is here to support left/right alignment if desired
                 text_anchor[0]=np.mean(pixel_corners_2d[-1,mid_pixel_range,0])
                 text_anchor[1]=np.min(pixel_corners_2d[-1,mid_pixel_range,1])
             else:
@@ -132,13 +145,13 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
 
         pixel_vec_origin=all_pixel_vecs_mso[mid_swath_index][0,0,4]
         
-        #or scale the swaths by angular extent based on the mirror angles
         start_along_mirror=np.array([np.rad2deg(np.dot(v[0,mid_pixel_index,0]-pixel_vec_origin,alongmirrorvec)) for v in all_pixel_vecs_mso])
         end_along_mirror=np.array([np.rad2deg(np.dot(v[-1,mid_pixel_index,3]-pixel_vec_origin,alongmirrorvec)) for v in all_pixel_vecs_mso])
         length_along_mirror=np.abs(end_along_mirror-start_along_mirror)
         
         swath_ax_scale=50 if orbno < 8500 else 60 # number of degrees represented by the entire axis (larger during + after aerobraking)
     elif scale_by_mirror_angle:
+        #or scale the swaths by angular extent based on the mirror angles
         fov_angles=[obs['fits']['Integration'].data['FOV_DEG'] for obs in apoapse_obs]
         
         start_along_mirror=np.array([a[0] for a in fov_angles])
