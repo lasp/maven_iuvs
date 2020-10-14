@@ -99,9 +99,13 @@ def get_lya(myfits):
         return lyavals
 
 
-def get_muv_contamination_templates(myfits):
+def get_muv_contamination_templates(myfits_fuv):
+    # returns the partner MUV FITS object
+    # and an n_spa x n_spe array of MUV contamination
+    # templates from the corresponding MUV observation
+
     #find the filename of the matching muv file
-    fuv_filename=myfits.filename()
+    fuv_filename=myfits_fuv.filename()
     fuv_dir=os.path.dirname(fuv_filename)
     muv_filename=os.path.basename(fuv_filename).replace('fuv','muv')
     muv_filename=os.path.join(fuv_dir,muv_filename)
@@ -109,6 +113,7 @@ def get_muv_contamination_templates(myfits):
     myfits_muv=fits.open(muv_filename)
 
     #get the MUV contamination templates
+    #To be ported from IDL by Sonal
     n_int,n_spa,n_spe = myfits['Primary'].data.shape
     muv_contamination_templates = np.zeros((n_spa,n_spe))
 
@@ -124,9 +129,6 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
         warnings.warn('correct_muv not implemented, this flag does not change output values')
         #get the muv counterpart of this observation, if it exists
         try:
-            # returns the partner FUV FITS object
-            # and an n_spa x n_spe array of MUV contamination
-            # templates from the corresponding MUV observation
             myfits_muv, muv_contamination_templates = get_muv_contamination_templates(myfits)
         except FileNotFoundError:
             print('no matching MUV observation found, cannot correct MUV')
