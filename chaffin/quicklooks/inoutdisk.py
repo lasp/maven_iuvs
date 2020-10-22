@@ -26,8 +26,8 @@ def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coor
         for idx, obs in enumerate(outdisk_obs):
             if obs['filename']!='':
                 draw_obs_arrow(obs['fits'], orbit_coords['camera_right'], orbit_coords['camera_up'], orbit_ax, target_index=0.5, arrow_length=0.4)
-                from ..integration import get_lya
-                outdisk_brightness.append(get_lya(obs['filename']))
+                from ..integration import get_lya_orbit_h5
+                outdisk_brightness.append(get_lya_orbit_h5(obs['filename']))
                 
                 mid_pixel_index = outdisk_brightness[-1].shape[1]//2
                 slit_center_alt = obs['fits']['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][:,mid_pixel_index,4] 
@@ -68,8 +68,8 @@ def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coor
         for idx, obs in enumerate(indisk_obs):
             if obs['filename']!='':
                 draw_obs_arrow(obs['filename'], orbit_coords['camera_right'], orbit_coords['camera_up'], orbit_ax, target_index=0.5, arrow_length=0.4)
-                from ..integration import get_lya
-                indisk_brightness.append(get_lya(obs['filename']))
+                from ..integration import get_lya_orbit_h5
+                indisk_brightness.append(get_lya_orbit_h5(obs['filename']))
                 
                 mid_pixel_index = outdisk_brightness[-1].shape[1]//2
                 slit_center_alt = obs['fits']['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][:,mid_pixel_index,4] 

@@ -1,8 +1,8 @@
 import numpy as np
 
 def pixel_swath_quantities(myfits,pixel_x=None,pixel_y=None,orbit_towards_apo_vec=None):  
-    from ..integration import get_lya
-    brightness=get_lya(myfits)
+    from ..integration import get_lya_orbit_h5
+    brightness=get_lya_orbit_h5(myfits)
     
     int_num_increases_along_apo=True
     

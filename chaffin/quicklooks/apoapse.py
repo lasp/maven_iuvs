@@ -107,8 +107,8 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
     # plot 2: all swaths laid out in rectangular format side-by-side
     #
     # get lyman alpha brightness of all files
-    from ..integration import get_lya
-    brightness=[get_lya(obs['fits']) for obs in apoapse_obs]
+    from ..integration import get_lya_orbit_h5
+    brightness=[get_lya_orbit_h5(obs['fits']) for obs in apoapse_obs]
     
     #use the pixel locations to define the along slit / along integration coordinate system
     scale_by_map_plot        = False

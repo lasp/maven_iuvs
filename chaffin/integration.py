@@ -74,29 +74,183 @@ def get_lya(myfits):
     from .paths import lya_fit_vals_dir
     import astropy.io.fits as fits
 
-    #get the filename of the FITS file without extensions or paths
+    # get the filename of the FITS file without extensions or paths
     if type(myfits)!=fits.hdu.hdulist.HDUList:
         fits_file_name=os.path.basename(myfits)
     else:
         fits_file_name=myfits['Primary'].header['FILENAME']
     fits_file_name=fits_file_name.replace('.fits','').replace('.gz','')
 
-    #determine where to save the lya fit values
+    # determine where to save the lya fit values
     save_file_name=fits_file_name+"_lya_fit_values.npy"
     save_file_orbit=save_file_name.split('orbit')[1][:5]
     save_file_subdir='orbit'+str(((int(save_file_orbit)//100)*100)).zfill(5)
     save_file_subdir=os.path.join(lya_fit_vals_dir,save_file_subdir)
     save_file_name=os.path.join(save_file_subdir,save_file_name)
-    
+
     if not os.path.exists(save_file_subdir):
         os.makedirs(save_file_subdir)
-        
+
     if os.path.exists(save_file_name):
         return np.load(save_file_name)
     else:
         lyavals=fit_line(myfits,121.56)
         np.save(save_file_name,lyavals)
         return lyavals
+
+
+def get_solar_lyman_alpha(myfits):
+    import datetime
+    from scipy.io.idl import readsav
+    from .paths import euvm_orbit_average_filename
+    import spiceypy as spice
+
+    # load the EUVM data
+    euvm = readsav(euvm_orbit_average_filename)
+    euvm_datetime = [datetime.datetime.fromtimestamp(t)
+                     for t in euvm['mvn_euv_l2_orbit'].item()[0]]
+
+    euvm_lya = euvm['mvn_euv_l2_orbit'].item()[2][2]
+    euvm_mars_sun_dist = euvm['mvn_euv_l2_orbit'].item()[5]
+
+    # get the time of the FITS file
+    iuvs_mean_et = np.mean(myfits['Integration'].data['ET'])
+    iuvs_datetime = spice.et2datetime(iuvs_mean_et)
+    # we need to remove the timezone info to compare with EUVM times
+    iuvs_datetime = iuvs_datetime.replace(tzinfo=None)
+
+    # interpolate the EUVM data if it's close enough in time
+    euvm_idx = np.searchsorted(euvm_datetime, iuvs_datetime)
+    if (euvm_datetime[euvm_idx] > iuvs_datetime - datetime.timedelta(days=2)
+        and
+        euvm_datetime[euvm_idx+1] < iuvs_datetime + datetime.timedelta(days=2)):
+        interp_frac = ((iuvs_datetime-euvm_datetime[euvm_idx])
+                       /
+                       (euvm_datetime[euvm_idx+1]-euvm_datetime[euvm_idx]))
+        lya_interp  = interp_frac*(euvm_lya[euvm_idx+1] - euvm_lya[euvm_idx]) + euvm_lya[euvm_idx]
+        dist_interp = interp_frac*(euvm_mars_sun_dist[euvm_idx+1] - euvm_mars_sun_dist[euvm_idx]) + euvm_mars_sun_dist[euvm_idx]
+
+        # this is the band-integrated value measured at Mars, we need to
+        # convert back to Earth, then get the line center flux using the
+        # power law relation of Emerich...
+        lya_interp *= dist_interp**2
+        # this is now in W/m2 at Earth. We need to convert to ph/cm2/s
+        phenergy = 1.98e-25/(121.6e-9)  # energy of a lyman alpha photon in J
+        lya_interp /= phenergy
+        lya_interp /= 1e4  # convert to /cm2
+        # we're now in ph/cm2/s
+
+        # Use the power law relation of Emerich:
+        lya_interp = 0.64*((lya_interp/1e11)**1.21)
+        lya_interp *= 1e12
+        # we're now in ph/cm2/s/nm
+
+        # convert back to Mars
+        lya_interp /= dist_interp**2
+    else:
+        lya_interp = np.nan
+
+    return lya_interp
+
+
+def get_lya_orbit_h5(myfits, label):
+    # get lyman alpha brightness values for the corresponding file and
+    # label, reading from a per-orbit HDF5 file that has a dataset
+    # corresponding to the passed file label
+
+    import os
+    import h5py
+    from .paths import lya_fit_vals_dir_h5
+    from .geometry import get_pixel_vec_mso
+    import astropy.io.fits as fits
+
+    # get the filename of the FITS file without extensions or paths
+    if type(myfits) != fits.hdu.hdulist.HDUList:
+        fits_file_name = os.path.basename(myfits)
+    else:
+        fits_file_name = myfits['Primary'].header['FILENAME']
+    fits_file_name = fits_file_name.replace('.fits', '').replace('.gz', '')
+
+    # determine where to save the lya fit values
+    save_file_orbit = fits_file_name.split('orbit')[1][:5]
+    save_file_name = 'orbit'+save_file_orbit+"_lya_fit_values.h5"
+    save_file_subdir = 'orbit'+str(((int(save_file_orbit)//100)*100)).zfill(5)
+    save_file_subdir = os.path.join(lya_fit_vals_dir_h5, save_file_subdir)
+    save_file_name = os.path.join(save_file_subdir, save_file_name)
+
+    if not os.path.exists(save_file_subdir):
+        os.makedirs(save_file_subdir)
+
+    f = h5py.File(save_file_name, 'a')
+    if label in f.keys():
+        grp = f[label]
+        # the data is already stored in the file, read it
+        if grp['l1b_filename'][0] == np.string_(fits_file_name):
+            lyavals = grp['IUVS Lyman alpha'][...]
+        else:
+            raise Exception('filename does not match expected ' +
+                            'filename in get_lya_orbit_h5')
+    else:
+        # the data is not stored in this file yet, get it and write it
+        grp = f.create_group(label)
+
+        # store relevant ancillary info
+
+        # values shared for the whole observation
+        grp.create_dataset('l1b_filename', data=[np.string_(fits_file_name)])
+        dset = grp.create_dataset('Solar Lyman alpha',
+                                  data=get_solar_lyman_alpha(myfits))
+        dset.attrs['units'] = 'ph/cm2/s/nm'
+        # get Mars Ecliptic coordinates
+        import spiceypy as spice
+        marspos, ltime = spice.spkezr('MARS',
+                                      myfits['Integration'].data['ET'][0],
+                                      'ECLIPJ2000', 'NONE', 'SSB')
+        marspos = marspos[:3]/1.496e8  # convert to AU from km
+        marssundist = np.linalg.norm(marspos)
+        dset = grp.create_dataset('Mars Ecliptic Coordinates',
+                                  data=marspos)
+        dset.attrs['units'] = 'AU'
+        dset = grp.create_dataset('Mars-Sun Distance',
+                                  data=marssundist)
+        dset.attrs['units'] = 'AU'
+        # now the IUVS Lyman alpha brightness
+
+        lyavals = fit_line(myfits, 121.56)  # get_lya(myfits)
+        dset = grp.create_dataset('IUVS Lyman alpha', data=lyavals)
+        dset.attrs['units'] = 'kR'
+
+        # ancillary data for the IUVS integrations
+        dset = grp.create_dataset('Uncertainty in IUVS Lyman alpha',
+                                  data=np.full_like(lyavals, np.nan))
+        dset.attrs['units'] = 'kR'
+        grp.create_dataset('ET', data=myfits['Integration'].data['ET'])
+        grp.create_dataset('UTC', data=np.array([np.string_(t)
+                                                 for t in myfits['Integration'].data['UTC']]))
+        grp.create_dataset('MSO Pixel vector along integration center',
+                           data=get_pixel_vec_mso(myfits)[:, :, 4])
+        dset = grp.create_dataset('MSO Spacecraft position',
+                                  data=myfits['SpacecraftGeometry'].data['V_SPACECRAFT_MSO'])
+        dset.attrs['units'] = 'km'
+        grp.create_dataset('Pixel RA',
+                           data=myfits['PixelGeometry'].data['PIXEL_CORNER_RA'][:, :, 4])
+        grp.create_dataset('Pixel Dec',
+                           data=myfits['PixelGeometry'].data['PIXEL_CORNER_DEC'][:, :, 4])
+        grp.create_dataset('Tangent point SZA',
+                           data=myfits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
+        grp.create_dataset('Tangent point local time',
+                           data=myfits['PixelGeometry'].data['PIXEL_LOCAL_TIME'])
+        grp.create_dataset('Tangent point Latitude',
+                           data=myfits['PixelGeometry'].data['PIXEL_CORNER_LAT'][:, :, 4])
+        grp.create_dataset('Tangent point Longitude',
+                           data=myfits['PixelGeometry'].data['PIXEL_CORNER_LON'][:, :, 4])
+        dset = grp.create_dataset('Tangent point altitude',
+                                  data=myfits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][:, :, 4])
+        dset.attrs['units'] = 'km'
+
+    f.close()
+
+    return lyavals
 
 
 def get_muv_contamination_templates(myfits_fuv):
