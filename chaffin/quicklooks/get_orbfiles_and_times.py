@@ -124,7 +124,7 @@ def get_orbfiles_and_times(orbno):
             #we've dealt with this file set, remove it from all lists
             orbfilenames = np.delete(orbfilenames, np.where(orbfilenames == filematch))
             if filematch != '':
-                iuvs_files_available_et  =np.delete(iuvs_files_available_et  ,closest_available_idx)
+                iuvs_files_available_et  =np.delete(iuvs_files_available_et, closest_available_idx)
                 del iuvs_files_available_fits[closest_available_idx]
                 del iuvs_files_available_name[closest_available_idx]
             integrated_report_image_list = np.delete(integrated_report_image_list, np.where(integrated_report_image_list == file_expected))
