@@ -3,6 +3,7 @@ import os
 import glob
 from .paths import l1b_files_directory
 
+all_iuvs_filenames = np.load(os.path.join(l1b_files_directory,'filenames.npy'))
 
 def filetag(fname):  # get tag for files, omitting directiory and version/revision number
     return os.path.basename(fname).split("_v")[0]
@@ -47,10 +48,18 @@ def latestfiles(files):
     return uniquefilenames
 
 
-def getfilenames(tag,  iuvs_dir=l1b_files_directory):
+def getfilenames(tag, iuvs_dir=l1b_files_directory, use_index=True):
     iuvs_dir = iuvs_dir+'*/'
     # print(dir)
-    orbfiles = sorted(glob.glob(iuvs_dir+tag))
+    if use_index:
+        # use the index of files saved in the
+        # l1b_data directory and loaded on startup
+        import fnmatch
+        orbfiles = fnmatch.filter(all_iuvs_filenames, tag)
+    else:
+        # go to the disk and glob directly (slow)
+        orbfiles = sorted(glob.glob(iuvs_dir+tag))
+
     if len(orbfiles) == 0:
         return []
     else:
