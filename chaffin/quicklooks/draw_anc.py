@@ -33,7 +33,7 @@ def draw_anc(euvm_ax, swia_ax, mcs_ax, orbtimedict):
     euvm_ax.scatter(euvm_np_datetime,1000*euvm_lya,s=1,color='#fc8d62',zorder=2,ec=None,alpha=1)
     euvm_ax.set_ylim(1.8,5.2)
     euvm_ax.yaxis.set_ticks([2,3,4,5])
-    euvm_ax.text(-0.075,0.5,"EUVM\nLy "+r"$\alpha$"+"\n[W/m2]",color=axis_label_color,fontsize=fontsize,horizontalalignment='right',verticalalignment='center',transform=euvm_ax.transAxes,clip_on=False)
+    euvm_ax.text(-0.075,0.5,"EUVM\nLy "+r"$\alpha$"+"\n[mW/m2]",color=axis_label_color,fontsize=fontsize,horizontalalignment='right',verticalalignment='center',transform=euvm_ax.transAxes,clip_on=False)
     euvm_ax.set_xlim(np_start,np_end)
     
     euvm_ax.axvspan(np_orbit_start,np_orbit_end,color='#666666',zorder=1,ec=None)
