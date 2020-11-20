@@ -12,7 +12,7 @@ irdir='/home/mike/Documents/MAVEN/IUVS/integrated_reports/integrated_reports/'
 
 #directories of ancillary files for orbit quicklooks
 euvm_dir='/home/mike/Documents/MAVEN/EUVM/'
-euvm_orbit_average_filename = os.path.join(euvm_dir, 'mvn_euv_l2b_orbit_merged_v13_r01.sav')
+euvm_orbit_average_filename = os.path.join(euvm_dir, 'mvn_euv_l2b_orbit_merged_v14_r00.sav')
 
 swia_dir='/home/mike/Documents/MAVEN/SWIA/'
 
