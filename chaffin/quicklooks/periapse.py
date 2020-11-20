@@ -7,7 +7,10 @@ import matplotlib
 from .pixel_swath_quantities import pixel_swath_quantities
 from .populate_limb_plot import populate_limb_plot
 
-def quicklook_periapse(orbno=None, observations=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, orbit_peri_ax=None, periapse_axes=None):
+def quicklook_periapse(orbno=None, observations=None,
+                       orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                       cmapnorm=None, orbit_peri_ax=None, periapse_axes=None,
+                       plot_brightness=None):
     peri_obs = [obs for obs in observations if obs['obsid']=='periapse' and obs['segment']=='periapse']
     n_peri = len(peri_obs)
     
@@ -84,16 +87,20 @@ def quicklook_periapse(orbno=None, observations=None, orbit_coords=None, map_ax=
                                           fontsize=orbit_annotation_fontsize,
                                           c=orbit_annotation_color,va='bottom',ha='center')
     
-            #draw observation on map
-            draw_map_obs(obs,map_ax,to_iau_mat)
+            if plot_brightness is None:
+                #draw observation on map if we're plotting the data
+                draw_map_obs(obs,map_ax,to_iau_mat)
             
             #figure out pixel corner coordinates and plot data
             if idx < n_peri_show:
-                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'])
+                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'],label = obs['label'])
                 periapse_axes[axis_idx].patch.set_alpha(1)
                 all_pixel_x.append(pixel_x)
                 all_pixel_y.append(pixel_y)
-                all_brightness.append(brightness)
+                if plot_brightness is None:
+                    all_brightness.append(brightness)
+                else:
+                    all_brightness.append(plot_brightness[obsid_label])
         else:
             axes_text=''
             if obs['echelle']:

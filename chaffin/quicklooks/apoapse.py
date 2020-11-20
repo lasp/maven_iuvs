@@ -2,7 +2,10 @@ from .plot_defaults import *
 import numpy as np
 from ..geometry import get_pixel_vec_mso,pixelcorner_avg
 
-def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, apoapse_axes=None):
+def quicklook_apoapse(fig=None,orbno=None, observations=None,
+                      orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None,
+                      colormap=None, cmapnorm=None, apoapse_axes=None,
+                      plot_brightness=None):
     apoapse_obs = [obs for obs in observations if obs['obsid']=='apoapse' and obs['n_int']>1 and obs['segment']=='apoapse' and not obs['echelle'] and not obs['filename']=='']
     #there's nothing to do for an apoapse observation without a file except put it on the orbit, which we already did.
     
@@ -108,16 +111,18 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
     #
     # get lyman alpha brightness of all files
     from ..integration import get_lya_orbit_h5
-    brightness=[get_lya_orbit_h5(obs['fits']) for obs in apoapse_obs]
-    
+    if plot_brightness is None:
+        brightness=[get_lya_orbit_h5(obs['fits'],obs['label']) for obs in apoapse_obs]
+    else:
+        brightness=[plot_brightness[obs['label']] for obs in apoapse_obs]
+        
     #use the pixel locations to define the along slit / along integration coordinate system
     scale_by_map_plot        = False
     scale_by_pixel_vec_angle = False
     scale_by_mirror_angle    = True
     
     if scale_by_map_plot+scale_by_pixel_vec_angle+scale_by_mirror_angle != 1:
-        print('select only one scaling method in quicklook_apoapse')
-        raise
+        raise KeyError('select only one scaling method in quicklook_apoapse')
     
     mid_swath_index=len(all_pixel_vecs_mso)//2 #helps to set origins by the middle swath since sometimes first has problems
     if scale_by_map_plot:    
@@ -240,15 +245,15 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
     #import pdb; pdb.set_trace()
     
     for idx,obs in enumerate(apoapse_obs):
-        plot_pixel_corners = all_pixel_corners_2d[idx]
-        plot_brightness = brightness[idx]
+        swath_plot_pixel_corners = all_pixel_corners_2d[idx]
+        swath_plot_brightness = brightness[idx]
         
         #sometimes pixel_vec is missing for the first or last integration
-        bad_indices=np.array([idx for idx,vals in enumerate(plot_pixel_corners) if np.any(np.isnan(vals))])
+        bad_indices=np.array([idx for idx,vals in enumerate(swath_plot_pixel_corners) if np.any(np.isnan(vals))])
 
         if len(bad_indices)!=0:
 #            import pdb; pdb.set_trace()
-            bad_indices=np.concatenate([[-1],bad_indices,[len(plot_pixel_corners)]])
+            bad_indices=np.concatenate([[-1],bad_indices,[len(swath_plot_pixel_corners)]])
             bad_indices=np.unique(bad_indices)
             
             #find the largest range of continuous data 
@@ -256,13 +261,13 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None, orbit_ax=None, orb
             start_good_idx=bad_indices[max_continuous_range_index]+1
             end_good_idx  =bad_indices[max_continuous_range_index+1]
 
-            plot_pixel_corners=plot_pixel_corners[start_good_idx:end_good_idx]
-            plot_brightness   =plot_brightness   [start_good_idx:end_good_idx-1]
+            swath_plot_pixel_corners=swath_plot_pixel_corners[start_good_idx:end_good_idx]
+            swath_plot_brightness   =swath_plot_brightness   [start_good_idx:end_good_idx-1]
 
-        if len(plot_brightness)>0:        
-            apoapse_axes[2].pcolormesh(plot_pixel_corners[:,:,0],
-                                       plot_pixel_corners[:,:,1],
-                                       plot_brightness,
+        if len(swath_plot_brightness)>0:        
+            apoapse_axes[2].pcolormesh(swath_plot_pixel_corners[:,:,0],
+                                       swath_plot_pixel_corners[:,:,1],
+                                       swath_plot_brightness,
                                        norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width,clip_on=False)
     
     apoapse_axes[2].text(0,0.1,'swath boundaries drawn at\nlocation of minimum ray height',

@@ -1,8 +1,14 @@
 import numpy as np
 
-def pixel_swath_quantities(myfits,pixel_x=None,pixel_y=None,orbit_towards_apo_vec=None):  
-    from ..integration import get_lya_orbit_h5
-    brightness=get_lya_orbit_h5(myfits)
+def pixel_swath_quantities(myfits, label=None,
+                           pixel_x=None, pixel_y=None,
+                           orbit_towards_apo_vec=None): 
+    from ..integration import get_lya_orbit_h5, fit_line
+    
+    if label is not None:
+        brightness=get_lya_orbit_h5(myfits, label)
+    else:
+        brightness, brightnessunc = fit_line(myfits, 121.56)
     
     int_num_increases_along_apo=True
     

@@ -14,74 +14,152 @@ from .inoutlimb import quicklook_inlimb, quicklook_outlimb
 from .inoutcorona import quicklook_incorona, quicklook_outcorona
 from .apoapse import quicklook_apoapse
 import os
+import numpy as np
 
-def H_corona_quicklook(orbno,brightness_range=[0,20],save=False,savedir='/home/mike/Documents/MAVEN/IUVS/iuvs_python/quicklooks_png/'):
-    observations, orbtimedict = get_orbfiles_and_times(orbno)
-    
-    fig=plt.figure(figsize=(6,5),dpi=300,facecolor='k');
-    fig.subplots_adjust(bottom=0,top=1,left=0,right=1)
-    [ax.remove() for ax in fig.axes];
+def orbit_brightness_plot(fig=None,
+                          orbtimedict=None, observations=None,
+                          map_ax=None, to_iau_mat=None,
+                          brightness_range=None,
+                          plot_brightness=None, panel_x_start_frac=None, plot_diff=False):
 
-    (orbit_x_ax, orbit_y_ax, map_ax, euvm_ax, swia_ax, mcs_ax, filelist_ax) = setup_info_canvas(fig,orbtimedict)
-    map_ax, to_iau_mat = draw_map(fig,map_ax,orbtimedict['orbit_middle_utc']);
-    draw_anc(euvm_ax, swia_ax, mcs_ax, orbtimedict);
-    draw_file_list(observations, filelist_ax)
+    (orbit_ax, orbit_bbox, orbit_coords, orbit_peri_ax) = setup_orbit_canvas(fig, orbtimedict, panel_x_start_frac=panel_x_start_frac)
 
-    (orbit_ax, orbit_bbox, orbit_coords, orbit_peri_ax) = setup_orbit_canvas(fig, orbtimedict)
-
-    myaxes = setup_orbit_axes(fig, orbit_ax, orbit_coords, orbit_bbox=orbit_bbox, orbtimedict=orbtimedict)
+    myaxes = setup_orbit_axes(fig, orbit_ax, orbit_coords, orbit_bbox=orbit_bbox, orbtimedict=orbtimedict,
+                              panel_x_start_frac=panel_x_start_frac)
     periapse_axes, apoapse_axes, indisk_axis, inlimb_axes, incorona_axis, outdisk_axis, outlimb_axes, outcorona_axis = myaxes
 
-    colorbar_axis, colormap, cmapnorm = setup_colorbar(fig,outcorona_axis,brightness_range=brightness_range)
+    if plot_diff:
+        # figure out what the max difference value is to setup the colormap
+        maxdiff = 0
+        for k in plot_brightness.keys():
+            immax = np.max(np.abs(plot_brightness[k]))
+            if immax > maxdiff:
+                maxdiff = immax 
+        maxdiff = np.ceil(maxdiff)
+        brightness_range = [-maxdiff, maxdiff]
+
+    colorbar_axis, colormap, cmapnorm = setup_colorbar(fig, outcorona_axis, brightness_range=brightness_range, plot_diff=plot_diff)
 
     add_orbit_annotations(observations,orbit_ax,orbit_coords)
 
-    periapse_axes = quicklook_periapse(orbno=orbtimedict['orbno'], observations=observations, 
-                                       orbit_coords=orbit_coords, 
-                                       map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                       colormap=colormap, cmapnorm=cmapnorm, 
-                                       orbit_peri_ax=orbit_peri_ax, periapse_axes=periapse_axes)
+    periapse_axes = quicklook_periapse(orbno=orbtimedict['orbno'], observations=observations,
+                                       orbit_coords=orbit_coords,
+                                       map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                       colormap=colormap, cmapnorm=cmapnorm,
+                                       orbit_peri_ax=orbit_peri_ax, periapse_axes=periapse_axes,
+                                       plot_brightness=plot_brightness)
 
-    outdisk_axis, indisk_axis = quicklook_inoutdisk(orbno=orbtimedict['orbno'], observations=observations, 
-                                                    orbit_ax=orbit_ax, orbit_coords=orbit_coords, 
-                                                    map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                                    colormap=colormap, cmapnorm=cmapnorm, 
-                                                    outdisk_axis=outdisk_axis, indisk_axis=indisk_axis)
+    outdisk_axis, indisk_axis = quicklook_inoutdisk(orbno=orbtimedict['orbno'], observations=observations,
+                                                    orbit_ax=orbit_ax, orbit_coords=orbit_coords,
+                                                    map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                                    colormap=colormap, cmapnorm=cmapnorm,
+                                                    outdisk_axis=outdisk_axis, indisk_axis=indisk_axis,
+                                                    plot_brightness=plot_brightness)
 
-    outlimb_axes = quicklook_outlimb(orbno=orbtimedict['orbno'], observations=observations, 
-                                     orbit_ax=orbit_ax, orbit_coords=orbit_coords, 
-                                     map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                     colormap=colormap, cmapnorm=cmapnorm, 
-                                     outlimb_axes=outlimb_axes, fig=fig)
+    outlimb_axes = quicklook_outlimb(orbno=orbtimedict['orbno'], observations=observations,
+                                     orbit_ax=orbit_ax, orbit_coords=orbit_coords,
+                                     map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                     colormap=colormap, cmapnorm=cmapnorm,
+                                     outlimb_axes=outlimb_axes, fig=fig,
+                                     plot_brightness=plot_brightness)
 
-    inlimb_axes = quicklook_inlimb(orbno=orbtimedict['orbno'], observations=observations, 
-                                   orbit_ax=orbit_ax, orbit_coords=orbit_coords, 
-                                   map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                   colormap=colormap, cmapnorm=cmapnorm, 
-                                   inlimb_axes=inlimb_axes, fig=fig)
+    inlimb_axes = quicklook_inlimb(orbno=orbtimedict['orbno'], observations=observations,
+                                   orbit_ax=orbit_ax, orbit_coords=orbit_coords,
+                                   map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                   colormap=colormap, cmapnorm=cmapnorm,
+                                   inlimb_axes=inlimb_axes, fig=fig,
+                                   plot_brightness=plot_brightness)
 
-    outcorona_axis = quicklook_outcorona(orbno=orbtimedict['orbno'], observations=observations, 
-                                         orbit_ax=orbit_ax, orbit_coords=orbit_coords, 
-                                         map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                         colormap=colormap, cmapnorm=cmapnorm, 
-                                         outcorona_axis=outcorona_axis)
+    outcorona_axis = quicklook_outcorona(orbno=orbtimedict['orbno'], observations=observations,
+                                         orbit_ax=orbit_ax, orbit_coords=orbit_coords,
+                                         map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                         colormap=colormap, cmapnorm=cmapnorm,
+                                         outcorona_axis=outcorona_axis,
+                                         plot_brightness=plot_brightness)
 
-    incorona_axis = quicklook_incorona(orbno=orbtimedict['orbno'], observations=observations, 
+    incorona_axis = quicklook_incorona(orbno=orbtimedict['orbno'], observations=observations,
                                        orbit_ax=orbit_ax, orbit_coords=orbit_coords,
-                                       map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                       colormap=colormap, cmapnorm=cmapnorm, 
-                                       incorona_axis=incorona_axis)
+                                       map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                       colormap=colormap, cmapnorm=cmapnorm,
+                                       incorona_axis=incorona_axis,
+                                       plot_brightness=plot_brightness)
 
     apoapse_axes = quicklook_apoapse(fig=fig,
-                                     orbno=orbtimedict['orbno'], observations=observations, 
-                                     orbit_ax=orbit_ax, orbit_coords=orbit_coords, 
-                                     map_ax=map_ax, to_iau_mat=to_iau_mat, 
-                                     colormap=colormap, cmapnorm=cmapnorm, 
-                                     apoapse_axes=apoapse_axes)
+                                     orbno=orbtimedict['orbno'], observations=observations,
+                                     orbit_ax=orbit_ax, orbit_coords=orbit_coords,
+                                     map_ax=map_ax, to_iau_mat=to_iau_mat,
+                                     colormap=colormap, cmapnorm=cmapnorm,
+                                     apoapse_axes=apoapse_axes,
+                                     plot_brightness=plot_brightness)
+
+
+
+def H_corona_quicklook(orbno,
+                       brightness_range=[0, 20],
+                       save=False,
+                       savedir='/home/mike/Documents/MAVEN/IUVS/iuvs_python/quicklooks_png/',
+                       model_brightness=None, diff_brightness=None):
+    #  model_brightness: dictionary of brightness arrays to plot
+    #                    instead of those found in the FITS files
+    #                    associated with this orbit. Structure must
+    #                    exactly match what's found in the files,
+    #                    including file tags, or errors will
+    #                    happen. Used for plotting model fits to the
+    #                    data
+
+    observations, orbtimedict = get_orbfiles_and_times(orbno)
+
+    figxsize = 2.5 + 3.5
+    data_x_start_frac = 2.5/6.0
+
+    if model_brightness is not None and diff_brightness is not None:
+        figxsize = 2.5 + 3.5 + 3.5 + 3.5
+        data_x_start_frac  = 2.5/13.0
+        model_x_start_frac = 6.0/13.0
+        diff_x_start_frac  = 9.5/13.0
+
+    if model_brightness is not None and diff_brightness is None:
+        figxsize = 2.5 + 3.5 + 3.5
+        data_x_start_frac = 2.5/9.5
+        model_x_start_frac = 6.0/9.5
+
+    if model_brightness is None and diff_brightness is not None:
+        raise ValueError("please specfify both model and diff brightness")
+
+    fig = plt.figure(figsize=(figxsize, 5), dpi=300, facecolor='k')
+    fig.subplots_adjust(bottom=0, top=1, left=0,right=1)
+    for ax in fig.axes:
+        ax.remove()
+
+    (orbit_x_ax, orbit_y_ax, map_ax, euvm_ax, swia_ax, mcs_ax, filelist_ax) = setup_info_canvas(fig, orbtimedict)
+    map_ax, to_iau_mat = draw_map(fig, map_ax, orbtimedict['orbit_middle_utc'])
+    draw_anc(euvm_ax, swia_ax, mcs_ax, orbtimedict)
+    draw_file_list(observations, filelist_ax)
+
+    orbit_brightness_plot(fig=fig,
+                          orbtimedict=orbtimedict, observations=observations,
+                          map_ax=map_ax, to_iau_mat=to_iau_mat,
+                          brightness_range=brightness_range,
+                          plot_brightness=None, panel_x_start_frac=data_x_start_frac, plot_diff=False)
+
+    if model_brightness is not None:
+        orbit_brightness_plot(fig=fig,
+                              orbtimedict=orbtimedict, observations=observations,
+                              map_ax=map_ax, to_iau_mat=to_iau_mat,
+                              brightness_range=brightness_range,
+                              plot_brightness=model_brightness, panel_x_start_frac=model_x_start_frac, plot_diff=False)
+
+    if diff_brightness is not None:
+        orbit_brightness_plot(fig=fig,
+                              orbtimedict=orbtimedict, observations=observations,
+                              map_ax=map_ax, to_iau_mat=to_iau_mat,
+                              brightness_range=brightness_range,
+                              plot_brightness=diff_brightness, panel_x_start_frac=diff_x_start_frac, plot_diff=True)
+
     import datetime
 
     if save:
-        fname=os.path.join(savedir,'orbit'+str(orbno).zfill(5))
+        fname = os.path.join(savedir, 'orbit'+str(orbno).zfill(5))
 
         #     #save to PDF with metadata
         #     from matplotlib.backends.backend_pdf import PdfPages
@@ -97,9 +175,9 @@ def H_corona_quicklook(orbno,brightness_range=[0,20],save=False,savedir='/home/m
         #         d['CreationDate'] = datetime.datetime.today()
         #         d['ModDate'] = datetime.datetime.today()
         
-        #save to png with metadata
-        pngfname=fname+'.png'
-        fig.savefig(pngfname,dpi=600)
+        # save to png with metadata
+        pngfname = fname+'.png'
+        fig.savefig(pngfname, dpi=600)
 
         # Use PIL to save some image metadata
         from PIL import Image

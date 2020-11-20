@@ -4,7 +4,10 @@ from .orbit_annotations import draw_obs_arrow
 from .pixel_swath_quantities import pixel_swath_quantities
 from .populate_limb_plot import draw_integration_plot_alt_labels
 
-def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, outdisk_axis=None, indisk_axis=None):
+def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None,
+                        orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                        cmapnorm=None, outdisk_axis=None, indisk_axis=None,
+                        plot_brightness=None):
     outdisk_obs = [obs for obs in observations if obs['obsid']=='outdisk' and obs['segment']=='outbound' and not obs['echelle']]
     indisk_obs = [obs for obs in observations if obs['obsid']=='indisk' and obs['segment']=='inbound' and not obs['echelle']]
         
@@ -27,8 +30,11 @@ def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coor
             if obs['filename']!='':
                 draw_obs_arrow(obs['fits'], orbit_coords['camera_right'], orbit_coords['camera_up'], orbit_ax, target_index=0.5, arrow_length=0.4)
                 from ..integration import get_lya_orbit_h5
-                outdisk_brightness.append(get_lya_orbit_h5(obs['filename']))
-                
+                if plot_brightness is None:
+                    outdisk_brightness.append(get_lya_orbit_h5(obs['filename'],obs['label']))
+                else:
+                    outdisk_brightness.append(plot_brightness[obs['label']]) # this might cause problems with >1 disk obs
+                    
                 mid_pixel_index = outdisk_brightness[-1].shape[1]//2
                 slit_center_alt = obs['fits']['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][:,mid_pixel_index,4] 
                 outdisk_alts.append(slit_center_alt)
@@ -69,11 +75,14 @@ def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coor
             if obs['filename']!='':
                 draw_obs_arrow(obs['filename'], orbit_coords['camera_right'], orbit_coords['camera_up'], orbit_ax, target_index=0.5, arrow_length=0.4)
                 from ..integration import get_lya_orbit_h5
-                indisk_brightness.append(get_lya_orbit_h5(obs['filename']))
+                if plot_brightness is None:
+                    indisk_brightness.append(get_lya_orbit_h5(obs['filename'],obs['label']))
+                else:
+                    indisk_brightness.append(plot_brightness[obs['label']]) # this might cause problems with >1 disk obs
                 
-                mid_pixel_index = outdisk_brightness[-1].shape[1]//2
+                mid_pixel_index = indisk_brightness[-1].shape[1]//2
                 slit_center_alt = obs['fits']['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][:,mid_pixel_index,4] 
-                outdisk_alts.append(slit_center_alt)
+                indisk_alts.append(slit_center_alt)
         if len(indisk_brightness)>0:
             indisk_brightness = np.concatenate(indisk_brightness)
             indisk_x=1-np.linspace(0,1,indisk_brightness.shape[1]+1) # flip for consistency with peri/limb/corona
@@ -99,7 +108,7 @@ def quicklook_inoutdisk(orbno=None, observations=None, orbit_ax=None, orbit_coor
             
             #draw box on map axis           
             #overlaps with orbit, confusing
-            #[draw_map_obs(obs,map_ax,to_iau_mat) for obs in outdisk_obs]
+            #[draw_map_obs(obs,map_ax,to_iau_mat) for obs in indisk_obs]
         else:
             #no observation files found, change the plot label color
             indisk_axis.set_title(indisk_obsid_label,fontsize=orbit_annotation_fontsize,c=orbit_annotation_warning,pad=0)

@@ -1,7 +1,11 @@
 from .plot_defaults import *
 import numpy as np
 
-def setup_orbit_axes(fig, orbit_ax, orbit_coords, orbtimedict=None, orbit_bbox=None, panel_x_start_frac=2.5/6):
+def setup_orbit_axes(fig, orbit_ax, orbit_coords, orbtimedict=None, orbit_bbox=None, panel_x_start_frac=None):
+    if panel_x_start_frac is None:
+        panel_x_start_frac = 2.5/6
+
+
     #set up canvas
     figsize       = fig.get_size_inches()
     figure_width  = figsize[0]

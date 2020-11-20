@@ -4,7 +4,10 @@ from .orbit_annotations import draw_obs_arrow
 from .pixel_swath_quantities import pixel_swath_quantities
 from ..geometry import get_pixel_vec_mso
 
-def quicklook_outcorona(orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, outcorona_axis=None):
+def quicklook_outcorona(orbno=None, observations=None, orbit_ax=None,
+                        orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                        cmapnorm=None, outcorona_axis=None,
+                        plot_brightness=None):
     #some files are incorrectly labeled, so we need to check if these are really outcorona files
     outcorona_obs = [obs for obs in observations if (obs['obsid']=='outcorona' or obs['obsid']=='outspace') and obs['segment']=='outbound' and not obs['echelle'] and obs['fits']!=None]
     
@@ -41,13 +44,18 @@ def quicklook_outcorona(orbno=None, observations=None, orbit_ax=None, orbit_coor
             
             #figure out pixel corner coordinates and plot data
             outcorona_axis.patch.set_alpha(1)
-            pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'])
+            pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'], label=obs['label'])
+            if plot_brightness is not None:
+                brightness = plot_brightness[obs['label']]
             pcol = outcorona_axis.pcolormesh(pixel_x,pixel_y,brightness,norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width)
             pcol.set_edgecolor('face')
         
     return outcorona_axis
 
-def quicklook_incorona(orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, incorona_axis=None):
+def quicklook_incorona(orbno=None, observations=None, orbit_ax=None,
+                       orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                       cmapnorm=None, incorona_axis=None,
+                       plot_brightness=None):
     incorona_obs = [obs for obs in observations if (obs['obsid']=='incorona' or obs['obsid']=='inspace') and obs['segment']=='inbound' and not obs['echelle'] and obs['fits']!=None]
     
     #select only files that look mostly across the orbit
@@ -83,7 +91,9 @@ def quicklook_incorona(orbno=None, observations=None, orbit_ax=None, orbit_coord
 
             #figure out pixel corner coordinates and plot data
             incorona_axis.patch.set_alpha(1)
-            pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'])
+            pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'], label=obs['label'])
+            if plot_brightness is not None:
+                brightness = plot_brightness[obs['label']]
             pcol = incorona_axis.pcolormesh(pixel_x,pixel_y,brightness,norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width)
             pcol.set_edgecolor('face')
         

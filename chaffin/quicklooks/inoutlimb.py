@@ -4,7 +4,10 @@ from .orbit_annotations import draw_obs_arrow
 from .pixel_swath_quantities import pixel_swath_quantities
 from .populate_limb_plot import populate_limb_plot
 
-def quicklook_outlimb(orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, outlimb_axes=None, fig=None):
+def quicklook_outlimb(orbno=None, observations=None, orbit_ax=None,
+                      orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                      cmapnorm=None, outlimb_axes=None, fig=None,
+                      plot_brightness=None):
     outlimb_obs = [obs for obs in observations if obs['obsid']=='outlimb' and obs['segment']=='outbound' and not obs['echelle']]
     n_outlimb = len(outlimb_obs)
     
@@ -88,17 +91,23 @@ def quicklook_outlimb(orbno=None, observations=None, orbit_ax=None, orbit_coords
             if axis_idx < n_axes:
                 #figure out pixel corner coordinates and plot data
                 outlimb_axes[axis_idx].patch.set_alpha(1)
-                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'])
+                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'], label=obs['label'])
                 all_pixel_x.append(pixel_x)
                 all_pixel_y.append(pixel_y)
-                all_brightness.append(brightness)
+                if plot_brightness is None:
+                    all_brightness.append(brightness)
+                else:
+                    all_brightness.append(plot_brightness[obsid_label])
                 
     
     populate_limb_plot(outlimb_obs, outlimb_axes, orbit_coords, all_pixel_x, all_pixel_y, all_brightness, colormap, cmapnorm)
     
     return outlimb_axes
 
-def quicklook_inlimb(orbno=None, observations=None, orbit_ax=None, orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None, cmapnorm=None, inlimb_axes=None, fig=None):
+def quicklook_inlimb(orbno=None, observations=None, orbit_ax=None,
+                     orbit_coords=None, map_ax=None, to_iau_mat=None, colormap=None,
+                     cmapnorm=None, inlimb_axes=None, fig=None,
+                     plot_brightness=None):
     inlimb_obs = [obs for obs in observations if obs['obsid']=='inlimb' and obs['segment']=='inbound' and not obs['echelle']]
     n_inlimb = len(inlimb_obs)
     
@@ -180,10 +189,13 @@ def quicklook_inlimb(orbno=None, observations=None, orbit_ax=None, orbit_coords=
             if axis_idx < n_axes:
                 inlimb_axes[axis_idx].patch.set_alpha(1)
                 #get the pixel coordinates to figure out if we should plot in altitude or integration number
-                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'])
+                pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'],label=obs['label'])
                 all_pixel_x.append(pixel_x)
                 all_pixel_y.append(pixel_y)
-                all_brightness.append(brightness)
+                if plot_brightness is None:
+                    all_brightness.append(brightness)
+                else:
+                    all_brightness.append(plot_brightness[obsid_label])
 
     populate_limb_plot(inlimb_obs, inlimb_axes, orbit_coords, all_pixel_x, all_pixel_y, all_brightness, colormap, cmapnorm)
 
