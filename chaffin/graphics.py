@@ -241,8 +241,11 @@ class line_fit_plot:
     def plot_line_fits(self,
                        iint, ispa,
                        fitwaves,
-                       fitDN, background_fit, line_fit,
-                       DNguess, DN_fit, thislinevalue):
+                       fitDN, fitDN_unc,
+                       background_fit, line_fit,
+                       DNguess,
+                       DN_fit, DN_unc,
+                       thislinevalue, thislineunc):
         data_color='#1f78b4'
         fit_color='#a6cee3'
         background_color='#888888'
@@ -250,22 +253,25 @@ class line_fit_plot:
         # plot line shapes and fits
         self.counts_axes[iint][ispa].text(0.5,1.0,'int '+str(iint)+' spa '+str(ispa),ha='center',va='bottom',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
         
-        self.counts_axes[iint][ispa].step(fitwaves, fitDN,          color=data_color)
-        self.counts_axes[iint][ispa].step(fitwaves, background_fit, color=background_color)
-        self.counts_axes[iint][ispa].step(fitwaves, line_fit,       color=fit_color)
+        self.counts_axes[iint][ispa].step(fitwaves, fitDN,          color=data_color, where='mid')
+        self.counts_axes[iint][ispa].errorbar(fitwaves, fitDN, lw=0,elinewidth=1.5,          color=data_color, yerr=fitDN_unc)
+        self.counts_axes[iint][ispa].step(fitwaves, background_fit, color=background_color, where='mid')
+        self.counts_axes[iint][ispa].step(fitwaves, line_fit,       color=fit_color, where='mid')
         
         self.counts_axes[iint][ispa].text(0.025,0.975,'DN guess = '+str(int(DNguess)),size=6,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
-        self.counts_axes[iint][ispa].text(0.025,0.9  ,'fit DN = '+str(int(np.round(DN_fit))),size=6,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
-        self.counts_axes[iint][ispa].text(0.025,0.825,'cal = '+str(np.round(thislinevalue,2))+" kR",size=6,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
+        self.counts_axes[iint][ispa].text(0.025,0.9  ,'fit DN = '+str(int(np.round(DN_fit)))+' ± '+str(int(np.round(DN_unc))),size=6,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
+        self.counts_axes[iint][ispa].text(0.025,0.825,'cal = '+'{:.2f}'.format(thislinevalue)+' ± '+'{:.2f}'.format(thislineunc)+" kR",size=6,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
         self.counts_axes[iint][ispa].xaxis.set_ticks([])
         self.counts_axes[iint][ispa].ticklabel_format(axis='y',style='sci',scilimits=(0,0))
-
+        
         # plot deviations
-        self.residual_axes[iint][ispa].step(fitwaves, (fitDN-line_fit)/np.sum(fitDN),color=data_color)
+        self.residual_axes[iint][ispa].axhline(0,color=background_color)
+        self.residual_axes[iint][ispa].step(fitwaves, (fitDN-line_fit)/np.sum(fitDN),color=data_color, where='mid')
+        self.residual_axes[iint][ispa].errorbar(fitwaves, (fitDN-line_fit)/np.sum(fitDN), lw=0,elinewidth=1.5,          color=data_color, yerr=fitDN_unc/np.sum(fitDN))
         self.residual_axes[iint][ispa].set_ylim(-0.06, 0.06)
         self.residual_axes[iint][ispa].yaxis.set_ticks([-0.05, 0, 0.05])
         self.residual_axes[iint][ispa].yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=1,decimals=0))  
-
+        
         if ispa==0:
             self.counts_axes[iint][ispa].set_ylabel('Counts [DN/bin]')
             self.counts_axes[iint][ispa].text(0.025,0.5,'Data',color=data_color,ha='left',va='top',transform=self.counts_axes[iint][ispa].transAxes,clip_on=False)
@@ -274,7 +280,7 @@ class line_fit_plot:
         else:
             self.counts_axes[iint][ispa].yaxis.set_major_formatter(mpl.ticker.NullFormatter())
             self.residual_axes[iint][ispa].yaxis.set_major_formatter(mpl.ticker.NullFormatter())
-
+            
 #                 if iint!=n_int-1:
 #                     self.residual_axes[iint][ispa].xaxis.set_major_formatter(mpl.ticker.NullFormatter()) 
 
