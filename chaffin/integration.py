@@ -94,7 +94,7 @@ def get_lya(myfits):
     if os.path.exists(save_file_name):
         return np.load(save_file_name)
     else:
-        lyavals=fit_line(myfits,121.56)
+        lyavals, lyaunc=fit_line(myfits,121.56)
         np.save(save_file_name,lyavals)
         return lyavals
 
@@ -153,6 +153,20 @@ def get_solar_lyman_alpha(myfits):
     return lya_interp
 
 
+def get_lya_orbit_h5_filename(orbit_number):
+    from .paths import lya_fit_vals_dir_h5
+
+    orbit_number = str(orbit_number).zfill(5)
+
+    # determine where to save the lya fit values
+    save_file_name = 'orbit'+orbit_number+"_lya_fit_values.h5"
+    save_file_subdir = 'orbit'+str(((int(orbit_number)//100)*100)).zfill(5)
+    save_file_subdir = os.path.join(lya_fit_vals_dir_h5, save_file_subdir)
+    save_file_name = os.path.join(save_file_subdir, save_file_name)
+
+    return save_file_name
+
+
 def get_lya_orbit_h5(myfits, label):
     # get lyman alpha brightness values for the corresponding file and
     # label, reading from a per-orbit HDF5 file that has a dataset
@@ -160,26 +174,23 @@ def get_lya_orbit_h5(myfits, label):
 
     import os
     import h5py
-    from .paths import lya_fit_vals_dir_h5
     from .geometry import get_pixel_vec_mso
     import astropy.io.fits as fits
 
+    import astropy.io.fits as fits
+    if type(myfits)!=fits.hdu.hdulist.HDUList:
+        myfits=fits.open(myfits)
+
     # get the filename of the FITS file without extensions or paths
-    if type(myfits) != fits.hdu.hdulist.HDUList:
-        fits_file_name = os.path.basename(myfits)
-    else:
-        fits_file_name = myfits['Primary'].header['FILENAME']
+    fits_file_name = myfits['Primary'].header['FILENAME']
     fits_file_name = fits_file_name.replace('.fits', '').replace('.gz', '')
 
     # determine where to save the lya fit values
     save_file_orbit = fits_file_name.split('orbit')[1][:5]
-    save_file_name = 'orbit'+save_file_orbit+"_lya_fit_values.h5"
-    save_file_subdir = 'orbit'+str(((int(save_file_orbit)//100)*100)).zfill(5)
-    save_file_subdir = os.path.join(lya_fit_vals_dir_h5, save_file_subdir)
-    save_file_name = os.path.join(save_file_subdir, save_file_name)
+    save_file_name = get_lya_orbit_h5_filename(save_file_orbit)
 
-    if not os.path.exists(save_file_subdir):
-        os.makedirs(save_file_subdir)
+    if not os.path.exists(os.path.dirname(save_file_name)):
+        os.makedirs(os.path.dirname(save_file_name))
 
     f = h5py.File(save_file_name, 'a')
     if label in f.keys():
@@ -216,13 +227,13 @@ def get_lya_orbit_h5(myfits, label):
         dset.attrs['units'] = 'AU'
         # now the IUVS Lyman alpha brightness
 
-        lyavals = fit_line(myfits, 121.56)  # get_lya(myfits)
+        lyavals, lyaunc = fit_line(myfits, 121.56)  # get_lya(myfits)
         dset = grp.create_dataset('IUVS Lyman alpha', data=lyavals)
         dset.attrs['units'] = 'kR'
 
         # ancillary data for the IUVS integrations
         dset = grp.create_dataset('Uncertainty in IUVS Lyman alpha',
-                                  data=np.full_like(lyavals, np.nan))
+                                  data=lyaunc)
         dset.attrs['units'] = 'kR'
         grp.create_dataset('ET', data=myfits['Integration'].data['ET'])
         grp.create_dataset('UTC', data=np.array([np.string_(t)
@@ -268,7 +279,7 @@ def get_muv_contamination_templates(myfits_fuv):
 
     #get the MUV contamination templates
     #To be ported from IDL by Sonal
-    n_int,n_spa,n_spe = myfits['Primary'].data.shape
+    n_int,n_spa,n_spe = myfits_muv['Primary'].data.shape
     muv_contamination_templates = np.zeros((n_spa,n_spe))
 
     return myfits_muv, muv_contamination_templates
@@ -310,6 +321,7 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
     lsf=get_lsf_interp(myfits)
 
     linevalues = np.zeros((n_int, n_spa))
+    lineunc    = np.zeros((n_int, n_spa))
     lineDNmax = 0
 
     if plot:
@@ -323,8 +335,11 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             else:
                 myplot.plot_detector(myfits,iint)
         for ispa in range(n_spa):
+            # print(str(iint).rjust(5),'  ',str(ispa).rjust(5), end='\r')
+
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
             DN = myfits['detector_dark_subtracted'].data[iint, ispa]
+            DN_unc = myfits['Random_dn_unc'].data[iint, ispa]
             if correct_muv:
                 muv = muv_contamination_templates[ispa]
             else:
@@ -332,9 +347,9 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             
             # subset the data to be fitted to the vicinity of the spectral line
             d_lambda = 2.5
-            fitwaves, fitDN, fitmuv = np.transpose([[w, d, m]
-                                                    for w, d, m in zip(waves, DN, muv)
-                                                    if w > l0-d_lambda and w < l0+d_lambda])
+            fitwaves, fitDN, fitDN_unc, fitmuv = np.transpose([[w, d, du, m]
+                                                               for w, d, du, m in zip(waves, DN, DN_unc, muv)
+                                                               if w > l0-d_lambda and w < l0+d_lambda])
             lineDNmax = np.max([lineDNmax, np.max(fitDN)]) # for plotting
 
             # guess what the fit parameters should be
@@ -363,23 +378,41 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             try:
                 from scipy.optimize import curve_fit
 
-                parms_guess = ( DNguess, 1.0, l0, slopeguess, backguess)
+                parms_bounds = ([     0, 0.5, l0-d_lambda, -np.inf, -np.inf],
+                                [np.inf, 2.0, l0+d_lambda,  np.inf,  np.inf])
+    
+                if correct_muv:
+                    parms_bounds[0].append(0)
+                    parms_bounds[1].appens(np.inf)
 
+                parms_guess = [DNguess - backguess*len(fitwaves), 1.0, l0, slopeguess, backguess]
+
+                
                 if correct_muv:
                     #we need to append a guess for the MUV background
-                    parms_guess=list(parms_guess)
                     parms_guess.append(0)
-                    parms_guess=tuple(parms_guess)
 
+                # ensure that the guesses are in bounds
+                for i, p in enumerate(parms_guess):
+                    if p < parms_bounds[0][i]:
+                        parms_guess[i] = parms_bounds[0][i]
+                    if p > parms_bounds[1][i]:
+                        parms_guess[i] = parms_bounds[1][i]
+    
                 fit = curve_fit(this_spatial_element_lsf, fitwaves, fitDN,
-                                p0=parms_guess)
-                
+                                p0=parms_guess,
+                                sigma=fitDN_unc, absolute_sigma=True,
+                                bounds=parms_bounds)
+
                 thislinevalue = fit[0][0] # keep only the total DN in the line
+                thislineunc   = np.sqrt(fit[1][0,0])
             except RuntimeError:
                 fit = [(DNguess, 1.0, l0, slopeguess, backguess)]
                 thislinevalue = np.nan
+                thislineunc = np.nan
 
             DN_fit = thislinevalue
+            DN_unc = thislineunc
                 
             # return the requested values
             if flatfield_correct:
@@ -388,22 +421,27 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             if calibrate:
                 cal_factor = get_line_calibration(myfits, l0)
                 thislinevalue *= cal_factor
+                thislineunc   *= cal_factor
 
             linevalues[iint, ispa] = thislinevalue
+            lineunc[iint, ispa] = thislineunc
                 
             if plot:
-                  myplot.plot_line_fits(iint, ispa,
-                                        fitwaves,
-                                        fitDN, this_spatial_element_lsf(fitwaves, *fit[0],background_only=True), this_spatial_element_lsf(fitwaves, *fit[0]),
-                                        DNguess, DN_fit, thislinevalue)
-
+                myplot.plot_line_fits(iint, ispa,
+                                      fitwaves,
+                                      fitDN, fitDN_unc,
+                                      this_spatial_element_lsf(fitwaves, *fit[0],background_only=True), this_spatial_element_lsf(fitwaves, *fit[0]),
+                                      DNguess,
+                                      DN_fit, DN_unc,
+                                      thislinevalue, thislineunc)
 
     if plot:
         myplot.finish_plot(lineDNmax, linevalues)
-        return linevalues, myplot.fig
+        return linevalues, lineunc, myplot.fig
     else:
-        return linevalues
+        return linevalues, lineunc
 
+    
 def mcp_dn_to_volt(dn):
     c0 = -1.83
     c1 = 0.244
