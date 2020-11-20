@@ -105,6 +105,10 @@ def get_solar_lyman_alpha(myfits):
     from .paths import euvm_orbit_average_filename
     import spiceypy as spice
 
+    import astropy.io.fits as fits
+    if type(myfits)!=fits.hdu.hdulist.HDUList:
+        myfits=fits.open(myfits)
+
     # load the EUVM data
     euvm = readsav(euvm_orbit_average_filename)
     euvm_datetime = [datetime.datetime.fromtimestamp(t)
@@ -120,7 +124,7 @@ def get_solar_lyman_alpha(myfits):
     iuvs_datetime = iuvs_datetime.replace(tzinfo=None)
 
     # interpolate the EUVM data if it's close enough in time
-    euvm_idx = np.searchsorted(euvm_datetime, iuvs_datetime)
+    euvm_idx = np.searchsorted(euvm_datetime, iuvs_datetime) - 1
     if (euvm_datetime[euvm_idx] > iuvs_datetime - datetime.timedelta(days=2)
         and
         euvm_datetime[euvm_idx+1] < iuvs_datetime + datetime.timedelta(days=2)):
@@ -129,6 +133,7 @@ def get_solar_lyman_alpha(myfits):
                        (euvm_datetime[euvm_idx+1]-euvm_datetime[euvm_idx]))
         lya_interp  = interp_frac*(euvm_lya[euvm_idx+1] - euvm_lya[euvm_idx]) + euvm_lya[euvm_idx]
         dist_interp = interp_frac*(euvm_mars_sun_dist[euvm_idx+1] - euvm_mars_sun_dist[euvm_idx]) + euvm_mars_sun_dist[euvm_idx]
+        dist_interp = dist_interp / 1.496e8  # convert dist_interp to AU
 
         # this is the band-integrated value measured at Mars, we need to
         # convert back to Earth, then get the line center flux using the
@@ -570,3 +575,15 @@ def getspecbins(myfits):
 def gainscaledcounts(fits):
     gain = np.nanmedian(fits[0].data/fits['detector_dark_subtracted'].data)
     return np.sum(gain*fits['detector_dark_subtracted'].data, axis=2)
+
+
+def lya_flux_to_g_factor(euvm_flux):
+    # converts EUVM fluxes in ph/cm2/s/nm to a g factor
+    lambda_lya = 121.56e-7  # cm
+    lya_cross_section_total = 2.647e-2 * 0.416  # cm^2 Hz
+    clight = 3e10  # cm/s
+    g_factor = euvm_flux * 1e7 * lambda_lya * lambda_lya / clight
+    #                      ^^^ nm/cm
+    # now we're in photons/s/cm2/Hz
+    g_factor *= lya_cross_section_total
+    return g_factor
