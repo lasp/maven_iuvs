@@ -20,7 +20,8 @@ def orbit_brightness_plot(fig=None,
                           orbtimedict=None, observations=None,
                           map_ax=None, to_iau_mat=None,
                           brightness_range=None,
-                          plot_brightness=None, panel_x_start_frac=None, plot_diff=False):
+                          plot_brightness=None, panel_x_start_frac=None, plot_diff=False,
+                          colormap=None, norm=None, cmap_label=None):
 
     (orbit_ax, orbit_bbox, orbit_coords, orbit_peri_ax) = setup_orbit_canvas(fig, orbtimedict, panel_x_start_frac=panel_x_start_frac)
 
@@ -38,7 +39,9 @@ def orbit_brightness_plot(fig=None,
         maxdiff = np.ceil(maxdiff)
         brightness_range = [-maxdiff, maxdiff]
 
-    colorbar_axis, colormap, cmapnorm = setup_colorbar(fig, outcorona_axis, brightness_range=brightness_range, plot_diff=plot_diff)
+    colorbar_axis, colormap, cmapnorm = setup_colorbar(fig, outcorona_axis,
+                                                       brightness_range=brightness_range, plot_diff=plot_diff,
+                                                       colormap=colormap, norm=norm, colormap_label=cmap_label)
 
     add_orbit_annotations(observations,orbit_ax,orbit_coords)
 
@@ -98,7 +101,9 @@ def H_corona_quicklook(orbno,
                        brightness_range=[0, 20],
                        save=False,
                        savedir='/home/mike/Documents/MAVEN/IUVS/iuvs_python/quicklooks_png/',
-                       model_brightness=None, diff_brightness=None):
+                       model_brightness=None, diff_brightness=None,
+                       brightness_cmap=None, brightness_norm=None,brightness_cmap_label='',
+                       diff_cmap=None, diff_norm=None,diff_cmap_label=''):
     #  model_brightness: dictionary of brightness arrays to plot
     #                    instead of those found in the FITS files
     #                    associated with this orbit. Structure must
@@ -140,21 +145,24 @@ def H_corona_quicklook(orbno,
                           orbtimedict=orbtimedict, observations=observations,
                           map_ax=map_ax, to_iau_mat=to_iau_mat,
                           brightness_range=brightness_range,
-                          plot_brightness=None, panel_x_start_frac=data_x_start_frac, plot_diff=False)
+                          plot_brightness=None, panel_x_start_frac=data_x_start_frac, plot_diff=False,
+                          colormap=brightness_cmap,norm=brightness_norm,cmap_label=brightness_cmap_label)
 
     if model_brightness is not None:
         orbit_brightness_plot(fig=fig,
                               orbtimedict=orbtimedict, observations=observations,
                               map_ax=map_ax, to_iau_mat=to_iau_mat,
                               brightness_range=brightness_range,
-                              plot_brightness=model_brightness, panel_x_start_frac=model_x_start_frac, plot_diff=False)
+                              plot_brightness=model_brightness, panel_x_start_frac=model_x_start_frac, plot_diff=False,
+                              colormap=brightness_cmap,norm=brightness_norm,cmap_label=brightness_cmap_label)
 
     if diff_brightness is not None:
         orbit_brightness_plot(fig=fig,
                               orbtimedict=orbtimedict, observations=observations,
                               map_ax=map_ax, to_iau_mat=to_iau_mat,
                               brightness_range=brightness_range,
-                              plot_brightness=diff_brightness, panel_x_start_frac=diff_x_start_frac, plot_diff=True)
+                              plot_brightness=diff_brightness, panel_x_start_frac=diff_x_start_frac, plot_diff=True,
+                              colormap=diff_cmap,norm=diff_norm,cmap_label=diff_cmap_label)
 
     import datetime
 
