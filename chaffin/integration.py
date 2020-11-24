@@ -358,10 +358,9 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             lineDNmax = np.max([lineDNmax, np.max(fitDN)]) # for plotting
 
             # guess what the fit parameters should be
-            DNguess = np.sum(fitDN)
-            backguess = np.median(fitDN[0:3])+np.median(fitDN[-3:-1])/2
-            slopeguess = np.median(
-                fitDN[-3:-1]-np.median(fitDN[0:3]))/(fitwaves[-1]-fitwaves[0])
+            backguess = (np.median(fitDN[0:3])+np.median(fitDN[-3:-1]))/2
+            slopeguess = (np.median(fitDN[-3:-1])-np.median(fitDN[0:3]))/(fitwaves[-1]-fitwaves[0])
+            DNguess = np.sum(fitDN) - backguess * len(fitwaves)
 
             # define the line spread function for this spatial element
             def this_spatial_element_lsf(x, scale=5e6, dl=1, x0=0, s=0, b=0, muv_background_scale=0,
@@ -390,7 +389,7 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
                     parms_bounds[0].append(0)
                     parms_bounds[1].appens(np.inf)
 
-                parms_guess = [DNguess - backguess*len(fitwaves), 1.0, l0, slopeguess, backguess]
+                parms_guess = [DNguess, 1.0, l0, slopeguess, backguess]
 
                 
                 if correct_muv:
@@ -422,6 +421,7 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             # return the requested values
             if flatfield_correct:
                 thislinevalue /= flatfield[ispa]
+                thislineunc   /= flatfield[ispa]
 
             if calibrate:
                 cal_factor = get_line_calibration(myfits, l0)
