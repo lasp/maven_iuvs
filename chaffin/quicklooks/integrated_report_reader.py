@@ -6,7 +6,7 @@ from ..paths import irdir
 def parse_ir_line(line):
     #parse the file so that the time and other info are seperate
 
-    #first three fields have no spaces, so split by whitespace
+    #first four fields have no spaces, so split by whitespace
     split=line.split()
 
     sclk=split[0]
@@ -50,9 +50,9 @@ obsid_dict={0:'periapse',
             22:'echelle indisk',
             23:'echelle outspace',
             24:'star',
-            25:'echelle relay',
+            25:'echelle relay-echelle',
             26:'relay',
-            27:'echelle comm',
+            27:'echelle comm-echelle',
             28:'comm'
            }
 
@@ -60,33 +60,69 @@ obsid_dict={0:'periapse',
 
 
 
-def parse_obsid(full_obsid_int,obs_et):
-    #see Chris's iuvs_obsid in the level1a folder for some more info
-    #obs_ids are a bitstring. Originally this was intended to have only four bits, but a fifth was needed later on.
-    #first four bits in string define old four-bit obs-id
-    #fifth+sixth? bit defines whether a nonlinear binning table is used
-    #originally, the remaining bits were intended to identify the binning table.
-    #However, because of the need for an extra bit for the obs id, the sixth bit is actually now the most significant bit of the obs id
+def parse_obsid(full_obsid_int, obs_et, orbit):
+    #  see Chris's iuvs_obsid in the level1a folder for some more info
+    #  obs_ids are a bitstring.
+    #  Originally this was intended to have only four bits,
+    #  but a fifth was needed later on.
+    #  first four bits in string define old four-bit obs-id
+    #  fifth bit defines whether a nonlinear binning table is used
+    #  originally, remaining bits were used to identify the bin table.
+    #  However, because of the need for an extra bit for the obs id,
+    #  the sixth bit is actually now the most significant bit of the obs id
 
-    #technically the table ID could be used to determine which files have hifi in their filenames but I don't want to parse table IDs so we'll handle this another way
+    #  technically the table ID could be used to determine which files
+    #  have hifi in their filenames but I don't want to parse table
+    #  IDs so we'll handle this another way
 
-    #obsid were reported as hex before 2014 Nov 30
+    #  obsid were reported as hex before 2014 Nov 30
     if obs_et < spice.str2et('2014-Nov-30 00:00:00 UTC'):
-        full_obsid_int=int(str(full_obsid_int),16)
+        full_obsid_int = int(str(full_obsid_int), 16)
 
-    #get the bitstring
+    time_MOI = spice.str2et('2014-Sep-22 02:00:00 UTC')
+    time_APP1_start = spice.str2et('2014-Oct-10 00:00:00 UTC')
+    time_CSS_start = spice.str2et('2014-Oct-16 00:00:00 UTC')
+    time_APP1A_start = spice.str2et('2014-Oct-29 00:00:00 UTC')
+    time_normal_start = spice.str2et('2014-Nov-10 00:00:00 UTC')
+
+    #  there are lots of time-based special cases for various observations
+    if obs_et < time_MOI:
+        raise ValueError("Observation occurs before MOI.")
+
+    if time_MOI <= obs_et < time_APP1_start:
+        #  'early' 35hr orbits before change to science orbit
+        return "early" # -orbit"+str(orbit).zfill(5)+"-mode"+str(full_obsid_int).zfill(3)
+
+    if time_APP1A_start <= obs_et < time_normal_start:
+        #APP cal 1A
+        return "APP1A" #-orbit"+str(orbit).zfill(5)+"-mode"+str(full_obsid_int).zfill(4)
+
+    APP2_orbitfirst = 254
+    APP2_orbitlast  = 257
+    if APP2_orbitfirst <= orbit <= APP2_orbitlast:
+        return "APP2" # -orbit"+str(orbit).zfill(5)+"-mode"+str(full_obsid_int).zfill(4)
+
+    # if we get here we're in a normal orbit
+
+    #  get the bitstring
     obsid_bitstring = '{0:016b}'.format(int(full_obsid_int))
 
-    #now convert back to base-10 for the dictionary lookup
-    obsid_phase = int(obsid_bitstring[6]+obsid_bitstring[:4],2)
+    #  now convert back to base-10 for the dictionary lookup
+    obsid_phase = int(obsid_bitstring[6]+obsid_bitstring[:4], 2)
     nonlinear   = obsid_bitstring[5]
     table       = int(obsid_bitstring[7:])
-    
+
     phase = obsid_dict[obsid_phase]
-    
-    #correct for observations of phobos
+
+    #  correct for observations of phobos
     if table == 24:
         phase = 'phobos'
+
+    # if 
+    if time_CSS_start <= obs_et < time_APP1A_start and table > 5:
+        phase = "comet" # -orbit"+str(orbit).zfill(5)+"-mode"+str(full_obsid_int).zfill(4)
+        if table == 11 or table == 12:
+            phase = "echelle " + phase
 
     return phase
 
@@ -102,9 +138,8 @@ def construct_integrated_orbit(ir_list,orbit_start=None):
     ir_version = [int(ir.split("_v")[1][:2].replace(".","")) for ir in ir_list]
     ir_version_max = np.max(ir_version)
     ir_list = [ir for ir,version in zip(ir_list,ir_version) if version==ir_version_max]
-    
-    #if there's only one file left look for the ones before and after
-    
+
+    #print(ir_list)
     
     all_ir_lines=[]
     for ir in ir_list:
@@ -148,6 +183,7 @@ def construct_integrated_orbit(ir_list,orbit_start=None):
     if orbit_start!=None:
         #look for the ET corresponding to the date/time string passed
         spice_parseable_datetime='20'+orbit_start[:2]+'-'+orbit_start[2:4]+'-'+orbit_start[4:6]+'T'+orbit_start[7:9]+':'+orbit_start[9:11]+':'+orbit_start[11:13]
+        #print(spice_parseable_datetime)
         file_start_et=spice.str2et(spice_parseable_datetime)
         #print(file_start_et)
 
@@ -162,12 +198,12 @@ def construct_integrated_orbit(ir_list,orbit_start=None):
         #get the orbit start and end time using the start of the periapse segment
         ir_orbit_start_line=int(ir_periapse_segment_set_line[ir_which_periapse_start])
         ir_orbit_end_line=int(ir_periapse_segment_set_line[ir_which_periapse_start+1])
-        #print(ir_orbit_start_line)
-        #print(ir_orbit_end_line)
+        #print(ir_text_parsed[ir_orbit_start_line])
+        #print(ir_text_parsed[ir_orbit_end_line])
 
         #restrict the search for all other events to this orbit only
         ir_text_parsed=ir_text_parsed[ir_orbit_start_line:ir_orbit_end_line]
-    
+
     #print(ir_text_parsed)
     
     return ir_text_parsed
@@ -210,89 +246,116 @@ def get_integrated_report_info(orbit_start, orbit_end, orbno):
     ir_orbit_end_et=spice.str2et(ir_orbit_end_time)
     
     #define the time at the midpoint of the periapsis segment and the apoapsis segment
-    ir_outbound_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=OB_SIDE' in irline['type2']][0]
-    ir_mid_periapse_et = (ir_orbit_start_et+ir_outbound_start_et)/2
+    ir_outbound_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=OB_SIDE' in irline['type2']]
+    if len(ir_outbound_start_et) != 0:
+        ir_outbound_start_et = ir_outbound_start_et[0]
+        ir_mid_periapse_et = (ir_orbit_start_et+ir_outbound_start_et)/2
+    else:
+        # this orbit has no labeled outbound side segment
+        ir_outbound_start_et = ir_orbit_end_et
+        ir_mid_periapse_et = ir_orbit_start_et
+
+
+    ir_apoapse_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=APOAPSE' in irline['type2']]
+    if len(ir_apoapse_start_et) != 0:
+        ir_apoapse_start_et = ir_apoapse_start_et[0]
+    else:
+        ir_apoapse_start_et = ir_orbit_end_et
     
-    ir_apoapse_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=APOAPSE' in irline['type2']][0]
-    ir_inbound_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=IB_SIDE' in irline['type2']][0]
+    ir_inbound_start_et = [spice.str2et(irline['et']) for irline in ir_text_parsed if 'vm_string=IB_SIDE' in irline['type2']]
+    if len(ir_inbound_start_et) != 0:
+        ir_inbound_start_et = ir_inbound_start_et[0]
+    else:
+        ir_inbound_start_et = ir_orbit_end_et
+    
     ir_mid_apoapse_et = (ir_apoapse_start_et+ir_inbound_start_et)/2
 
     orbit_segment    = np.array(['periapse',        'outbound',           'apoapse',           'inbound'          ])
     orbit_segment_et = np.array([ir_orbit_start_et, ir_outbound_start_et, ir_apoapse_start_et, ir_inbound_start_et])
+
+    if not np.array_equal(np.sort(orbit_segment_et), orbit_segment_et):
+        raise ValueError("Orbit segment boundary times don't make sense!")
     
     #now let's look for IUVS image_init commands
 
     #obs_id is set before a group of images:
     obsid_commands=[(irline['et'],irline['type2'].split(',rsdpu_obs_id=')[1].split(",")[0]) for irline in ir_text_parsed if 'RSP_OBS_ID_SET' in irline['type1']]
-    #print(obsid_commands)
-    obsid_tag_et,obsid_tag=np.transpose([(spice.str2et(et),parse_obsid(obsid,spice.str2et(et))) for et,obsid in obsid_commands])
 
-    #mcp_level operates in the same way to distinguish light from dark images
-    mcp_level_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_level=')[1].split(",")[0]) for irline in ir_text_parsed if ('RSP_MCP_LVL_SET' in irline['type1'] 
+    if len(obsid_commands) == 0:
+        raise ValueError("No obsid set commands found")
+    else:
+        #print(obsid_commands)
+        obsid_tag_et,obsid_tag=np.transpose([(spice.str2et(et),parse_obsid(obsid,spice.str2et(et),orbno)) for et,obsid in obsid_commands])
+
+        #print(obsid_tag)
+    
+        #mcp_level operates in the same way to distinguish light from dark images
+        mcp_level_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_level=')[1].split(",")[0]) for irline in ir_text_parsed if ('RSP_MCP_LVL_SET' in irline['type1'] 
                                                                                                                                     and ('rsdpu_detector=FUV' in irline['type2'] 
                                                                                                                                          or 'rsdpu_detector=BOTH' in irline['type2']))]
-    mcp_dark_et, mcp_dark=np.transpose([(spice.str2et(et),'dark' if mcp_level=="0x0000" else "light") for et,mcp_level in mcp_level_set_commands])
+        mcp_dark_et, mcp_dark=np.transpose([(spice.str2et(et),'dark' if mcp_level=="0x0000" else "light") for et,mcp_level in mcp_level_set_commands])
 
-    #we need to get integration number to check for outdisk and outlimb on orbits < 1050
-    img_num_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_img_num=')[1].split(",")[0]) for irline in ir_text_parsed if 'RSP_IMG_NUM_SET' in irline['type1']]
-    img_num_et, img_num=np.transpose([(spice.str2et(et),num) for et,num in img_num_set_commands])
+        #we need to get integration number to check for outdisk and outlimb on orbits < 1050
+        img_num_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_img_num=')[1].split(",")[0]) for irline in ir_text_parsed if 'RSP_IMG_NUM_SET' in irline['type1']]
+        img_num_et, img_num=np.transpose([(spice.str2et(et),num) for et,num in img_num_set_commands])
     
-    #get the image cadence also so we can calculate the length of this observation
-    img_cad_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_img_cadence=')[1].split(",")[0]) for irline in ir_text_parsed if 'RSP_IMG_CAND_SET' in irline['type1']]
-    img_cad_et, img_cad=np.transpose([(spice.str2et(et),num) for et,num in img_cad_set_commands])    
-    
-
-    
-    #all of the image_inits have only an et
-    img_init_commands_et=[spice.str2et(irline['et']) for irline in ir_text_parsed if 'RSP_IMAGING_INIT' in irline['type1']]
-
-    #print a list of all the commands we've looked at to see the timing
-    #all_commands_et  =np.concatenate([obsid_tag_et,mcp_dark_et,img_num_et,img_init_commands_et                  ])
-    #all_commands_text=np.concatenate([obsid_tag   ,mcp_dark   ,img_num   ,["init" for i in img_init_commands_et]])
-    #all_commands_order=np.argsort(all_commands_et)
-    #[print(all_commands_et[i],":",all_commands_text[i]) for i in all_commands_order]
+        #get the image cadence also so we can calculate the length of this observation
+        img_cad_set_commands=[(irline['et'],irline['type2'].split(',rsdpu_img_cadence=')[1].split(",")[0]) for irline in ir_text_parsed if 'RSP_IMG_CAND_SET' in irline['type1']]
+        img_cad_et, img_cad=np.transpose([(spice.str2et(et),num) for et,num in img_cad_set_commands])    
     
 
     
-    #but we can find the most recent obs_id and mcp_level commands that happened before them
-    img_init_segment = orbit_segment[np.searchsorted(orbit_segment_et    , img_init_commands_et)-1]
-    img_init_obsid   = obsid_tag    [np.searchsorted(obsid_tag_et        , img_init_commands_et)-1]
-    img_init_dark    = mcp_dark     [np.searchsorted(mcp_dark_et         , img_init_commands_et)-1]
-    img_init_num     = img_num      [np.searchsorted(img_num_et          , img_init_commands_et)-1]
-    img_init_num     = np.array(list(map(int  ,img_init_num)))
-    img_init_cad     = img_cad      [np.searchsorted(img_cad_et          , img_init_commands_et)-1]
-    img_init_cad     = np.array(list(map(float,img_init_cad)))
-    #[print(et,": (",spice.et2utc(et,"C",0),")",img_init_segment[i],", ",img_init_obsid[i],", ", img_init_dark[i],", ",img_init_num[i]," @ ",img_init_cad[i]," ms") for i,et in enumerate(img_init_commands_et)]
-    
-    #now we can generate a list of expected files to be generated
-    img_fileinfo=[{'et_start':et_start,
-                   'segment':segment,
-                   'obsid':obsid.replace('echelle ',''),
-                   'echelle':True if 'echelle' in obsid else False,
-                   'n_int':num,
-                   'et_end':et_start+num*cad/1000.} for et_start,segment,obsid,dark,num,cad in zip(img_init_commands_et,
-                                                                                                   img_init_segment,
-                                                                                                   img_init_obsid,
-                                                                                                   img_init_dark,
-                                                                                                   img_init_num,
-                                                                                                   img_init_cad) if dark!='dark']
-    #[print(img) for img in img_fileinfo]
-    
-    #do some small corrections on the files
-    for i, img in enumerate(img_fileinfo):
-        if not img['echelle']:
-            if img['obsid']=='periapse':
-                #some periapse files are really periapse hifi
-                if img['n_int']==1:
-                    img_fileinfo[i]['obsid']='periapsehifi'
-            if orbno < 1050:
-                #outbound files before this orbit were not distinguished by obsid
-                if img['obsid']=='outcorona':
-                    if img['n_int']==72 or img['n_int']==88 or img['n_int']==92:
-                        img_fileinfo[i]['obsid']='outdisk'
-                    elif img['n_int']==60:
-                        img_fileinfo[i]['obsid']='outlimb'
+        #all of the image_inits have only an et
+        img_init_commands_et=[spice.str2et(irline['et']) for irline in ir_text_parsed if 'RSP_IMAGING_INIT' in irline['type1']]
 
+        #print a list of all the commands we've looked at to see the timing
+        #all_commands_et  =np.concatenate([obsid_tag_et,mcp_dark_et,img_num_et,img_init_commands_et                  ])
+        #all_commands_text=np.concatenate([obsid_tag   ,mcp_dark   ,img_num   ,["init" for i in img_init_commands_et]])
+        #all_commands_order=np.argsort(all_commands_et)
+        #[print(all_commands_et[i],":",all_commands_text[i]) for i in all_commands_order]
+    
+
+    
+        #but we can find the most recent obs_id and mcp_level commands that happened before them
+        img_init_segment = orbit_segment[np.searchsorted(orbit_segment_et    , img_init_commands_et)-1]
+        img_init_obsid   = obsid_tag    [np.searchsorted(obsid_tag_et        , img_init_commands_et)-1]
+        img_init_dark    = mcp_dark     [np.searchsorted(mcp_dark_et         , img_init_commands_et)-1]
+        img_init_num     = img_num      [np.searchsorted(img_num_et          , img_init_commands_et)-1]
+        img_init_num     = np.array(list(map(int  ,img_init_num)))
+        img_init_cad     = img_cad      [np.searchsorted(img_cad_et          , img_init_commands_et)-1]
+        img_init_cad     = np.array(list(map(float,img_init_cad)))
+        #[print(et,": (",spice.et2utc(et,"C",0),")",img_init_segment[i],", ",img_init_obsid[i],", ", img_init_dark[i],", ",img_init_num[i]," @ ",img_init_cad[i]," ms") for i,et in enumerate(img_init_commands_et)]
+        
+        #now we can generate a list of expected files to be generated
+        img_fileinfo=[{'et_start':et_start,
+                       'segment':segment,
+                       'obsid':obsid.replace('echelle ',''),
+                       'echelle':True if 'echelle' in obsid else False,
+                       'n_int':num,
+                       'et_end':et_start+num*cad/1000.} for et_start,segment,obsid,dark,num,cad in zip(img_init_commands_et,
+                                                                                                       img_init_segment,
+                                                                                                       img_init_obsid,
+                                                                                                       img_init_dark,
+                                                                                                       img_init_num,
+                                                                                                       img_init_cad) if dark!='dark']
+        #[print(img) for img in img_fileinfo]
+    
+        #do some small corrections on the files
+        for i, img in enumerate(img_fileinfo):
+            if not img['echelle']:
+                if img['obsid']=='periapse':
+                    #some periapse files are really periapse hifi
+                    if img['n_int']==1:
+                        img_fileinfo[i]['obsid']='periapsehifi'
+                if orbno < 1050:
+                    #outbound files before this orbit were not distinguished by obsid
+                    if img['obsid']=='outcorona':
+                        if img['n_int']==72 or img['n_int']==88 or img['n_int']==92:
+                            img_fileinfo[i]['obsid']='outdisk'
+                        elif img['n_int']==60:
+                            img_fileinfo[i]['obsid']='outlimb'
+                            
+    
     return {'orbit_start_et':ir_orbit_start_et,
             'orbit_end_et':ir_orbit_end_et,
             'mid_peri_et':ir_mid_periapse_et,
