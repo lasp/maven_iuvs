@@ -87,9 +87,10 @@ def quicklook_periapse(orbno=None, observations=None,
                                           fontsize=orbit_annotation_fontsize,
                                           c=orbit_annotation_color,va='bottom',ha='center')
     
-            if plot_brightness is None:
-                #draw observation on map if we're plotting the data
-                draw_map_obs(obs,map_ax,to_iau_mat)
+            # if plot_brightness is None:
+            #     #draw observation on map if we're plotting the data
+            #     #needs fix to handle NaN values in geometry
+            #     draw_map_obs(obs,map_ax,to_iau_mat)
             
             #figure out pixel corner coordinates and plot data
             if idx < n_peri_show:

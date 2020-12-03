@@ -247,26 +247,15 @@ def quicklook_apoapse(fig=None,orbno=None, observations=None,
     for idx,obs in enumerate(apoapse_obs):
         swath_plot_pixel_corners = all_pixel_corners_2d[idx]
         swath_plot_brightness = brightness[idx]
+
+        from .remove_pixel_nans import remove_pixel_nans
         
-        #sometimes pixel_vec is missing for the first or last integration
-        bad_indices=np.array([idx for idx,vals in enumerate(swath_plot_pixel_corners) if np.any(np.isnan(vals))])
-
-        if len(bad_indices)!=0:
-#            import pdb; pdb.set_trace()
-            bad_indices=np.concatenate([[-1],bad_indices,[len(swath_plot_pixel_corners)]])
-            bad_indices=np.unique(bad_indices)
-            
-            #find the largest range of continuous data 
-            max_continuous_range_index = ((bad_indices[1:]-1)-(bad_indices[:-1]+1)).argmax()
-            start_good_idx=bad_indices[max_continuous_range_index]+1
-            end_good_idx  =bad_indices[max_continuous_range_index+1]
-
-            swath_plot_pixel_corners=swath_plot_pixel_corners[start_good_idx:end_good_idx]
-            swath_plot_brightness   =swath_plot_brightness   [start_good_idx:end_good_idx-1]
-
-        if len(swath_plot_brightness)>0:        
-            apoapse_axes[2].pcolormesh(swath_plot_pixel_corners[:,:,0],
-                                       swath_plot_pixel_corners[:,:,1],
+        swath_plot_pixel_x, swath_plot_pixel_y, swath_plot_brightness = remove_pixel_nans(swath_plot_pixel_corners[:,:,0],
+                                                                                          swath_plot_pixel_corners[:,:,1],
+                                                                                          swath_plot_brightness)
+        if len(swath_plot_brightness)>0:
+            apoapse_axes[2].pcolormesh(swath_plot_pixel_x,
+                                       swath_plot_pixel_y,
                                        swath_plot_brightness,
                                        norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width,clip_on=False)
     

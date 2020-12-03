@@ -45,6 +45,8 @@ def quicklook_outcorona(orbno=None, observations=None, orbit_ax=None,
             #figure out pixel corner coordinates and plot data
             outcorona_axis.patch.set_alpha(1)
             pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'], label=obs['label'])
+            from .remove_pixel_nans import remove_pixel_nans
+            pixel_x,pixel_y,brightness=remove_pixel_nans(pixel_x,pixel_y,brightness)
             if plot_brightness is not None:
                 brightness = plot_brightness[obs['label']]
             pcol = outcorona_axis.pcolormesh(pixel_x,pixel_y,brightness,norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width)
@@ -92,6 +94,8 @@ def quicklook_incorona(orbno=None, observations=None, orbit_ax=None,
             #figure out pixel corner coordinates and plot data
             incorona_axis.patch.set_alpha(1)
             pixel_x,pixel_y,brightness=pixel_swath_quantities(obs['fits'], label=obs['label'])
+            from .remove_pixel_nans import remove_pixel_nans
+            pixel_x,pixel_y,brightness=remove_pixel_nans(pixel_x,pixel_y,brightness)
             if plot_brightness is not None:
                 brightness = plot_brightness[obs['label']]
             pcol = incorona_axis.pcolormesh(pixel_x,pixel_y,brightness,norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width)

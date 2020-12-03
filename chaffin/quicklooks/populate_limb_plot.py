@@ -130,6 +130,8 @@ def populate_limb_plot(observations, axes, orbit_coords, all_pixel_x, all_pixel_
                     pixel_y=altitudes
                 
                 #plot the data
+                from .remove_pixel_nans import remove_pixel_nans
+                pixel_x,pixel_y,brightness=remove_pixel_nans(pixel_x,pixel_y,brightness)
                 pcol = axes[axis_idx].pcolormesh(pixel_x,pixel_y,brightness,
                                                  norm=cmapnorm,cmap=colormap,linewidth=pcolormesh_edge_width)
                 pcol.set_edgecolor('face')

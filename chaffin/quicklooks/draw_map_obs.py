@@ -19,7 +19,7 @@ def draw_map_obs(obs, map_ax,to_iau_mat):
     pixel_vec_mso_corners=np.transpose(pixel_vec_mso_corners,[1,2,0])
     
     if obs['obsid']!='apoapse':
-        #we can proceed assuming Chris found all the right geometry
+        #TODO: fix this so it works when pixel_vec contains NaNs
 
         #we need to pad the spacecraft pos to the same dimensions as the pixel array
         spacecraft_pos_mso_reshaped=np.repeat(np.repeat(obs['fits']['SpacecraftGeometry'].data["V_SPACECRAFT_MSO"][:,np.newaxis,np.newaxis,:],
@@ -34,6 +34,10 @@ def draw_map_obs(obs, map_ax,to_iau_mat):
         
         #now we need to convert to IAU_MARS so we can get lat/lons
         pixel_corners_iau=np.transpose(np.tensordot(to_iau_mat,pixel_corners_mso,axes=([1],[2])),[2,1,0])
+
+        #sometimes the pixel_vec has nans in it, which results in NaNs for the pixel_corners_iau object
+        from .remove_pixel_nans import remove_pixel_nans
+        pixel_corners_iau[:,:,0], pixel_corners_iau[:,:,1] = remove_pixel_nans(pixel_corners_iau[:,:,0],pixel_corners_iau[:,:,1])
 
         #get the complete boundary at all altitudes
         surface_boundary_iau=np.concatenate([pixel_corners_iau[:,0],pixel_corners_iau[-1,:],pixel_corners_iau[::-1,-1],pixel_corners_iau[0,::-1]])
