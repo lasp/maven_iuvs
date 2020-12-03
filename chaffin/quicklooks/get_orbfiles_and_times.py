@@ -32,8 +32,8 @@ def get_orbfiles_and_times(orbno):
     from ..file_operations import getfilenames
     from .integrated_report_reader import get_integrated_report_info
 
-    fuvfilenames=getfilenames('*orbit'+str(orbno).zfill(5)+'*fuv*')
-    echfilenames=getfilenames('*orbit'+str(orbno).zfill(5)+'*ech*')
+    fuvfilenames=getfilenames('*-orbit'+str(orbno).zfill(5)+'*fuv*')
+    echfilenames=getfilenames('*-orbit'+str(orbno).zfill(5)+'*ech*')
     orbfilenames=np.concatenate([fuvfilenames,echfilenames])
     
     if len(orbfilenames)==0:
