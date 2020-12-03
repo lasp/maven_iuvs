@@ -58,7 +58,7 @@ def get_lsf_interp(myfits):
     lsf_interp = [None]*len(lsf)
     for i,l in enumerate(lsf):
         # shift the LSF x coordinates to roughly match the instrument wavelength scale in nm
-        waves = 7.5 * (np.arange(len(l))/len(l)-0.5)
+        waves = 7.5 * np.linspace(-1,1,len(l))
 
         interp = interp1d(x=waves,
                           y=l,
@@ -305,20 +305,27 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             correct_muv=False
 
     if flatfield_correct:
-        periapse_spatial_binning=[ 89, 204, 319, 434, 549, 664, 779, 894] #spatial binning used in periapse
+        if (np.abs(l0-121.56) > 1):
+            warnings.warn('using flat field derived at Lyman alpha')
+            
+        # periapse_spatial_binning=[ 89, 204, 319, 434, 549, 664, 779, 894] #spatial binning used in periapse
         myfits_spatial_binning = np.concatenate([myfits['Binning'].data['SPAPIXLO'][0],
                                                  [myfits['Binning'].data['SPAPIXHI'][0][-1]+1]])
-
-        if np.array_equal(myfits_spatial_binning,periapse_spatial_binning):
-            #this is a periapse-binned file, we can use an empirical flat field from periapse
-            flatfield = seven_segment_flatfield
-        else:
-            warnings.warn('Binning is not periapsis--- using a very rough FUV flatfield.')
-            slit_flatfield = np.load(os.path.join(anc_dir, 'bad_flatfield_23Sep2020.npy'))
-            flatfield = np.array([np.mean(slit_flatfield[p0:p1]) for p0,p1 in zip(myfits_spatial_binning[:-1],
-                                                                                  myfits_spatial_binning[1:])])
-
         
+        # if np.array_equal(myfits_spatial_binning,periapse_spatial_binning):
+        #     #this is a periapse-binned file, we can use an empirical flat field from periapse
+        #     flatfield = seven_segment_flatfield
+        # else:
+        #     warnings.warn('Binning is not periapsis--- using a very rough FUV flatfield.')
+        #     slit_flatfield = np.load(os.path.join(anc_dir, 'bad_flatfield_23Sep2020.npy'))
+        #     flatfield = np.array([np.mean(slit_flatfield[p0:p1]) for p0,p1 in zip(myfits_spatial_binning[:-1],
+        #                                                                           myfits_spatial_binning[1:])])
+        slit_flatfield = np.load(os.path.join(anc_dir, 'kei_flatfield_polynomial_25Nov2020.npy'))
+        flatfield = np.array([np.mean(slit_flatfield[p0:p1]) for p0,p1 in zip(myfits_spatial_binning[:-1],
+                                                                              myfits_spatial_binning[1:])])
+        if np.any(np.isnan(flatfield)):
+            raise Exception("Observation extents past airglow slit, cannot flatfield correct.")
+
     filedims = myfits['Primary'].shape  
     n_int = filedims[0]
     n_spa = filedims[1]
@@ -365,7 +372,7 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             # define the line spread function for this spatial element
             def this_spatial_element_lsf(x, scale=5e6, dl=1, x0=0, s=0, b=0, muv_background_scale=0,
                                          background_only=False):
-                unitlsf = lsf[ispa](dl*x-x0)
+                unitlsf = lsf[ispa](dl*(x-x0))
                 unitlsf /= np.sum(unitlsf)
 
                 lineshape = s*(x-x0) + b
@@ -382,8 +389,8 @@ def fit_line(myfits, l0, calibrate=True, flatfield_correct=True, plot=False, cor
             try:
                 from scipy.optimize import curve_fit
 
-                parms_bounds = ([     0, 0.5, l0-d_lambda, -np.inf, -np.inf],
-                                [np.inf, 2.0, l0+d_lambda,  np.inf,  np.inf])
+                parms_bounds = ([     0,  0.0, l0-d_lambda, -np.inf, -np.inf],
+                                [np.inf, 10.0, l0+d_lambda,  np.inf,  np.inf])
     
                 if correct_muv:
                     parms_bounds[0].append(0)
