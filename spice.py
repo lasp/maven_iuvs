@@ -23,7 +23,8 @@ def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
     fnamelist_in : str, arr, list
         Input file path(s) of kernels.
     part : int
-        I have no idea what this does yet.
+        Describes where in the kernel filename the date information resides.
+        Filename is split by - and _, part is the index of the date component
     getlast : bool
         Set to true to return the date of the last of the latest kernels. Defaults to False.
     after : int
@@ -296,7 +297,22 @@ def load_sc_sclk():
 
 def breakup_path(string, splitlength):
     """
-    I have no idea what the hell this does.
+    Splits a string filename into a list of strings of at most length
+    splitlength. Necessary because SPICE internals can handle only strings
+    of a certain length.
+
+    Parameters
+    ----------
+    string: str
+        The string to be split
+    splitlength: int
+        Max length of string chunks to return
+
+    Returns
+    -------
+    breakup: list
+        List of strings of at most length splitlength, containing
+        all of the content of the input string.
     """
 
     breakup = [string[i:i + splitlength]
@@ -327,12 +343,12 @@ def load_iuvs_spice(load_all_longterm=False):
     # clear any existing furnished kernels
     spice.kclear()
 
-    # do whatever the hell this does, necessary to furnish the generic meta-kernel
+    # break up path names into chunks of length 78 so SPICE can handle it.
     path_values = breakup_path(generic_kpath, 78)
     spice.pcpool('PATH_VALUES', path_values)
     spice.furnsh(generic_kpath + '/generic.tm')
 
-    # again this thing, necessary to furnish the MAVEN meta-kernel
+    # break up path names again
     path_values = breakup_path(mvn_kpath, 78)
     spice.pcpool('PATH_VALUES', path_values)
     spice.furnsh(mvn_kpath + '/mvn.tm')
@@ -346,5 +362,6 @@ def load_iuvs_spice(load_all_longterm=False):
     # furnish spacecraft clock kernels
     load_sc_sclk()
 
-    # furnish some important kernel that does who-knows-what
+    # furnish the mars system position kernel that gives the location
+    # of Mars relative to the solar system
     spice.furnsh(os.path.join(generic_kpath, 'spk', 'mar097.bsp'))
