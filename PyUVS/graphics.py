@@ -3,6 +3,7 @@ import os
 import cartopy.crs as ccrs
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import numpy as np
 import spiceypy as spice
 from astropy.io import fits
@@ -129,7 +130,7 @@ def colorbar(mappable, axis, ticks=None, ticklabels=None, boundaries=None, minor
     # otherwise, place the colorbar using provided ticks and ticklabels
     if ticks is not None:
         cbar = plt.colorbar(mappable, cax=cax, ticks=ticks, boundaries=boundaries)
-        ticklabels = ticklabels.astype(str)
+        ticklabels = np.array(ticklabels).astype(str)
         if unit is not None:
             ticklabels[-1] += ' ' + unit
         cbar.ax.set_yticklabels(ticklabels)
