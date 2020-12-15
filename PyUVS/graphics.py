@@ -6,13 +6,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import spiceypy as spice
 from astropy.io import fits
+from matplotlib.image import imread
 from shapely.geometry import box, Polygon
 from shapely.geometry.polygon import LinearRing
+from tempfile import NamedTemporaryFile
+import pkg_resources
 
 from .data import calculate_calibration_curve
 from .geometry import beta_flip, haversine, rotation_matrix
 from .statistics import multiple_linear_regression, integrate_intensity
-from .variables import R_Mars_km, slit_width_deg, pyuvs_directory
+from .variables import R_Mars_km, slit_width_deg
 
 # color dictionary
 color_dict = {'red': '#D62728', 'orange': '#FF7F0E', 'yellow': '#FDB813',
@@ -179,9 +182,9 @@ def NO_colormap(bad=None, n=256):
     return cmap
 
 
-def aurora_colormap(bad=None, n=256):
+def CO2p_colormap(bad=None, n=256):
     """
-    Generates the custom aurora black/pink/white colormap.
+    Generates the custom CO2p black/pink/white colormap.
     
     Parameters
     ----------
@@ -200,7 +203,44 @@ def aurora_colormap(bad=None, n=256):
     cmap_colors = [(0, 0, 0), (0.7255, 0.0588, 0.7255), (1, 1, 1)]
 
     # set colormap name
-    cmap_name = 'aurora'
+    cmap_name = 'CO2p'
+
+    # make a colormap using the color sequence and chosen name
+    cmap = colors.LinearSegmentedColormap.from_list(cmap_name, cmap_colors, N=n)
+
+    # set the nan color
+    if bad is not None:
+        try:
+            cmap.set_bad(bad)
+        except:
+            raise Exception('Invalid choice for bad data color. Try a color tuple, e.g., (0,0,0).')
+
+    # return the colormap
+    return cmap
+
+
+def CO_colormap(bad=None, n=256):
+    """
+    Generates the custom CO Cameron band black/red/white colormap (IDL #3).
+
+    Parameters
+    ----------
+    bad : (3,) tuple
+        Normalized color tuple (R,G,B) for missing data (NaN) display. Defaults to None (bad values are masked).
+    n : int
+        Number of colors to generate. Defaults to 256.
+
+    Returns
+    -------
+    cmap : object
+        Special aurora colormap.
+    """
+
+    # color sequence from black -> red -> white
+    cmap_colors = [(0, 0, 0), (0.722, 0.051, 0), (1, 1, 1)]
+
+    # set colormap name
+    cmap_name = 'CO'
 
     # make a colormap using the color sequence and chosen name
     cmap = colors.LinearSegmentedColormap.from_list(cmap_name, cmap_colors, N=n)
@@ -291,28 +331,6 @@ def rainbow_colormap(bad=None, n=256):
     return cmap
 
 
-def find_nearest_index(wavs, value):
-    """
-    Find the nearest index to a given wavelength.
-
-    Parameters
-    ----------
-    wavs : list, arr
-        Wavelengths.
-    value : int
-        Wavelength to compare to list of wavelengths.
-
-    Returns
-    -------
-    index : int
-        The index of the wavelength closest to value.
-
-    """
-
-    index = wavs.index(min(wavs, key=lambda x: abs(x - value)))
-    return index
-
-
 def get_flatfield(n_integrations, n_spatial):
     """
     Loads the detector flatfield and stacks it by the number of integrations.
@@ -332,11 +350,14 @@ def get_flatfield(n_integrations, n_spatial):
 
     # load the flatfield, interpolate if required using the 133-bin flatfield
     if n_spatial == 133:
-        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
+        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+                                             'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
     elif n_spatial == 50:
-        detector_flat = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
+        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+                                             'mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
     else:
-        detector_full = np.load(os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
+        detector_full = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+                                             'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
         detector_flat = np.zeros((n_spatial, 18))
         for i in range(18):
             detector_flat[:, i] = np.interp(np.linspace(0, 132, n_spatial), np.arange(133), detector_full[:, i])
@@ -346,477 +367,6 @@ def get_flatfield(n_integrations, n_spatial):
 
     # return the stacked flatfield
     return flatfield
-
-
-def get_orbit_rgb(files):
-    """
-    Open all dayside FITS files for a given orbit and extract RGB values of pixels on the disk and with
-    a solar zenith angle less than 102 degrees (dayside or twilight only).
-    
-    Parameters
-    ----------
-    files : list, arr
-        String filepaths of the input FITS files for the orbit.
-    
-    Returns
-    -------
-    dn_colors : array
-        An (n,3) array of RGB tuples for histogram-equalization.
-    """
-
-    # make lists to hold the red, green, and blue values in DN of each data point
-    r = []
-    g = []
-    b = []
-
-    # loop through the files
-    for f in range(len(files)):
-
-        # open the current FITS file
-        hdul = fits.open(files[f])
-
-        # check for and skip single integrations
-        if hdul['primary'].data.ndim == 2:
-            continue
-
-        # skip if nightside
-        if hdul['observation'].data['mcp_volt'] > 700:
-            continue
-        else:
-            pass
-
-        # determine dimensions
-        n_integrations = hdul['integration'].data.shape[0]
-        n_spatial = len(hdul['binning'].data['spapixlo'][0])
-        n_spectral = len(hdul['binning'].data['spepixlo'][0])
-
-        # flatfield correct
-        flatfield = get_flatfield(n_integrations, n_spatial)
-        data = hdul['primary'].data
-        if n_spectral == 15:
-            data /= flatfield[:, :, 1:16]
-            n_spectral = 15
-        elif (n_spectral >= 18) and (n_spectral <= 20):
-            data = data[:, :, :18]
-            data /= flatfield
-            n_spectral = 18
-        else:
-            data = data
-            n_spectral = n_spectral
-
-        # get altitude and solar zenith angle information
-        altitude = hdul['pixelgeometry'].data['pixel_corner_mrh_alt'][:, :, 4]
-        sza = hdul['pixelgeometry'].data['pixel_solar_zenith_angle']
-
-        # loop through each integration...
-        for i in range(n_integrations):
-
-            # and each pixel along the slit...
-            for j in range(n_spatial):
-
-                # and if on-disk (altitude = 0) and on dayside or within twilight (SZA < 102)
-                if (altitude[i, j] == 0) & (sza[i, j] < 102):
-
-                    # different regime in later mission
-                    if n_spectral == 15:
-
-                        # add the sum of the first 5 wavelengths as the blue value
-                        b.append(np.sum(data[i, j, 0:5]))
-
-                        # add the sum of the middle 6 wavelengths as the green value
-                        g.append(np.sum(data[i, j, 5:11]))
-
-                        # add the sum of the last 6 wavelengths (ignoring the final wavelength) as the red value
-                        r.append(np.sum(data[i, j, 11:15]))
-
-                    # different regime in later mission
-                    elif n_spectral == 18:
-
-                        # add the sum of the first 6 wavelengths as the blue value
-                        b.append(np.sum(data[i, j, 0:6]))
-
-                        # add the sum of the middle 6 wavelengths as the green value
-                        g.append(np.sum(data[i, j, 6:12]))
-
-                        # add the sum of the last 6 wavelengths (ignoring the final wavelength) as the red value
-                        r.append(np.sum(data[i, j, 12:18]))
-
-                    # weird early mission stuff with lots of spectral bins on the dayside
-                    else:
-
-                        # calculate number of bins per color
-                        ind = int(n_spectral / 3)
-
-                        # add the sum of the first 6 wavelengths as the blue value
-                        b.append(np.sum(data[i, j, 0:ind]))
-
-                        # add the sum of the middle 6 wavelengths as the green value
-                        g.append(np.sum(data[i, j, ind:2 * ind]))
-
-                        # add the sum of the last 6 wavelengths (ignoring the final wavelength) as the red value
-                        r.append(np.sum(data[i, j, 2 * ind:3 * ind]))
-
-    # make an array of the RGB tuples
-    dn_colors = np.array([r, g, b])
-
-    # return the array of colors
-    return dn_colors
-
-
-def find_heq_scaling(dn_colors):
-    """
-    Find the histogram bin edges for a given set of RGB DN values.
-    
-    Parameters
-    ----------
-    dn_colors : array
-        An (n,3) array of RGB tuples for histogram-equalization generated by get_orbit_rgb().
-        
-    Returns
-    -------
-    red_heq : array
-        The red channel bin edges (8-bit color).
-    green_heq : array
-        The green channel bin edges (8-bit color).
-    blue_heq : array
-        The blue channel bin edges (8-bit color).
-    """
-
-    # extract the color channels and numerically-sort the DN values
-    red = np.sort(dn_colors[0])
-    green = np.sort(dn_colors[1])
-    blue = np.sort(dn_colors[2])
-
-    # remove the outliers
-    red = red[int(len(red) * 0.01):int(len(red) * 0.99)]
-    green = green[int(len(green) * 0.01):int(len(green) * 0.99)]
-    blue = blue[int(len(blue) * 0.01):int(len(blue) * 0.99)]
-
-    # lists to store the histogram bins
-    red_heq = []
-    green_heq = []
-    blue_heq = []
-
-    # insert bin edges into lists
-    for i in range(256):
-        red_heq.append(red[int(i * len(red) / 256)])
-        green_heq.append(green[int(i * len(green) / 256)])
-        blue_heq.append(blue[int(i * len(blue) / 256)])
-
-    # convert to numpy arrays
-    red_heq = np.array(red_heq)
-    green_heq = np.array(green_heq)
-    blue_heq = np.array(blue_heq)
-
-    # return the bin edges
-    return red_heq, green_heq, blue_heq
-
-
-def colorize_pixel(pixel, rgb_histogram):
-    """
-    Take an individual pixel's RGB in DN and return a histogram-equalized RGB tuple on domain [0,1]
-    for display with matplotlib.pyplot.pcolormesh().
-    
-    Parameters
-    ----------
-    pixel : list, array
-        Pixel color as RGB tuple in DN.
-    rgb_histogram : array
-        Color channel histograms with shape (3,256).
-        
-    Returns
-    -------
-    pixel_rgb : array
-        Pixel color as normalized RGB tuple.
-    """
-
-    # extract the three color channel histograms
-    red_heq = np.array(rgb_histogram[0])
-    green_heq = np.array(rgb_histogram[1])
-    blue_heq = np.array(rgb_histogram[2])
-
-    # find which bin the red pixel belongs in and assign that as the red channel value
-    red = np.searchsorted(red_heq, pixel[0])
-    if red > 255:
-        red = 255
-
-    # find which bin the green pixel belongs in and assign that as the green channel value
-    green = np.searchsorted(green_heq, pixel[1])
-    if green > 255:
-        green = 255
-
-    # find which bin the green pixel belongs in and assign that as the green channel value
-    blue = np.searchsorted(blue_heq, pixel[2])
-    if blue > 255:
-        blue = 255
-
-    # create the RGB tuple and normalize it (pcolormesh requires float colors to be on domain [0,1])
-    pixel_rgb = np.array([red, green, blue]) / 255.
-
-    # return the normalized RGB tuple
-    return pixel_rgb
-
-
-def dayside_pixels(hdul, heqs, mask=None, flat=True, flat2=False, sharpen=False):
-    """
-    Process dayside apoapse pixels and return arrays for pcolormesh display.
-
-    Parameters
-    ----------
-    hdul : HDUList
-        Opened FITS file.
-    heqs : array
-        Histogram equalization bin edges from find_heq_scaling().
-    mask : array
-        Bad pixels from latlon_meshgrid().
-    flat : bool
-        Whether or not to flatten the color array.
-    flat2 : bool
-        Very bad gradient removal along the slit. Don't use this.
-    sharpen : bool
-        Whether or not to apply sharpening to the image. Defaults to False.
-
-    Returns
-    -------
-    phil : array
-        Filler array for pcolormesh display.
-    pixel_colors : array
-        (n*m, 3) array of pixel RGB colors for pcolormesh display.
-    """
-
-    # ensure the supplied FITS file is nightside
-    voltage = hdul['observation'].data['mcp_volt']
-    if voltage > 700:
-        raise Exception('This is not a dayside observation.')
-
-    # extract the data and pixel center altitude
-    altitude = hdul['pixelgeometry'].data['pixel_corner_mrh_alt'][:, :, 4]
-
-    # determine dimensions
-    n_integrations = hdul['integration'].data.shape[0]
-    n_spatial = len(hdul['binning'].data['spapixlo'][0])
-    n_spectral = len(hdul['binning'].data['spepixlo'][0])
-
-    # flatfield correct
-    flatfield = get_flatfield(n_integrations, n_spatial)
-    data = hdul['primary'].data
-    if n_spectral == 15:
-        data /= flatfield[:, :, 1:16]
-        n_spectral = 15
-    elif (n_spectral >= 18) and (n_spectral <= 20):
-        data = data[:, :, :18]
-        data /= flatfield
-        n_spectral = 18
-    else:
-        data = data
-        n_spectral = n_spectral
-
-    # make filler array for pcolormesh (can be anything, here we've chosen an array of ones)
-    phil = np.ones((n_integrations, n_spatial))
-
-    # make an array to hold RGB triplets
-    pixel_colors = np.zeros((n_integrations, n_spatial, 3))
-
-    # make fake mask if required
-    if mask is None:
-        mask = np.ones_like(altitude)
-
-    # loop through pixel geometry arrays
-    for i in range(n_integrations):
-        for j in range(n_spatial):
-
-            # there are some pixels where some of the pixel corner longitudes are undefined
-            # if we encounter one of those, set the data value to missing so it isn't displayed
-            # with pcolormesh
-            if ~np.isfinite(mask[i, j]):
-                data[i, j] = np.nan
-
-            # calculate a pixel's RGB channel values in DN
-            if n_spectral == 15:
-                b = np.sum(data[i, j, 0:5])
-                g = np.sum(data[i, j, 5:11])
-                r = np.sum(data[i, j, 11:16])
-            elif (n_spectral >= 18) and (n_spectral <= 20):
-                b = np.sum(data[i, j, 0:6])
-                g = np.sum(data[i, j, 6:12])
-                r = np.sum(data[i, j, 12:18])
-            else:
-                ind = int(n_spectral / 3)
-                b = np.sum(data[i, j, 0:ind])
-                g = np.sum(data[i, j, ind:2 * ind])
-                r = np.sum(data[i, j, 2 * ind:3 * ind])
-
-            # calculate the histogram-equalized RGB triplet
-            pixel_colors[i, j] = colorize_pixel([r, g, b], heqs)
-
-    # sharpen if desired
-    if sharpen:
-        pixel_colors = sharpen_image(pixel_colors)
-
-    # set the display grid to be on-disk data only
-    phil[np.where(altitude != 0)] = np.nan
-
-    # try to remove the slit gradient
-    if flat2:
-        ff2 = np.repeat(np.repeat(np.linspace(1, 0.9, n_spatial)[None, :], n_integrations, axis=0)[:, :, None],
-                        3, axis=2)
-        pixel_colors *= ff2
-
-    # reform the colors array for display with pcolormesh
-    # it needs the shape (n_pixels, 3)
-    if flat:
-        pixel_colors = pixel_colors.reshape(pixel_colors.shape[0] * pixel_colors.shape[1], pixel_colors.shape[2])
-
-        # return the filler array and the associated pixel colors
-        return phil, pixel_colors
-
-    # for some projections I need to maintain the shape of the swath
-    elif not flat:
-        return pixel_colors
-
-
-def nightside_pixels(hdul, feature='NO'):
-    """
-    Take a 3D spectrum array (integrations, spatial bins, spectral bins) and generate a 2D array of integrated MLR
-    radiance values.
-
-    Parameters
-    ----------
-    hdul : HDUList
-        Opened FITS file.
-    feature : str
-        Nightside feature. Current options are 'NO' for nitric oxide nightglow, 'aurora' for aurora, or 'solar' for
-        MUV solar continuum.
-
-    Returns
-    -------
-    mlr_array : ndarray
-        2D array of integrated MLR values in kR.
-    """
-
-    # determine dimensions
-    n_integrations = hdul['integration'].data.shape[0]
-    n_spatial = len(hdul['binning'].data['spapixlo'][0])
-    n_spectral = len(hdul['binning'].data['spepixlo'][0])
-
-    # this is the detector DN threshold for non-saturated data, increased by spatial and spectral binning
-    spa_bin_width = hdul['primary'].header['spa_size']
-    spe_bin_width = hdul['primary'].header['spe_size']
-    dn_threshold = 3640 * spa_bin_width * spe_bin_width
-
-    # load spectral bin templates, and account for weird binning early-on in the mission
-    spectral_bins = 1024/spe_bin_width
-    if (spectral_bins == 256) or (spectral_bins == 512) or (spectral_bins == 1024):
-        template_filepath = os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_templates-%ispe-muv.npy' % spectral_bins)
-        templates = np.load(template_filepath)
-        template_wavelength = templates.item().get('wavelength')
-        template_solar_continuum = templates.item().get('solar_continuum')
-        template_co_cameron = templates.item().get('co_cameron')
-        template_co2p_uvd = templates.item().get('co2p_uvd')
-        template_o2972 = templates.item().get('o2972')
-        template_co2p_fdb = templates.item().get('co2p_fdb')
-        template_no_nightglow = templates.item().get('no_nightglow')
-    else:
-        wavelength = hdul['observation'].data[0]['wavelength'][0]
-        template_filepath = os.path.join(pyuvs_directory, 'ancillary/mvn_iuv_templates-1024spe-muv.npy')
-        templates = np.load(template_filepath)
-        template_wavelength = wavelength
-        template_solar_continuum = np.interp(wavelength, templates.item().get('wavelength'),
-                                             templates.item().get('solar_continuum'))
-        template_co_cameron = np.interp(wavelength, templates.item().get('wavelength'),
-                                        templates.item().get('co_cameron'))
-        template_co2p_uvd = np.interp(wavelength, templates.item().get('wavelength'),
-                                      templates.item().get('co2p_uvd'))
-        template_o2972 = np.interp(wavelength, templates.item().get('wavelength'),
-                                   templates.item().get('o2972'))
-        template_co2p_fdb = np.interp(wavelength, templates.item().get('wavelength'),
-                                      templates.item().get('co2p_fdb'))
-        template_no_nightglow = np.interp(wavelength, templates.item().get('wavelength'),
-                                          templates.item().get('no_nightglow'))
-
-    # generate calibration curve
-    calibration_curve = calculate_calibration_curve(hdul, template_wavelength)
-
-    # make an array to hold integrated brightnesses
-    mlr_array = np.zeros((n_integrations, n_spatial)) * np.nan
-
-    # get the spectral wavelengths
-    wavelength = hdul['observation'].data[0]['wavelength'][0]
-
-    # get the spectra and the wavelengths
-    spectra = hdul['detector_dark_subtracted'].data
-    spectra_err = hdul['random_dn_unc'].data
-
-    # add an artificial integration dimension if necessary
-    if n_integrations == 1:
-        spectra = np.expand_dims(spectra, axis=0)
-        spectra_err = np.expand_dims(spectra_err, axis=0)
-
-    # determine wavelength index corresponding to fit start and length of fitting region
-    find_start = np.abs(template_wavelength - np.nanmin(wavelength))
-    fit_start = np.where(find_start == np.nanmin(find_start))[0][0]
-    fit_length = n_spectral
-
-    # make array of templates
-    fit_templates = np.array([template_solar_continuum[fit_start:fit_start + fit_length],
-                              template_co_cameron[fit_start:fit_start + fit_length],
-                              template_co2p_uvd[fit_start:fit_start + fit_length],
-                              template_o2972[fit_start:fit_start + fit_length],
-                              template_co2p_fdb[fit_start:fit_start + fit_length],
-                              template_no_nightglow[fit_start:fit_start + fit_length]
-                              ])
-
-    # loop through integrations
-    for i in range(n_integrations):
-
-        # loop through spatial bins
-        for j in range(n_spatial):
-
-            # extract the dark-subtracted detector image
-            spectrum = spectra[i, j, :]
-
-            # extract the error
-            spectrum_err = spectra_err[i, j, :]
-
-            # find the good data
-            good = np.where(spectrum < dn_threshold)[0]
-
-            # perform MLR
-            coeff, const = multiple_linear_regression(fit_templates[:, good], spectrum[good],
-                                                      spectrum_err[good])
-
-            # if any fits fail, disregard the set and keep value as NaN
-            if np.isnan(np.sum(coeff)):
-                continue
-
-            # calculate integrated radiances
-            radiance_solar_continuum = integrate_intensity(template_wavelength, template_no_nightglow,
-                                                           calibration_curve, coeff[0])
-            radiance_co_cameron = integrate_intensity(template_wavelength, template_no_nightglow, calibration_curve,
-                                                      coeff[1])
-            radiance_co2p_uvd = integrate_intensity(template_wavelength, template_no_nightglow, calibration_curve,
-                                                    coeff[2])
-            radiance_o2972 = integrate_intensity(template_wavelength, template_no_nightglow, calibration_curve,
-                                                 coeff[3])
-            radiance_co2p_fdb = integrate_intensity(template_wavelength, template_no_nightglow, calibration_curve,
-                                                    coeff[4])
-            radiance_no_nightglow = integrate_intensity(template_wavelength, template_no_nightglow, calibration_curve,
-                                                        coeff[5])
-
-            # store requested feature radiance
-            if feature == 'solar':
-                mlr_array[i, j] = radiance_solar_continuum
-            elif feature == 'NO':
-                mlr_array[i, j] = radiance_no_nightglow
-            elif feature == 'aurora':
-                mlr_array[i, j] = radiance_co_cameron + radiance_co2p_uvd + radiance_o2972 + radiance_co2p_fdb
-
-            # raise exception if it wasn't one of the three permitted choices
-            else:
-                raise Exception('You have chosen...poorly...')
-
-    # return the array
-    return mlr_array
 
 
 def sharpen_image(image):
@@ -1238,7 +788,7 @@ def latlon_meshgrid(hdul):
     Parameters
     ----------
     hdul : HDUList
-        Opened FITS file.
+        Opened level 1B FITS file.
 
     Returns
     -------
@@ -1259,9 +809,6 @@ def latlon_meshgrid(hdul):
     X = np.zeros((latitude.shape[0] + 1, latitude.shape[1] + 1))
     Y = np.zeros((longitude.shape[0] + 1, longitude.shape[1] + 1))
     mask = np.ones((latitude.shape[0], latitude.shape[1]))
-
-    # calculate beta-flip state
-    flipped = beta_flip(hdul)
 
     # loop through pixel geometry arrays
     for i in range(int(latitude.shape[0])):
@@ -1305,7 +852,7 @@ def angle_meshgrid(hdul):
     Parameters
     ----------
     hdul : HDUList
-        Opened FITS file.
+        Opened level 1B FITS file.
 
     Returns
     -------
@@ -1711,27 +1258,6 @@ def terminator(et):
 
     # return the terminator array with plotting meshgrids
     return longitudes, latitudes, terminator_array
-
-
-def checkerboard():
-    """
-    Create an 5-degree-size RGB checkerboard array for display with matplotlib.pyplot.imshow().
-
-    Parameters
-    ----------
-    None.
-
-    Returns
-    -------
-    grid : array
-        The checkerboard grid.
-    """
-
-    # make and transpose the grid (don't ask how it's done)
-    grid = np.repeat(np.kron([[0.67, 0.33] * 36, [0.33, 0.67] * 36] * 18, np.ones((5, 5)))[:, :, None], 3, axis=2)
-
-    # return the array
-    return grid
 
 
 def reset_symlog_labels(fig, axes):

@@ -8,8 +8,9 @@ import shapely.geometry as sgeom
 import spiceypy as spice
 from astropy.io import fits
 from skimage.transform import resize
+import pkg_resources
 
-from .variables import R_Mars_km, data_directory, pyuvs_directory
+from .variables import R_Mars_km, slit_width_deg
 
 
 def beta_flip(hdul):
@@ -98,7 +99,7 @@ def haversine(subsolar_latitude, subsolar_longitude, lat_dim=1800, lon_dim=3600)
     return longitudes, latitudes, solar_zenith_angles
 
 
-def highres_swath_geometry(hdul, res=200):
+def highres_swath_geometry(hdul, res=200, twilight='discrete'):
     """
     Generates an artificial high-resolution slit, calculates viewing geometry and surface-intercept map.
 
@@ -108,6 +109,10 @@ def highres_swath_geometry(hdul, res=200):
         Opened FITS file.
     res : int, optional
         The desired number of artificial elements along the slit. Defaults to 200.
+    twilight : str
+        The appearance of the twilight zone. 'discrete' has a partially transparent zone with sharp edges while
+        'continuous' smoothes it with a cosine function. The discrete option does not always work on all systems, but
+        I cannot yet say why that is. In those cases you get the continuous appearance.
 
     Returns
     -------
@@ -135,9 +140,6 @@ def highres_swath_geometry(hdul, res=200):
         High-resolution image of the Mars surface as intercepted by the swath. RGB tuples with shape (n,m,3).
     """
 
-    # get the slit width in degrees
-    from .variables import slit_width_deg as slit_width_deg
-
     # calculate beta-flip state
     flipped = beta_flip(hdul)
 
@@ -164,7 +166,7 @@ def highres_swath_geometry(hdul, res=200):
         upper_left = vec[-1, :, 0, 1]
         lower_right = vec[0, :, -1, 2]
         upper_right = vec[-1, :, -1, 3]
-    elif not flipped:
+    else:
         lower_left = vec[0, :, 0, 1]
         upper_left = vec[-1, :, 0, 0]
         lower_right = vec[0, :, -1, 3]
@@ -188,7 +190,8 @@ def highres_swath_geometry(hdul, res=200):
     context_map = np.zeros((hifi_int, hifi_spa, 3))*np.nan
 
     # load Mars surface map and switch longitude domain from [-180,180) to [0, 360)
-    mars_surface_map = plt.imread(os.path.join(pyuvs_directory, 'ancillary/mars_surface_map.jpg'))
+    mars_surface_map = plt.imread(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+                                               'mars_surface_map.jpg'))
     offset_map = np.zeros_like(mars_surface_map)
     offset_map[:, :1800, :] = mars_surface_map[:, 1800:, :]
     offset_map[:, 1800:, :] = mars_surface_map[:, :1800, :]
@@ -245,12 +248,21 @@ def highres_swath_geometry(hdul, res=200):
 
                 # instead of changing an alpha layer, I just multiply an RGB triplet by a scaling fraction in order to
                 # make it darker; determine that scalar here based on solar zenith angle
-                if (sza[i, j] > 90) & (sza[i, j] <= 102):
-                    twilight = 0.7
-                elif sza[i, j] > 102:
-                    twilight = 0.4
+                if twilight is 'discrete':
+                    if (sza[i, j] > 90) & (sza[i, j] <= 102):
+                        twilight = 0.7
+                    elif sza[i, j] > 102:
+                        twilight = 0.4
+                    else:
+                        twilight = 1
                 else:
-                    twilight = 1
+                    if (sza[i, j] > 90) & (sza[i, j] <= 102):
+                        tsza = (sza[i, j]-90)*np.pi/2/12
+                        twilight = np.cos(tsza)*0.6 + 0.4
+                    elif sza[i, j] > 102:
+                        twilight = 0.4
+                    else:
+                        twilight = 1
 
                 # place the corresponding pixel from the high-resolution Mars map into the swath context map with the
                 # twilight scaling
@@ -293,6 +305,7 @@ def highres_swath_geometry(hdul, res=200):
 def find_maven_apsis(segment='periapse'):
     """
     Calculates the ephemeris times at apoapse or periapse for all MAVEN orbits between orbital insertion and now.
+    Requires furnishing of all SPICE kernels.
 
     Parameters
     ----------
@@ -408,7 +421,8 @@ def spice_positions(et):
 
 def get_orbit_positions():
     """
-    Calculates orbit segment geometry data.
+    Calculates orbit segment geometry information. Includes orbit numbers, ephemeris time, sub-spacecraft latitude,
+    longitude, and altitude (in km), and solar longitude for three orbit positions: start, periapse, apoapse.
 
     Parameters
     ----------
@@ -417,9 +431,7 @@ def get_orbit_positions():
     Returns
     -------
     orbit_data : dict
-        Calculations of the spacecraft and Mars position. Includes orbit numbers, ephemeris time,
-        sub-spacecraft latitude, longitude, and altitude (in km), and solar longitude for three orbit segments: start,
-        periapse, apoapse.
+        Calculations of the spacecraft and Mars position.
     """
 
     # get ephemeris times for orbit apoapse and periapse points

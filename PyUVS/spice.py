@@ -5,14 +5,6 @@ import re
 import numpy as np
 import spiceypy as spice
 
-from .variables import spice_directory
-
-# set SPICE paths relative to SPICE directory
-mvn_kpath = os.path.join(spice_directory, 'mvn')
-generic_kpath = os.path.join(spice_directory, 'generic_kernels')
-ck_path = os.path.join(mvn_kpath, 'ck')
-spk_path = os.path.join(mvn_kpath, 'spk')
-
 
 def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
     """
@@ -87,12 +79,12 @@ def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
 def furnsh_array(kernel_array):
     """
     Furnish a set of kernels defined in a list or array of their file paths.
-    
+
     Parameters
     ----------
     kernel_array : list, arr
         A list or array of kernel file paths.
-    
+
     Returns
     -------
     None.
@@ -101,23 +93,29 @@ def furnsh_array(kernel_array):
     [spice.furnsh(k) for k in kernel_array]
 
 
-def load_sc_ck_type(kerntype, load_predicts=False, load_all_longterm=False):
+def load_sc_ck_type(kerntype, spice_directory, load_predicts=False, load_all_longterm=False):
     """
     Furnish CK kernels.
-    
+
     Parameters
     ----------
     kerntype : str
         The type of CK kernel to furnish. We use 'app' and 'sc' with MAVEN/IUVS.
+    spice_directory : str
+        Absolute path to your local SPICE directory.
     load_predicts : bool
         Whether or not to load prediction kernels. Defaults to False.
     load_all_longterm : bool
         Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10.
-        
+
     Returns
     -------
     None.
     """
+
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
+    ck_path = os.path.join(mvn_kpath, 'ck')
 
     # load the long kernels first
     f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_rel_*.bc'))
@@ -163,28 +161,34 @@ def load_sc_ck_type(kerntype, load_predicts=False, load_all_longterm=False):
         furnsh_array(pred_list)
 
 
-def load_sc_ck(load_cruise=False, load_all_longterm=False):
+def load_sc_ck(spice_directory, load_cruise=False, load_all_longterm=False):
     """
     Furnish CK kernels and mirror kernels, accounting for combined daily mirror kernels.
-    
+
     Parameters
     ----------
+    spice_directory : str
+        Absolute path to your local SPICE directory.
     load_cruise : bool
         Whether or not to load kernels from cruise (when MAVEN was en route to Mars). Defaults to False.
     load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10 
+        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10
         (see function load_sc_ck_type).
-    
+
     Returns
     -------
     None.
     """
 
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
+    ck_path = os.path.join(mvn_kpath, 'ck')
+
     # load orientation of Articulated Payload Platform (APP)
-    load_sc_ck_type('app', load_all_longterm=load_all_longterm)
+    load_sc_ck_type('app', spice_directory, load_all_longterm=load_all_longterm)
 
     # load spacecraft orientation
-    load_sc_ck_type('sc', load_all_longterm=load_all_longterm)
+    load_sc_ck_type('sc', spice_directory, load_all_longterm=load_all_longterm)
 
     # Load the latest of each days' IUVS mirror kernel
     # Since the instrument was not active during September 2014 before MOI, we can consider
@@ -228,18 +232,23 @@ def load_sc_ck(load_cruise=False, load_all_longterm=False):
         furnsh_array(find_latest_kernel(f, 4))
 
 
-def load_sc_spk():
+def load_sc_spk(spice_directory):
     """
     Furnish SPK kernels.
-    
+
     Parameters
     ----------
-    None.
-    
+    spice_directory : str
+        Absolute path to your local SPICE directory.
+
     Returns
     -------
     None.
     """
+
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
+    spk_path = os.path.join(mvn_kpath, 'spk')
 
     # retrieve list of SPK kernels
     f = glob.glob(os.path.join(spk_path,
@@ -272,18 +281,22 @@ def load_sc_spk():
     furnsh_array(rec)
 
 
-def load_sc_sclk():
+def load_sc_sclk(spice_directory):
     """
     Furnish SCLK kernels.
-    
+
     Parameters
     ----------
-    None.
-    
+    spice_directory : str
+        Absolute path to your local SPICE directory.
+
     Returns
     -------
     None.
     """
+
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
 
     # retrieve list of SCLK kernels
     f = glob.glob(os.path.join(mvn_kpath, 'sclk', 'MVN_SCLKSCET.[0-9][0-9][0-9][0-9][0-9].tsc'))
@@ -325,20 +338,26 @@ def breakup_path(string, splitlength):
         return breakup
 
 
-def load_iuvs_spice(load_all_longterm=False):
+def load_iuvs_spice(spice_directory, load_all_longterm=False):
     """
     Load SPICE kernels for MAVEN/IUVS use.
-    
+
     Parameters
     ----------
+    spice_directory : str
+        Absolute path to your local SPICE directory.
     load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10 
+        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10
         (see function load_sc_ck_type).
-        
+
     Returns
     -------
     None.
     """
+
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
+    generic_kpath = os.path.join(spice_directory, 'generic_kernels')
 
     # clear any existing furnished kernels
     spice.kclear()
@@ -354,13 +373,13 @@ def load_iuvs_spice(load_all_longterm=False):
     spice.furnsh(mvn_kpath + '/mvn.tm')
 
     # furnish spacecraft C-kernels (attitude of spacecraft structures or instruments)
-    load_sc_ck(load_all_longterm=load_all_longterm)
+    load_sc_ck(spice_directory, load_all_longterm=load_all_longterm)
 
     # furnish SP-kernels (ephemeris data (spacecraft physical location))
-    load_sc_spk()
+    load_sc_spk(spice_directory)
 
     # furnish spacecraft clock kernels
-    load_sc_sclk()
+    load_sc_sclk(spice_directory)
 
     # furnish the mars system position kernel that gives the location
     # of Mars relative to the solar system

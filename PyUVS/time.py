@@ -68,15 +68,18 @@ def et2datetime(et):
     return datetime.strptime(result, isoformat).replace(tzinfo=pytz.utc)
 
 
-def find_segment_et(orbit_number, segment='apoapse'):
+def find_segment_et(orbit_number, data_directory, segment='apoapse'):
     """
     Calculates the ephemeris time at the moment of apoapsis or periapsis for an orbit. Requires data files exist for
-    the choice of orbit and segment. If not, use the full-mission "find_maven_apsis" function.
+    the choice of orbit and segment. If not, use the full-mission "find_maven_apsis" function available in the "data"
+    sub-module. Also requires furnishing of all SPICE kernels.
 
     Parameters
     ----------
     orbit_number : int
         The MAVEN orbit number.
+    data_directory : str
+        Absolute system path to the location containing orbit block folders ("orbit01300", orbit01400", etc.)
     segment : str
         For which orbit segment you want to calculate the ephemeris time. Options are 'apoapse' and 'periapse." Default
         choice is 'apoapse'.
@@ -88,7 +91,7 @@ def find_segment_et(orbit_number, segment='apoapse'):
     """
 
     # load files
-    files = get_files(orbit_number, segment=segment)
+    files = get_files(orbit_number, data_directory, segment=segment)
     if len(files) == 0:
         raise Exception('No %s files for orbit %i.' % (segment, orbit_number))
     else:

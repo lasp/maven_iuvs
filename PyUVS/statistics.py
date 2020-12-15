@@ -45,7 +45,7 @@ def multiple_linear_regression(templates, spectrum, spectrum_error):
     coeff = fit.coef_
     const = fit.intercept_
 
-    # return the coefficient and constant
+    # return the coefficients and constant term
     return coeff, const
 
 
