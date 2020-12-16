@@ -340,7 +340,7 @@ def breakup_path(string, splitlength):
 
 def load_iuvs_spice(spice_directory, load_all_longterm=False):
     """
-    Load SPICE kernels for MAVEN/IUVS use.
+    Load SPICE kernels for MAVEN/IUVS use. Takes a second or two to load all kernels.
 
     Parameters
     ----------
