@@ -248,7 +248,7 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
 
                 # instead of changing an alpha layer, I just multiply an RGB triplet by a scaling fraction in order to
                 # make it darker; determine that scalar here based on solar zenith angle
-                if twilight is 'discrete':
+                if twilight == 'discrete':
                     if (sza[i, j] > 90) & (sza[i, j] <= 102):
                         twilight = 0.7
                     elif sza[i, j] > 102:
