@@ -88,7 +88,7 @@ def haversine(subsolar_latitude, subsolar_longitude, lat_dim=1800, lon_dim=3600)
     # calculate solar zenith angles using haversine function
     solar_zenith_angles = 2 * np.arcsin(np.sqrt(np.sin(
         (subsolar_latitude - latitudes) / 2) ** 2 + np.cos(latitudes) * np.cos(subsolar_latitude) *
-                                                np.sin((subsolar_longitude - longitudes) / 2) ** 2))
+        np.sin((subsolar_longitude - longitudes) / 2) ** 2))
 
     # convert to degrees
     longitudes = np.degrees(longitudes)
@@ -175,7 +175,8 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
     for e in range(3):
         a = np.linspace(lower_left[e], upper_left[e], hifi_int + 1)
         b = np.linspace(lower_right[e], upper_right[e], hifi_int + 1)
-        vec_arr[:, :, e] = np.array([np.linspace(i, j, hifi_spa + 1) for i, j in zip(a, b)])
+        vec_arr[:, :, e] = np.array(
+            [np.linspace(i, j, hifi_spa + 1) for i, j in zip(a, b)])
 
     # resize array to extract centers
     vec_arr = resize(vec_arr, (hifi_int, hifi_spa, 3), anti_aliasing=True)
@@ -214,7 +215,8 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
             try:
 
                 # calculate surface intercept
-                spoint, trgepc, srfvec = spice.sincpt('Ellipsoid', target, et, frame, abcorr, observer, frame, los_mid)
+                spoint, trgepc, srfvec = spice.sincpt(
+                    'Ellipsoid', target, et, frame, abcorr, observer, frame, los_mid)
 
                 # calculate illumination angles
                 trgepc, srfvec, phase_for, solar, emissn = spice.ilumin('Ellipsoid', target, et, frame, abcorr,
@@ -228,7 +230,8 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
                     lonpoint += 2 * np.pi
 
                 # convert ephemeris time to local solar time
-                hr, mn, sc, time, ampm = spice.et2lst(et, body, lonpoint, 'planetocentric', timlen=256, ampmlen=256)
+                hr, mn, sc, time, ampm = spice.et2lst(
+                    et, body, lonpoint, 'planetocentric', timlen=256, ampmlen=256)
 
                 # convert spherical coordinates to latitude and longitude in degrees
                 latitude[i, j] = np.degrees(np.pi / 2 - colatpoint)
@@ -248,7 +251,7 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
 
                 # instead of changing an alpha layer, I just multiply an RGB triplet by a scaling fraction in order to
                 # make it darker; determine that scalar here based on solar zenith angle
-                if twilight is 'discrete':
+                if twilight == 'discrete':
                     if (sza[i, j] > 90) & (sza[i, j] <= 102):
                         twilight = 0.7
                     elif sza[i, j] > 102:
@@ -266,14 +269,16 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
 
                 # place the corresponding pixel from the high-resolution Mars map into the swath context map with the
                 # twilight scaling
-                context_map[i, j, :] = mars_surface_map[map_lat, map_lon, :] / 255 * twilight
+                context_map[i, j, :] = mars_surface_map[map_lat,
+                                                        map_lon, :] / 255 * twilight
 
             # if the SPICE calculation fails, this (probably) means it didn't intercept the planet
             except:
                 pass
 
     # get mirror angles
-    angles = hdul['integration'].data['mirror_deg'] * 2  # convert from mirror angles to FOV angles
+    angles = hdul['integration'].data['mirror_deg'] * \
+        2  # convert from mirror angles to FOV angles
     dang = np.diff(angles)[0]
 
     # create an meshgrid of angular coordinates for the high-resolution pixel edges
@@ -343,8 +348,10 @@ def find_maven_apsis(segment='periapse'):
     cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
     spice.wninsd(et[0], et[1], cnfine)
     ninterval = round((et[1] - et[0]) / step)
-    result = spice.utils.support_types.SPICEDOUBLE_CELL(round(1.1 * (et[1] - et[0]) / 4.5))
-    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
+    result = spice.utils.support_types.SPICEDOUBLE_CELL(
+        round(1.1 * (et[1] - et[0]) / 4.5))
+    spice.gfdist(target, abcorr, observer, relate, refval,
+                 adjust, step, ninterval, cnfine, result=result)
     count = spice.wncard(result)
     et_array = np.zeros(count)
     if count == 0:
@@ -395,7 +402,8 @@ def spice_positions(et):
     target = 'Mars'
     abcorr = 'LT+S'
     observer = 'MAVEN'
-    spoint, trgepc, srfvec = spice.subpnt('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    spoint, trgepc, srfvec = spice.subpnt(
+        'Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
     rpoint, colatpoint, lonpoint = spice.recsph(spoint)
     if lonpoint > np.pi:
         lonpoint -= 2 * np.pi
@@ -404,7 +412,8 @@ def spice_positions(et):
     sc_alt_km = np.sqrt(np.sum(srfvec ** 2))
 
     # calculate subsolar position
-    sspoint, strgepc, ssrfvec = spice.subslr('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    sspoint, strgepc, ssrfvec = spice.subslr(
+        'Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
     srpoint, scolatpoint, slonpoint = spice.recsph(sspoint)
     if slonpoint > np.pi:
         slonpoint -= 2 * np.pi
