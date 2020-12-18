@@ -22,7 +22,7 @@ def setup_package():
         author=('Zachariah Milby,'
                 ' Kyle Connour,'
                 ' Mike Chaffin,'
-                ' and the IUVS team',
+                ' and the IUVS team'),
         packages=setuptools.find_packages(),
         include_package_data=True,
         python_requires='>=3.7',
@@ -36,9 +36,7 @@ def setup_package():
             'paramiko>=2.6.0',
             'pytz>=2018.9',
             'spiceypy>=2.2.0',
-            'getpass',
-            'pexpect',
-            'fnmatch'
+            'pexpect'
         ],
         dependency_links=['http://github.com/user/repo/'
                           'tarball/master#egg=package-1.0']
