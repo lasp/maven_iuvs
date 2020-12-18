@@ -2,12 +2,27 @@ import setuptools
 
 
 def setup_package():
+    """
+    Set up PyUVS package
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    none
+
+    """
     setuptools.setup(
         name='PyUVS',
         version='0.1.0',
         description='Utilities for Python 3 analysis of MAVEN/IUVS data.',
         url='none yet',
-        author='Zachariah Milby',
+        author=('Zachariah Milby,'
+                ' Kyle Connour,'
+                ' Mike Chaffin,'
+                ' and the IUVS team',
         packages=setuptools.find_packages(),
         include_package_data=True,
         python_requires='>=3.7',
@@ -21,8 +36,12 @@ def setup_package():
             'paramiko>=2.6.0',
             'pytz>=2018.9',
             'spiceypy>=2.2.0',
+            'getpass',
+            'pexpect',
+            'fnmatch'
         ],
-        dependency_links=['http://github.com/user/repo/tarball/master#egg=package-1.0']
+        dependency_links=['http://github.com/user/repo/'
+                          'tarball/master#egg=package-1.0']
 
     )
 
