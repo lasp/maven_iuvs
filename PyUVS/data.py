@@ -555,7 +555,7 @@ def call_rsync(remote_path,
 
     cpl = child.compile_pattern_list(['.* password: ',
                                       '[0-9]+%'])
-    child.expect_list(cpl, timeout=None)
+    child.expect_list(cpl)
 
     if 'password' in child.after:
         # respond to server password request
@@ -573,7 +573,7 @@ def call_rsync(remote_path,
             percent = child.after.strip(" \t\n\t")
 
             # get file left to check also
-            child.expect('[0-9]+/[0-9]+')
+            child.expect('[0-9]+/[0-9]+', timeout=None)
             file_numbers = child.after
 
             if version < 313:
