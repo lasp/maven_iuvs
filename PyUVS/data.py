@@ -521,12 +521,34 @@ def call_rsync(remote_path,
     """
     from .miscellaneous import clear_line
 
-    rsync_command = " ".join(['rsync -trvzL --info=progress2',
-                              '--outbuf=L',
+    # get the version number of rsync
+    import subprocess
+    try:
+        result = subprocess.run(['rsync', '--version'],
+                                stdout=subprocess.PIPE,
+                                check=True)
+        version = result.stdout.split(b'version')[1].split()[0]
+        version = int(version.replace(b".", b""))
+    except subprocess.CalledProcessError:
+        raise Exception("rsync failed ---"
+                        " is rsync installed on your system?")
+
+    version = 269
+    
+    if version >= 313:
+        # we can print total transfer progress
+        progress_flag = '--info=progress2'
+    else:
+        progress_flag = '--progress'
+
+    
+    rsync_command = " ".join(['rsync -trvzL',
+                              progress_flag,
                               extra_flags,
                               remote_path,
                               local_path])
-    #print("running rsync_command: " + rsync_command)
+
+    print("running rsync_command: " + rsync_command)
     import pexpect
     child = pexpect.spawn(rsync_command,
                           encoding='utf-8')
@@ -548,15 +570,21 @@ def call_rsync(remote_path,
         if i == 0:  # end of file
             break
         if i == 1:
-            to_print = child.after
+            percent = child.after.strip(" \t\n\t")
 
             # get file left to check also
             child.expect('[0-9]+/[0-9]+')
             file_numbers = child.after
 
+            if version < 313:
+                # compute progress from file numbers
+                fnum1, fnum2 = list(map(int, file_numbers.split("/")))
+                percent = 1.0 - fnum1 / fnum2
+                percent = str(int(percent*100)) + "%"
+                
             clear_line()
             print("rsync progress: " +
-                  to_print.strip(" \t\n\r") +
+                  percent +
                   ' (files left: ' + file_numbers + ')',
                   end='\r')
 
