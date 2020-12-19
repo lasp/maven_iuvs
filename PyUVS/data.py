@@ -531,9 +531,13 @@ def call_rsync(remote_path,
     child = pexpect.spawn(rsync_command,
                           encoding='utf-8')
 
-    # respond to server password request
-    child.expect('.* password: ')
-    child.sendline(ssh_password)
+    cpl = child.compile_pattern_list(['.* password: ',
+                                      '[0-9]+%'])
+    child.expect_list(cpl, timeout=None)
+
+    if 'password' in child.after:
+        # respond to server password request
+        child.sendline(ssh_password)
 
     # print some progress info by searching for lines with a
     # percentage progress
