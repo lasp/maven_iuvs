@@ -264,7 +264,7 @@ def relay_file(hdul):
     return relay
 
 
-def latest_files(files):
+def get_latest_files(files):
     """
     Given a list of input files, return the most recent version of each file.
 
@@ -376,8 +376,11 @@ def setup_user_paths():
         return
 
     # get the location of the default L1B and SPICE directory
+    print("Syncing all of the L1B data could take up to 2TB of disk space.")
     l1b_dir = input("Where would you like IUVS l1b FITS files"
                     " to be stored by sync_data? ")
+    print("Syncing all of the SPICE kernels could take up to 300GB of disk"
+          " space.")
     spice_dir = input("Where would you like MAVEN/IUVS SPICE"
                       " kernels to be stored by sync_data? ")
     # get the VM username to be used in rsync calls
@@ -436,6 +439,10 @@ def find_all_l1b(pattern,
     if data_directory is None:
         setup_user_paths()
         from .user_paths import l1b_dir
+        if not os.path.exists(l1b_dir):
+            raise Exception("Cannot find specified L1B directory."
+                            " Is it accessible?")
+
         data_directory = l1b_dir
         if use_index is None:
             use_index = True
@@ -462,7 +469,7 @@ def find_all_l1b(pattern,
     if n_files == 0:
         return []
     else:
-        return latest_files(dropxml(orbfiles))
+        return get_latest_files(dropxml(orbfiles))
 
 
 def dropxml(files):
@@ -521,7 +528,7 @@ def call_rsync(remote_path,
                               local_path])
     #print("running rsync_command: " + rsync_command)
     import pexpect
-    child = pexpect.spawn('/bin/bash -c \"' + rsync_command + "\"",
+    child = pexpect.spawn(rsync_command,
                           encoding='utf-8')
 
     # respond to server password request
@@ -652,8 +659,8 @@ def sync_data(spice=True, l1b=True,
               minorb=100, maxorb=100000,
               include_cruise=False):
     """
-    Synchronize new data from the VM and remove any old files that
-    have been replaced by newer versions.
+    Synchronize new SPICE kernels and L1B data from the VM and remove
+    any old files that have been replaced by newer versions.
 
     Parameters
     ----------
@@ -689,6 +696,12 @@ def sync_data(spice=True, l1b=True,
     setup_user_paths()
     #  load user path data from file
     from .user_paths import l1b_dir, spice_dir, iuvs_vm_username
+    if not os.path.exists(spice_dir):
+        raise Exception("Cannot find specified SPICE directory."
+                        " Is it accessible?")
+    if not os.path.exists(l1b_dir):
+        raise Exception("Cannot find specified L1B directory."
+                        " Is it accessible?")
 
     # get starting time
     import time
@@ -746,9 +759,9 @@ def sync_data(spice=True, l1b=True,
                 print("No matching files on VM")
                 return
 
-            files_to_sync = latest_files(np.concatenate([local_filenames,
-                                                         prod_filenames,
-                                                         stage_filenames]))
+            files_to_sync = get_latest_files(np.concatenate([local_filenames,
+                                                             prod_filenames,
+                                                             stage_filenames]))
 
             # figure out which files to get from production and stage
             files_from_production = [a[len(production_l1b):]
@@ -798,7 +811,7 @@ def sync_data(spice=True, l1b=True,
 
             # figure out what files need to be deleted
             local_filenames = glob.glob(l1b_dir+"/*/*.fits*")
-            latest_local_files = latest_files(local_filenames)
+            latest_local_files = get_latest_files(local_filenames)
             local_files_to_delete = np.setdiff1d(local_filenames,
                                                  latest_local_files)
 
@@ -827,10 +840,8 @@ def sync_data(spice=True, l1b=True,
             local_filenames = sorted(glob.glob(l1b_dir+"/*/*.fits*"))
             np.save(l1b_dir+'/filenames', sorted(local_filenames))
 
-    except Exception:
-        # can this exception call be made more specific?
-        raise Exception('Error encountered. Are you on the VPN?'
-                        ' Is your SPICE / l1b data folder accessible?')
+    except OSError:
+        raise Exception('rsync failed --- are you connected to the VPN?')
 
     # get ending time
     t1 = time.time()
