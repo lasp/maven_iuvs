@@ -533,8 +533,6 @@ def call_rsync(remote_path,
         raise Exception("rsync failed ---"
                         " is rsync installed on your system?")
 
-    version = 269
-    
     if version >= 313:
         # we can print total transfer progress
         progress_flag = '--info=progress2'
