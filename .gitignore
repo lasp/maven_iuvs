@@ -1,3 +1,4 @@
+PyUVS/user_paths.py
 *.pyc
 */__pycache__
 .DS_Store
