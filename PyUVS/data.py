@@ -5,8 +5,8 @@ import numpy as np
 import pkg_resources
 from astropy.io import fits
 
-from .geometry import beta_flip
-from .variables import slit_width_mm, pixel_size_mm, focal_length_mm
+from PyUVS.geometry import beta_flip
+from PyUVS.variables import slit_width_mm, pixel_size_mm, focal_length_mm
 
 
 def get_files(orbit_number, data_directory, segment='apoapse', channel='muv', count=False):
