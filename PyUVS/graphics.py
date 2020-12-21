@@ -13,10 +13,11 @@ from shapely.geometry.polygon import LinearRing
 from tempfile import NamedTemporaryFile
 import pkg_resources
 
-from .data import calculate_calibration_curve
-from .geometry import beta_flip, haversine, rotation_matrix
-from .statistics import multiple_linear_regression, integrate_intensity
-from .variables import R_Mars_km, slit_width_deg
+from PyUVS.instrument import calculate_calibration_curve
+from PyUVS.geometry import beta_flip, haversine, rotation_matrix
+from PyUVS.statistics import multiple_linear_regression, integrate_intensity
+from PyUVS.instrument import slit_width_deg
+from PyUVS.constants import R_Mars_km
 
 # color dictionary
 color_dict = {'red': '#D62728', 'orange': '#FF7F0E', 'yellow': '#FDB813',

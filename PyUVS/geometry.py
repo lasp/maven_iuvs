@@ -10,7 +10,8 @@ from astropy.io import fits
 from skimage.transform import resize
 import pkg_resources
 
-from .variables import R_Mars_km, slit_width_deg
+from PyUVS.instrument import slit_width_deg
+from PyUVS.constants import R_Mars_km
 
 
 def beta_flip(hdul):
