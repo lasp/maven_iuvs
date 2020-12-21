@@ -5,7 +5,7 @@ import pytz
 import spiceypy as spice
 from astropy.io import fits
 
-from .data import get_files
+from PyUVS.search import get_files
 
 
 def utc_to_sol(utc):
