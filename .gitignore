@@ -3,3 +3,4 @@ PyUVS/user_paths.py
 */__pycache__
 .DS_Store
 *.ipynb_checkpoints*
+.idea/
