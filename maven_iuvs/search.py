@@ -5,9 +5,9 @@ import fnmatch
 import numpy as np
 from astropy.io import fits
 
-#  NOTE: depends on PyUVS.download must be encapsulated to avoid
+#  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
-from PyUVS.geometry import beta_flip
+from maven_iuvs.geometry import beta_flip
 
 
 def get_files(orbit_number, data_directory,
@@ -197,11 +197,11 @@ def find_all_l1b(pattern,
     """
 
     if data_directory is None:
-        from PyUVS.download import setup_user_paths  # don't move
+        from maven_iuvs.download import setup_user_paths  # don't move
         # ^^^ avoids circular import
         setup_user_paths()
         # get the path from the possibly newly created file
-        from PyUVS.user_paths import l1b_dir  # don't move this
+        from maven_iuvs.user_paths import l1b_dir  # don't move this
         if not os.path.exists(l1b_dir):
             raise Exception("Cannot find specified L1B directory."
                             " Is it accessible?")
@@ -391,7 +391,7 @@ def get_euvm_l2b_filename():
     euvm_l2b_fname : str
        Filename of EUVM L2B save file.
     """
-    from PyUVS.download import get_euvm_l2b_dir
+    from maven_iuvs.download import get_euvm_l2b_dir
 
     euvm_l2b_dir = get_euvm_l2b_dir()
 

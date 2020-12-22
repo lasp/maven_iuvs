@@ -80,7 +80,7 @@ def calculate_calibration_curve(hdul):
 
     # load IUVS sensitivity curve for given channel
     sens_file_basename = 'mvn_iuv_sensitivity-%s.npy' % xuv.lower()
-    sens_fname = os.path.join(pkg_resources.resource_filename('PyUVS',
+    sens_fname = os.path.join(pkg_resources.resource_filename('maven_iuvs',
                                                               'ancillary/'),
                               sens_file_basename)
     sensitivity = np.load(sens_fname, allow_pickle=True)
