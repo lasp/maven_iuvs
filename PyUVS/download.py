@@ -1,16 +1,31 @@
-import glob
 import os
+import glob
 import subprocess
-import pexpect
-import paramiko
 import time
 import tempfile
+import datetime
+from getpass import getpass
+
+# twill's __init__.py is dumb, we need to work around it to play nice
+# with jupyter:
+import sys
+_stdout = sys.stdout
+_stderr = sys.stdout
+
+import twill
+twill.set_output(_stdout)
+twill.set_errout(_stderr)
+twill.set_loglevel(twill.loglevels['WARNING'])
+
+
+import pexpect
+import paramiko
 
 import numpy as np
 
-from getpass import getpass
 from PyUVS.miscellaneous import clear_line
 from PyUVS.search import get_latest_files
+
 
 def get_user_paths_filename():
     """
@@ -135,7 +150,6 @@ def call_rsync(remote_path,
     else:
         progress_flag = '--progress'
 
-    
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
                               extra_flags,
@@ -174,7 +188,7 @@ def call_rsync(remote_path,
                 fnum1, fnum2 = list(map(int, file_numbers.split("/")))
                 percent = 1.0 - fnum1 / fnum2
                 percent = str(int(percent*100)) + "%"
-                
+
             clear_line()
             print("rsync progress: " +
                   percent +
@@ -469,3 +483,242 @@ def sync_data(spice=True, l1b=True,
 
     # tell us how long it took
     print('Data syncing and cleanup took %.2d:%.2d:%.2d.' % (h, m, s))
+
+
+def get_euvm_l2b_dir():
+    """
+    Returns the directory where euvm_l2b data should be stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_dir : str
+       Directory to store EUVM L2B files in.
+    """
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, "user_paths.py")
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from PyUVS.user_paths import euvm_l2b_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        euvm_l2b_dir = input("Where should euvm_l2b data be stored?")
+        with open(user_paths_py, "a+") as f:
+            f.write("# This line added by get_euvm_l2b_dir.py\n")
+            f.write("euvm_l2b_dir = '"+euvm_l2b_dir+"'\n")
+
+    return euvm_l2b_dir
+
+
+def sync_euvm_l2b(sdc_username, sdc_password):
+    """
+    Sync EUVM L2B data file from MAVEN SDC. This deletes all old data
+    in euvm_l2b_dir and replaces it with a newly downloaded file.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+
+    Returns
+    -------
+    none
+
+    """
+    print("syncing EUVM L2B...")
+
+    url = 'https://lasp.colorado.edu/maven/data/sci/euv/l2b/'
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv("1", 'username', sdc_username)
+    twill.commands.fv("1", 'password', sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we're authenticated
+    twill.browser.go(url)
+
+    # find the most recent save file on the page
+    files = sorted([f.url for f in twill.browser.links if '.sav' in f.url])
+    most_recent = files[-1]
+
+    # navigate to that file
+    twill.browser.go(url+most_recent)
+
+    # delete old EUVM files in the EUVM l2b directory
+    old_fnames = glob.glob(euvm_l2b_dir+'*l2b*.sav')
+    [os.remove(f) for f in old_fnames]
+
+    # save the new file to disk
+    fname = euvm_l2b_dir + most_recent
+    with open(fname, "wb") as file:
+        file.write(twill.browser.dump)
+
+
+def get_integrated_reports_dir():
+    """
+    Returns the directory where MAVEN integrated reports files should be
+    stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    integrated_reports_dir : str
+        Directory to store MAVEN integrated reports in.
+
+    """
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, "user_paths.py")
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from PyUVS.user_paths import integrated_reports_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        integrated_reports_dir = input("Where should MAVEN Integrated Reports"
+                                       " data be stored?")
+        with open(user_paths_py, "a+") as f:
+            f.write("# This line added by get_integrated_reports_dir.py\n")
+            f.write("integrated_reports_dir = '"+integrated_reports_dir+"'\n")
+
+    return integrated_reports_dir
+
+
+def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
+    """Sync Integrated Reports data from MAVEN Ops page. Syncs all new
+    files and all files from last 180 days by default.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    """
+
+    print("syncing Integrated Reports...")
+    
+    url = ('https://lasp.colorado.edu/ops/maven/team/'
+           + 'inst_ops.php?content=msa_ir&show_all')
+
+    local_ir_dir = get_integrated_reports_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv("1", 'username', sdc_username)
+    twill.commands.fv("1", 'password', sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we're authenticated
+    twill.browser.go(url)
+
+    # get the list of integrated report files on the server
+    server_links = sorted([f for f in twill.browser.links if '.txt' in f.text])
+
+    # get the list of local integrated report files
+    local_files = [os.path.basename(f)
+                   for f in glob.glob(os.path.join(local_ir_dir, '*'))]
+
+    if check_old:
+        # check all the files, not just the ones we don't have
+        to_download = server_links
+    else:
+        # figure out which ones on the server are new
+        old_time = datetime.datetime.now() - datetime.timedelta(days=180)
+        old_time = old_time.strftime("%y%m%d")
+        to_download = [f for f in server_links if ((int(f.text.split("_")[2])
+                                                    > int(old_time))
+                                                   or (f.text
+                                                       not in local_files))]
+
+    # download the new files
+    from lxml.etree import ParserError
+    for link in to_download:
+        clear_line()
+        print(link.text, end="\r")
+
+        # modify the page link to a download link
+        download_link = link.url.replace("inst_ops.php?content=file&file=",
+                                         "download-file.php?public/")
+
+        # get the binary of the file
+        try:
+            twill.browser.go(download_link)
+            server_binary_data = twill.browser.dump
+        except ParserError:
+            # sometimes the files have zero size,
+            # which results in a ParserError
+            server_binary_data = b""
+
+        # get the local filename
+        fname = os.path.join(local_ir_dir, link.text)
+
+        # look at the local file contents and compare with remote
+        if os.path.exists(fname):
+            with open(fname, "rb") as file:
+                if file.read() == twill.browser.dump:
+                    # file is the same as the server, keep it
+                    continue
+
+        # if we're here either the local file doesn't exist
+        # or it's different from the server copy.
+        # Either way, download the server version
+        fname = os.path.join(local_ir_dir, link.text)
+        with open(fname, "wb") as file:
+            file.write(server_binary_data)
+
+    clear_line()
+
+
+def sync_sdc(check_old=False):
+    """Wrapper routine to sync EUVM L2B data and Integrated Reports from
+    MAVEN SDC.
+
+    Parameters
+    ----------
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    """
+
+    username = input('Username for MAVEN Team SDC: ')
+    password = getpass('password for '+username+' on MAVEN Team SDC: ')
+
+    sync_euvm_l2b(username, password)
+    sync_integrated_reports(username, password, check_old=check_old)
