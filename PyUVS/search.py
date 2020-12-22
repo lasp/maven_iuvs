@@ -376,3 +376,25 @@ def dropxml(files):
     """
 
     return [f for f in files if f[-3:] != 'xml']
+
+
+def get_euvm_l2b_filename():
+    """
+    Returns the most recent EUVM L2B file available
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_fname : str
+       Filename of EUVM L2B save file.
+    """
+    from PyUVS.download import get_euvm_l2b_dir
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+"*l2b*.sav"))[-1]
+
+    return euvm_l2b_fname

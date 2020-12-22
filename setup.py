@@ -23,6 +23,7 @@ setuptools.setup(
         'paramiko>=2.6.0',
         'pytz>=2018.9',
         'spiceypy>=2.2.0',
-        'pexpect>=4.8.0'
+        'pexpect>=4.8.0',
+        'twill>=2.0.1'
     ]
 )
