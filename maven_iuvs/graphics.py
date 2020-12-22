@@ -13,11 +13,11 @@ from shapely.geometry.polygon import LinearRing
 from tempfile import NamedTemporaryFile
 import pkg_resources
 
-from PyUVS.instrument import calculate_calibration_curve
-from PyUVS.geometry import beta_flip, haversine, rotation_matrix
-from PyUVS.statistics import multiple_linear_regression, integrate_intensity
-from PyUVS.instrument import slit_width_deg
-from PyUVS.constants import R_Mars_km
+from maven_iuvs.instrument import calculate_calibration_curve
+from maven_iuvs.geometry import beta_flip, haversine, rotation_matrix
+from maven_iuvs.statistics import multiple_linear_regression, integrate_intensity
+from maven_iuvs.instrument import slit_width_deg
+from maven_iuvs.constants import R_Mars_km
 
 # color dictionary
 color_dict = {'red': '#D62728', 'orange': '#FF7F0E', 'yellow': '#FDB813',
@@ -352,13 +352,13 @@ def get_flatfield(n_integrations, n_spatial):
 
     # load the flatfield, interpolate if required using the 133-bin flatfield
     if n_spatial == 133:
-        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
     elif n_spatial == 50:
-        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
     else:
-        detector_full = np.load(os.path.join(pkg_resources.resource_filename('PyUVS', 'ancillary/'),
+        detector_full = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
         detector_flat = np.zeros((n_spatial, 18))
         for i in range(18):

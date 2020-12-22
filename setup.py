@@ -2,7 +2,7 @@ import setuptools
 
 
 setuptools.setup(
-    name='PyUVS',
+    name='maven_iuvs',
     version='0.1.0',
     description='Utilities for Python 3 analysis of MAVEN/IUVS data.',
     url='https://github.com/lasp/maven_iuvs',

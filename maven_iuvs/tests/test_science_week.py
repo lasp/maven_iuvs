@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 
 # Local imports
-from PyUVS.time import ScienceWeek
+from maven_iuvs.time import ScienceWeek
 
 
 class TestScienceWeek(TestCase):
