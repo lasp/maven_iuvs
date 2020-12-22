@@ -1,5 +1,7 @@
-from datetime import datetime
+import datetime
+import warnings
 
+import numpy as np
 import julian
 import pytz
 import spiceypy as spice
@@ -65,7 +67,8 @@ def et2datetime(et):
     isoformat = '%Y-%m-%dT%H:%M:%S.%f'
 
     # return the datetime object version of the input ephemeris time
-    return datetime.strptime(result, isoformat).replace(tzinfo=pytz.utc)
+    return datetime.datetime.strptime(result,
+                                      isoformat).replace(tzinfo=pytz.utc)
 
 
 def find_segment_et(orbit_number, data_directory, segment='apoapse'):
@@ -125,8 +128,11 @@ def find_segment_et(orbit_number, data_directory, segment='apoapse'):
 
 
 class ScienceWeek:
-    # TODO: Decide if I want to prohibit users from inputting negative science weeks, or dates that result in them
-    # TODO: Decide how to handle future science week (should I warn if they request science week from a future date?)
+    # TODO: Decide if I want to prohibit users from inputting negative
+    #       science weeks, or dates that result in them
+
+    # TODO: Decide how to handle future science week (should I warn if
+    #       they request science week from a future date?)
     def __init__(self):
         """ A ScienceWeek object can convert dates into MAVEN science weeks.
 
@@ -135,7 +141,7 @@ class ScienceWeek:
         science_start_date: datetime.date
             The date when IUVS began performing science.
         """
-        self.__science_start_date = date(2014, 11, 11)
+        self.__science_start_date = datetime.date(2014, 11, 11)
 
     @property
     def science_start_date(self):
@@ -168,7 +174,7 @@ class ScienceWeek:
         science_week: int
             The current science week.
         """
-        science_week = self.get_science_week_from_date(date.today())
+        science_week = self.get_science_week_from_date(datetime.date.today())
         return science_week
 
     def get_science_week_start_date(self, week):
@@ -187,8 +193,10 @@ class ScienceWeek:
         try:
             rounded_week = int(np.floor(week))
             if week != rounded_week:
-                warnings.warn('This is a non-integer week. Converting it to integer...')
-            science_week_start = self.__science_start_date + timedelta(days=rounded_week * 7)
+                warnings.warn('This is a non-integer week.'
+                              ' Converting it to integer...')
+            science_week_start = (self.__science_start_date
+                                  + datetime.timedelta(days=rounded_week * 7))
             return science_week_start
         except TypeError:
             raise TypeError(f'week should be an int, not a {type(week)}.')
@@ -206,7 +214,8 @@ class ScienceWeek:
         science_week_end: datetime.date
             The date when the science week ended.
         """
-        return self.get_science_week_start_date(week + 1) - timedelta(days=1)
+        return (self.get_science_week_start_date(week + 1)
+                - datetime.timedelta(days=1))
 
     def get_science_week_date_range(self, week):
         """ Get the date range corresponding to the input science week.
@@ -221,10 +230,15 @@ class ScienceWeek:
         date_range: tuple
             The start and end dates of the science week.
         """
-        date_range = self.get_science_week_start_date(week), self.get_science_week_end_date(week)
+        date_range = (self.get_science_week_start_date(week),
+                      self.get_science_week_end_date(week))
         return date_range
 
-    # TODO: Decide if I want a subclass to handle requests related to science week 
-    #  (ex. get_orbit_range_from_science_week)
-    # Pro: It's easy to code after making the database and it'd be helpful
-    # Con: It might be easier to make 1 utility for database searching and tell users to apply it to science week
+    # TODO: Decide if I want a subclass to handle requests related to
+    #       science week (ex. get_orbit_range_from_science_week)
+    #
+    #       Pro: It's easy to code after making the database and it'd
+    #       be helpful
+    #
+    #       Con: It might be easier to make 1 utility for database
+    #       searching and tell users to apply it to science week
