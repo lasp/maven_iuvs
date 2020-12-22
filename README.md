@@ -1,5 +1,7 @@
 # maven_iuvs
-maven_iuvs is the place where all cool cats and kittens go to contribute Python routines for IUVS science. It provides:
+maven_iuvs is the place where all cool cats and kittens go to contribute Python routines for IUVS science. :smiley_cat: :sunglasses: 
+
+It provides:
 * Tools for reading and manipulating IUVS data 
 * Standardized projections of IUVS data
 * Integration with spiceyPy
