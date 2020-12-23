@@ -1,3 +1,4 @@
+docs/user_paths.html
 maven_iuvs/user_paths.py
 *.pyc
 */__pycache__
