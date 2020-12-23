@@ -15,15 +15,16 @@ setuptools.setup(
     python_requires='>=3.7',
     install_requires=[
         'astropy>=4.2',
-        'numpy>=1.10',
-        'matplotlib>=3.0.3',
-        'pdoc3>=0.9.1',
+        'cartopy>=0.17.0',
         'julian>=0.14',
-        'sysrsync>=0.1.2',
+        'matplotlib>=3.0.3',
+        'numpy>=1.10',
         'paramiko>=2.6.0',
+        'pdoc3>=0.9.1',
+        'pexpect>=4.8.0',
         'pytz>=2018.9',
         'spiceypy>=2.2.0',
-        'pexpect>=4.8.0',
+        'sysrsync>=0.1.2',
         'twill>=2.0.1'
     ]
 )
