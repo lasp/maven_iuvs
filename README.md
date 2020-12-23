@@ -7,6 +7,8 @@ It provides:
 * Integration with spiceyPy
 * ... and much much more
 
+Documentation is hosted here: https://lasp.github.io/maven_iuvs/
+
 If you want to contribute code, follow the instructions [here](https://numpy.org/doc/stable/dev/) to fork the repo to
 your Github personal page and clone from there. Otherwise, you can just clone this repo directly.
 
