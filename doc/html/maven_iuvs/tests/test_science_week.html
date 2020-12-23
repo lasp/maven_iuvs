@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.9.2" />
+<title>maven_iuvs.tests.test_science_week API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>maven_iuvs.tests.test_science_week</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python"># Built-in imports
+from unittest import TestCase
+from datetime import date, timedelta
+import warnings
+
+# 3rd-party imports
+import numpy as np
+
+# Local imports
+from maven_iuvs.time import ScienceWeek
+
+
+class TestScienceWeek(TestCase):
+    def setUp(self):
+        self.science_week = ScienceWeek()
+
+
+class TestScienceWeekInit(TestScienceWeek):
+    def test_science_week_has_science_start_date_attribute(self):
+        self.assertTrue(hasattr(self.science_week, &#39;science_start_date&#39;))
+
+    def test_science_week_has_exactly_one_parameter(self):
+        self.assertTrue(len(self.science_week.__dict__.keys()), 1)
+
+    def test_science_start_date_is_2014_11_11(self):
+        self.assertEqual(date(2014, 11, 11), self.science_week.science_start_date)
+
+    def test_science_start_date_cannot_be_modified(self):
+        with self.assertRaises(AttributeError):
+            self.science_week.science_start_date = date(2014, 11, 11)
+
+
+class TestGetScienceWeekFromDate(TestScienceWeek):
+    def test_science_start_date_is_week_0(self):
+        self.assertEqual(0, self.science_week.get_science_week_from_date(self.science_week.science_start_date))
+
+    def test_known_science_week_and_date_matches_output(self):
+        test_date = date(2020, 12, 14)
+        self.assertEqual(317, self.science_week.get_science_week_from_date(test_date))
+
+    def test_integer_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_from_date(100)
+
+
+# I cannot figure out how to properly mock a date such that ScienceWeek knows about my mock
+class TestGetCurrentScienceWeek(TestScienceWeek):
+    # TODO: Get a test for this
+    pass
+    &#39;&#39;&#39;def test_science_week_of_today(self):
+        with mock.patch(&#39;maven_iuvs.science_week.science_week.datetime.date&#39;) as mock_date:
+            mock_date.today.return_value = date(2020, 1, 1)
+            #self.assertEqual(mock_date.today(), date(2020, 1, 1))   # this works
+            self.assertEqual(268, self.science_week.get_current_science_week())  # This doesn&#39;t about mock_date&#39;&#39;&#39;
+
+
+class TestGetScienceWeekStartDate(TestScienceWeek):
+    def test_start_of_week_0_is_mission_arrival_date(self):
+        self.assertEqual(self.science_week.science_start_date, self.science_week.get_science_week_start_date(0))
+
+    def test_example_science_week_matches_its_known_start_date(self):
+        self.assertEqual(date(2020, 12, 8), self.science_week.get_science_week_start_date(317))
+
+    def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+        with warnings.catch_warnings(record=True):
+            self.assertEqual(self.science_week.get_science_week_start_date(317),
+                             self.science_week.get_science_week_start_date(317.0),
+                             self.science_week.get_science_week_start_date(np.nextafter(318, 317)))
+
+    def test_integer_float_week_raises_no_warnings(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_start_date(1.0)
+            self.assertEqual(0, len(warning))
+
+    def test_non_integer_float_raises_warning(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_start_date(1.5)
+            self.assertEqual(1, len(warning))
+            self.assertEqual(warning[-1].category, UserWarning)
+
+    def test_ndarray_input_raises_type_error(self):
+        test_weeks = np.linspace(1, 50, num=50, dtype=int)
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_start_date(test_weeks)
+
+    def test_string_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_start_date(&#39;100&#39;)
+
+    def test_nan_input_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.science_week.get_science_week_start_date(np.nan)
+
+
+class TestGetScienceWeekEndDate(TestScienceWeek):
+    def test_end_of_week_0_is_6_days_after_science_start_date(self):
+        self.assertEqual(self.science_week.science_start_date + timedelta(days=6),
+                         self.science_week.get_science_week_end_date(0))
+
+    def test_example_science_week_matches_its_known_end_date(self):
+        self.assertEqual(date(2020, 12, 14), self.science_week.get_science_week_end_date(317))
+
+    def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+        with warnings.catch_warnings(record=True):
+            self.assertEqual(self.science_week.get_science_week_end_date(317),
+                             self.science_week.get_science_week_end_date(317.0),
+                             self.science_week.get_science_week_end_date(np.nextafter(318, 317)))
+
+    def test_integer_float_week_raises_no_warnings(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_end_date(1.0)
+            self.assertEqual(0, len(warning))
+
+    def test_non_integer_float_raises_warning(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_end_date(1.5)
+            self.assertEqual(1, len(warning))
+            self.assertEqual(warning[-1].category, UserWarning)
+
+    def test_ndarray_input_raises_type_error(self):
+        test_weeks = np.linspace(1, 50, num=50, dtype=int)
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_end_date(test_weeks)
+
+    def test_string_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_end_date(&#39;100&#39;)
+
+    def test_nan_input_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.science_week.get_science_week_end_date(np.nan)
+
+
+class TestGetScienceWeekDateRange(TestScienceWeek):
+    def test_output_is_tuple(self):
+        self.assertTrue(isinstance(self.science_week.get_science_week_date_range(100), tuple))
+
+    def test_output_is_2_elements(self):
+        self.assertTrue(len(self.science_week.get_science_week_date_range(100)), 2)
+
+    def test_output_is_result_of_start_and_end_date_methods(self):
+        self.assertTrue(self.science_week.get_science_week_start_date(100),
+                        self.science_week.get_science_week_date_range(100)[0])
+        self.assertTrue(self.science_week.get_science_week_end_date(100),
+                        self.science_week.get_science_week_date_range(100)[1])</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestGetCurrentScienceWeek"><code class="flex name class">
+<span>class <span class="ident">TestGetCurrentScienceWeek</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestGetCurrentScienceWeek(TestScienceWeek):
+    # TODO: Get a test for this
+    pass
+    &#39;&#39;&#39;def test_science_week_of_today(self):
+        with mock.patch(&#39;maven_iuvs.science_week.science_week.datetime.date&#39;) as mock_date:
+            mock_date.today.return_value = date(2020, 1, 1)
+            #self.assertEqual(mock_date.today(), date(2020, 1, 1))   # this works
+            self.assertEqual(268, self.science_week.get_current_science_week())  # This doesn&#39;t about mock_date&#39;&#39;&#39;</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange"><code class="flex name class">
+<span>class <span class="ident">TestGetScienceWeekDateRange</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestGetScienceWeekDateRange(TestScienceWeek):
+    def test_output_is_tuple(self):
+        self.assertTrue(isinstance(self.science_week.get_science_week_date_range(100), tuple))
+
+    def test_output_is_2_elements(self):
+        self.assertTrue(len(self.science_week.get_science_week_date_range(100)), 2)
+
+    def test_output_is_result_of_start_and_end_date_methods(self):
+        self.assertTrue(self.science_week.get_science_week_start_date(100),
+                        self.science_week.get_science_week_date_range(100)[0])
+        self.assertTrue(self.science_week.get_science_week_end_date(100),
+                        self.science_week.get_science_week_date_range(100)[1])</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_2_elements"><code class="name flex">
+<span>def <span class="ident">test_output_is_2_elements</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_output_is_2_elements(self):
+    self.assertTrue(len(self.science_week.get_science_week_date_range(100)), 2)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_result_of_start_and_end_date_methods"><code class="name flex">
+<span>def <span class="ident">test_output_is_result_of_start_and_end_date_methods</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_output_is_result_of_start_and_end_date_methods(self):
+    self.assertTrue(self.science_week.get_science_week_start_date(100),
+                    self.science_week.get_science_week_date_range(100)[0])
+    self.assertTrue(self.science_week.get_science_week_end_date(100),
+                    self.science_week.get_science_week_date_range(100)[1])</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_tuple"><code class="name flex">
+<span>def <span class="ident">test_output_is_tuple</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_output_is_tuple(self):
+    self.assertTrue(isinstance(self.science_week.get_science_week_date_range(100), tuple))</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate"><code class="flex name class">
+<span>class <span class="ident">TestGetScienceWeekEndDate</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestGetScienceWeekEndDate(TestScienceWeek):
+    def test_end_of_week_0_is_6_days_after_science_start_date(self):
+        self.assertEqual(self.science_week.science_start_date + timedelta(days=6),
+                         self.science_week.get_science_week_end_date(0))
+
+    def test_example_science_week_matches_its_known_end_date(self):
+        self.assertEqual(date(2020, 12, 14), self.science_week.get_science_week_end_date(317))
+
+    def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+        with warnings.catch_warnings(record=True):
+            self.assertEqual(self.science_week.get_science_week_end_date(317),
+                             self.science_week.get_science_week_end_date(317.0),
+                             self.science_week.get_science_week_end_date(np.nextafter(318, 317)))
+
+    def test_integer_float_week_raises_no_warnings(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_end_date(1.0)
+            self.assertEqual(0, len(warning))
+
+    def test_non_integer_float_raises_warning(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_end_date(1.5)
+            self.assertEqual(1, len(warning))
+            self.assertEqual(warning[-1].category, UserWarning)
+
+    def test_ndarray_input_raises_type_error(self):
+        test_weeks = np.linspace(1, 50, num=50, dtype=int)
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_end_date(test_weeks)
+
+    def test_string_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_end_date(&#39;100&#39;)
+
+    def test_nan_input_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.science_week.get_science_week_end_date(np.nan)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_end_of_week_0_is_6_days_after_science_start_date"><code class="name flex">
+<span>def <span class="ident">test_end_of_week_0_is_6_days_after_science_start_date</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_end_of_week_0_is_6_days_after_science_start_date(self):
+    self.assertEqual(self.science_week.science_start_date + timedelta(days=6),
+                     self.science_week.get_science_week_end_date(0))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_example_science_week_matches_its_known_end_date"><code class="name flex">
+<span>def <span class="ident">test_example_science_week_matches_its_known_end_date</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_example_science_week_matches_its_known_end_date(self):
+    self.assertEqual(date(2020, 12, 14), self.science_week.get_science_week_end_date(317))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer"><code class="name flex">
+<span>def <span class="ident">test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+    with warnings.catch_warnings(record=True):
+        self.assertEqual(self.science_week.get_science_week_end_date(317),
+                         self.science_week.get_science_week_end_date(317.0),
+                         self.science_week.get_science_week_end_date(np.nextafter(318, 317)))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_integer_float_week_raises_no_warnings"><code class="name flex">
+<span>def <span class="ident">test_integer_float_week_raises_no_warnings</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_integer_float_week_raises_no_warnings(self):
+    with warnings.catch_warnings(record=True) as warning:
+        warnings.simplefilter(&#34;always&#34;)
+        self.science_week.get_science_week_end_date(1.0)
+        self.assertEqual(0, len(warning))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_nan_input_raises_value_error"><code class="name flex">
+<span>def <span class="ident">test_nan_input_raises_value_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_nan_input_raises_value_error(self):
+    with self.assertRaises(ValueError):
+        self.science_week.get_science_week_end_date(np.nan)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_ndarray_input_raises_type_error"><code class="name flex">
+<span>def <span class="ident">test_ndarray_input_raises_type_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_ndarray_input_raises_type_error(self):
+    test_weeks = np.linspace(1, 50, num=50, dtype=int)
+    with self.assertRaises(TypeError):
+        self.science_week.get_science_week_end_date(test_weeks)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_non_integer_float_raises_warning"><code class="name flex">
+<span>def <span class="ident">test_non_integer_float_raises_warning</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_non_integer_float_raises_warning(self):
+    with warnings.catch_warnings(record=True) as warning:
+        warnings.simplefilter(&#34;always&#34;)
+        self.science_week.get_science_week_end_date(1.5)
+        self.assertEqual(1, len(warning))
+        self.assertEqual(warning[-1].category, UserWarning)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_string_input_raises_type_error"><code class="name flex">
+<span>def <span class="ident">test_string_input_raises_type_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_string_input_raises_type_error(self):
+    with self.assertRaises(TypeError):
+        self.science_week.get_science_week_end_date(&#39;100&#39;)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate"><code class="flex name class">
+<span>class <span class="ident">TestGetScienceWeekFromDate</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestGetScienceWeekFromDate(TestScienceWeek):
+    def test_science_start_date_is_week_0(self):
+        self.assertEqual(0, self.science_week.get_science_week_from_date(self.science_week.science_start_date))
+
+    def test_known_science_week_and_date_matches_output(self):
+        test_date = date(2020, 12, 14)
+        self.assertEqual(317, self.science_week.get_science_week_from_date(test_date))
+
+    def test_integer_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_from_date(100)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_integer_input_raises_type_error"><code class="name flex">
+<span>def <span class="ident">test_integer_input_raises_type_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_integer_input_raises_type_error(self):
+    with self.assertRaises(TypeError):
+        self.science_week.get_science_week_from_date(100)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_known_science_week_and_date_matches_output"><code class="name flex">
+<span>def <span class="ident">test_known_science_week_and_date_matches_output</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_known_science_week_and_date_matches_output(self):
+    test_date = date(2020, 12, 14)
+    self.assertEqual(317, self.science_week.get_science_week_from_date(test_date))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_science_start_date_is_week_0"><code class="name flex">
+<span>def <span class="ident">test_science_start_date_is_week_0</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_science_start_date_is_week_0(self):
+    self.assertEqual(0, self.science_week.get_science_week_from_date(self.science_week.science_start_date))</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate"><code class="flex name class">
+<span>class <span class="ident">TestGetScienceWeekStartDate</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestGetScienceWeekStartDate(TestScienceWeek):
+    def test_start_of_week_0_is_mission_arrival_date(self):
+        self.assertEqual(self.science_week.science_start_date, self.science_week.get_science_week_start_date(0))
+
+    def test_example_science_week_matches_its_known_start_date(self):
+        self.assertEqual(date(2020, 12, 8), self.science_week.get_science_week_start_date(317))
+
+    def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+        with warnings.catch_warnings(record=True):
+            self.assertEqual(self.science_week.get_science_week_start_date(317),
+                             self.science_week.get_science_week_start_date(317.0),
+                             self.science_week.get_science_week_start_date(np.nextafter(318, 317)))
+
+    def test_integer_float_week_raises_no_warnings(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_start_date(1.0)
+            self.assertEqual(0, len(warning))
+
+    def test_non_integer_float_raises_warning(self):
+        with warnings.catch_warnings(record=True) as warning:
+            warnings.simplefilter(&#34;always&#34;)
+            self.science_week.get_science_week_start_date(1.5)
+            self.assertEqual(1, len(warning))
+            self.assertEqual(warning[-1].category, UserWarning)
+
+    def test_ndarray_input_raises_type_error(self):
+        test_weeks = np.linspace(1, 50, num=50, dtype=int)
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_start_date(test_weeks)
+
+    def test_string_input_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.science_week.get_science_week_start_date(&#39;100&#39;)
+
+    def test_nan_input_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.science_week.get_science_week_start_date(np.nan)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_example_science_week_matches_its_known_start_date"><code class="name flex">
+<span>def <span class="ident">test_example_science_week_matches_its_known_start_date</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_example_science_week_matches_its_known_start_date(self):
+    self.assertEqual(date(2020, 12, 8), self.science_week.get_science_week_start_date(317))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer"><code class="name flex">
+<span>def <span class="ident">test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer(self):
+    with warnings.catch_warnings(record=True):
+        self.assertEqual(self.science_week.get_science_week_start_date(317),
+                         self.science_week.get_science_week_start_date(317.0),
+                         self.science_week.get_science_week_start_date(np.nextafter(318, 317)))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_integer_float_week_raises_no_warnings"><code class="name flex">
+<span>def <span class="ident">test_integer_float_week_raises_no_warnings</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_integer_float_week_raises_no_warnings(self):
+    with warnings.catch_warnings(record=True) as warning:
+        warnings.simplefilter(&#34;always&#34;)
+        self.science_week.get_science_week_start_date(1.0)
+        self.assertEqual(0, len(warning))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_nan_input_raises_value_error"><code class="name flex">
+<span>def <span class="ident">test_nan_input_raises_value_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_nan_input_raises_value_error(self):
+    with self.assertRaises(ValueError):
+        self.science_week.get_science_week_start_date(np.nan)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_ndarray_input_raises_type_error"><code class="name flex">
+<span>def <span class="ident">test_ndarray_input_raises_type_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_ndarray_input_raises_type_error(self):
+    test_weeks = np.linspace(1, 50, num=50, dtype=int)
+    with self.assertRaises(TypeError):
+        self.science_week.get_science_week_start_date(test_weeks)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_non_integer_float_raises_warning"><code class="name flex">
+<span>def <span class="ident">test_non_integer_float_raises_warning</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_non_integer_float_raises_warning(self):
+    with warnings.catch_warnings(record=True) as warning:
+        warnings.simplefilter(&#34;always&#34;)
+        self.science_week.get_science_week_start_date(1.5)
+        self.assertEqual(1, len(warning))
+        self.assertEqual(warning[-1].category, UserWarning)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_start_of_week_0_is_mission_arrival_date"><code class="name flex">
+<span>def <span class="ident">test_start_of_week_0_is_mission_arrival_date</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_start_of_week_0_is_mission_arrival_date(self):
+    self.assertEqual(self.science_week.science_start_date, self.science_week.get_science_week_start_date(0))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_string_input_raises_type_error"><code class="name flex">
+<span>def <span class="ident">test_string_input_raises_type_error</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_string_input_raises_type_error(self):
+    with self.assertRaises(TypeError):
+        self.science_week.get_science_week_start_date(&#39;100&#39;)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeek"><code class="flex name class">
+<span>class <span class="ident">TestScienceWeek</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestScienceWeek(TestCase):
+    def setUp(self):
+        self.science_week = ScienceWeek()</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestGetCurrentScienceWeek" href="#maven_iuvs.tests.test_science_week.TestGetCurrentScienceWeek">TestGetCurrentScienceWeek</a></li>
+<li><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange">TestGetScienceWeekDateRange</a></li>
+<li><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate">TestGetScienceWeekEndDate</a></li>
+<li><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate">TestGetScienceWeekFromDate</a></li>
+<li><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate">TestGetScienceWeekStartDate</a></li>
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit">TestScienceWeekInit</a></li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp"><code class="name flex">
+<span>def <span class="ident">setUp</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Hook method for setting up the test fixture before exercising it.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setUp(self):
+    self.science_week = ScienceWeek()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeekInit"><code class="flex name class">
+<span>class <span class="ident">TestScienceWeekInit</span></span>
+<span>(</span><span>methodName='runTest')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class whose instances are single test cases.</p>
+<p>By default, the test code itself should be placed in a method named
+'runTest'.</p>
+<p>If the fixture may be used for many test cases, create as
+many test methods as are needed. When instantiating such a TestCase
+subclass, specify in the constructor arguments the name of the test method
+that the instance is to execute.</p>
+<p>Test authors should subclass TestCase for their own tests. Construction
+and deconstruction of the test's environment ('fixture') can be
+implemented by overriding the 'setUp' and 'tearDown' methods respectively.</p>
+<p>If it is necessary to override the <strong>init</strong> method, the base class
+<strong>init</strong> method must always be called. It is important that subclasses
+should not change the signature of their <strong>init</strong> method, since instances
+of the classes are instantiated automatically by parts of the framework
+in order to be run.</p>
+<p>When subclassing TestCase, you can set these attributes:
+* failureException: determines which exception will be raised when
+the instance's assertion methods fail; test methods raising this
+exception will be deemed to have 'failed' rather than 'errored'.
+* longMessage: determines whether long messages (including repr of
+objects used in assert methods) will be printed on failure in <em>addition</em>
+to any explicit message passed.
+* maxDiff: sets the maximum length of a diff in failure messages
+by assert methods using difflib. It is looked up as an instance
+attribute so can be configured by individual tests if required.</p>
+<p>Create an instance of the class that will use the named test
+method when executed. Raises a ValueError if the instance does
+not have a method with the specified name.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TestScienceWeekInit(TestScienceWeek):
+    def test_science_week_has_science_start_date_attribute(self):
+        self.assertTrue(hasattr(self.science_week, &#39;science_start_date&#39;))
+
+    def test_science_week_has_exactly_one_parameter(self):
+        self.assertTrue(len(self.science_week.__dict__.keys()), 1)
+
+    def test_science_start_date_is_2014_11_11(self):
+        self.assertEqual(date(2014, 11, 11), self.science_week.science_start_date)
+
+    def test_science_start_date_cannot_be_modified(self):
+        with self.assertRaises(AttributeError):
+            self.science_week.science_start_date = date(2014, 11, 11)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></li>
+<li>unittest.case.TestCase</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_cannot_be_modified"><code class="name flex">
+<span>def <span class="ident">test_science_start_date_cannot_be_modified</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_science_start_date_cannot_be_modified(self):
+    with self.assertRaises(AttributeError):
+        self.science_week.science_start_date = date(2014, 11, 11)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_is_2014_11_11"><code class="name flex">
+<span>def <span class="ident">test_science_start_date_is_2014_11_11</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_science_start_date_is_2014_11_11(self):
+    self.assertEqual(date(2014, 11, 11), self.science_week.science_start_date)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_exactly_one_parameter"><code class="name flex">
+<span>def <span class="ident">test_science_week_has_exactly_one_parameter</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_science_week_has_exactly_one_parameter(self):
+    self.assertTrue(len(self.science_week.__dict__.keys()), 1)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_science_start_date_attribute"><code class="name flex">
+<span>def <span class="ident">test_science_week_has_science_start_date_attribute</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_science_week_has_science_start_date_attribute(self):
+    self.assertTrue(hasattr(self.science_week, &#39;science_start_date&#39;))</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></b></code>:
+<ul class="hlist">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="maven_iuvs.tests" href="index.html">maven_iuvs.tests</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestGetCurrentScienceWeek" href="#maven_iuvs.tests.test_science_week.TestGetCurrentScienceWeek">TestGetCurrentScienceWeek</a></code></h4>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange">TestGetScienceWeekDateRange</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_2_elements" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_2_elements">test_output_is_2_elements</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_result_of_start_and_end_date_methods" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_result_of_start_and_end_date_methods">test_output_is_result_of_start_and_end_date_methods</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_tuple" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekDateRange.test_output_is_tuple">test_output_is_tuple</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate">TestGetScienceWeekEndDate</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_end_of_week_0_is_6_days_after_science_start_date" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_end_of_week_0_is_6_days_after_science_start_date">test_end_of_week_0_is_6_days_after_science_start_date</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_example_science_week_matches_its_known_end_date" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_example_science_week_matches_its_known_end_date">test_example_science_week_matches_its_known_end_date</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer">test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_integer_float_week_raises_no_warnings" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_integer_float_week_raises_no_warnings">test_integer_float_week_raises_no_warnings</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_nan_input_raises_value_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_nan_input_raises_value_error">test_nan_input_raises_value_error</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_ndarray_input_raises_type_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_ndarray_input_raises_type_error">test_ndarray_input_raises_type_error</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_non_integer_float_raises_warning" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_non_integer_float_raises_warning">test_non_integer_float_raises_warning</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_string_input_raises_type_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekEndDate.test_string_input_raises_type_error">test_string_input_raises_type_error</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate">TestGetScienceWeekFromDate</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_integer_input_raises_type_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_integer_input_raises_type_error">test_integer_input_raises_type_error</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_known_science_week_and_date_matches_output" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_known_science_week_and_date_matches_output">test_known_science_week_and_date_matches_output</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_science_start_date_is_week_0" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekFromDate.test_science_start_date_is_week_0">test_science_start_date_is_week_0</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate">TestGetScienceWeekStartDate</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_example_science_week_matches_its_known_start_date" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_example_science_week_matches_its_known_start_date">test_example_science_week_matches_its_known_start_date</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer">test_floats_between_two_consecutive_integers_give_output_equal_to_lower_integer</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_integer_float_week_raises_no_warnings" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_integer_float_week_raises_no_warnings">test_integer_float_week_raises_no_warnings</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_nan_input_raises_value_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_nan_input_raises_value_error">test_nan_input_raises_value_error</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_ndarray_input_raises_type_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_ndarray_input_raises_type_error">test_ndarray_input_raises_type_error</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_non_integer_float_raises_warning" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_non_integer_float_raises_warning">test_non_integer_float_raises_warning</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_start_of_week_0_is_mission_arrival_date" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_start_of_week_0_is_mission_arrival_date">test_start_of_week_0_is_mission_arrival_date</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_string_input_raises_type_error" href="#maven_iuvs.tests.test_science_week.TestGetScienceWeekStartDate.test_string_input_raises_type_error">test_string_input_raises_type_error</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek" href="#maven_iuvs.tests.test_science_week.TestScienceWeek">TestScienceWeek</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeek.setUp" href="#maven_iuvs.tests.test_science_week.TestScienceWeek.setUp">setUp</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit">TestScienceWeekInit</a></code></h4>
+<ul class="">
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_cannot_be_modified" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_cannot_be_modified">test_science_start_date_cannot_be_modified</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_is_2014_11_11" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_start_date_is_2014_11_11">test_science_start_date_is_2014_11_11</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_exactly_one_parameter" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_exactly_one_parameter">test_science_week_has_exactly_one_parameter</a></code></li>
+<li><code><a title="maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_science_start_date_attribute" href="#maven_iuvs.tests.test_science_week.TestScienceWeekInit.test_science_week_has_science_start_date_attribute">test_science_week_has_science_start_date_attribute</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+</footer>
+</body>
+</html>

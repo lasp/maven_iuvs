@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.9.2" />
+<title>maven_iuvs.search API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>maven_iuvs.search</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import glob
+import os
+import fnmatch
+
+import numpy as np
+from astropy.io import fits
+
+#  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
+#  circular import
+from maven_iuvs.geometry import beta_flip
+
+
+def get_files(orbit_number, data_directory,
+              segment=&#39;apoapse&#39;, channel=&#39;muv&#39;, count=False):
+    &#34;&#34;&#34;Return file paths to FITS files for a given orbit number.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+    segment : str
+        The orbit segment for which you want data files. Defaults to
+        &#39;apoapse&#39;.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+    count : bool
+        Whether or not to return the number of files.
+
+    Returns
+    -------
+    files : array
+        A sorted list of the file paths to the FITS files.
+    n_files : int
+        The number of files, if requested.
+
+    &#34;&#34;&#34;
+
+    # determine orbit block (directories which group data by 100s)
+    orbit_block = int(orbit_number / 100) * 100
+
+    # location of FITS files (this will change depending on the user)
+    filepath = os.path.join(data_directory, &#39;level1b/orbit%.5d/&#39; % orbit_block)
+
+    # format of FITS file names
+    filename_str = (&#39;*%s-orbit%.5d-%s*.fits.gz&#39;
+                    % (segment, orbit_number, channel))
+
+    # get list of files
+    files = sorted(glob.glob(os.path.join(filepath, filename_str)))
+
+    # get number of files
+    n_files = int(len(files))
+
+    # return the list of files with the count if requested
+    if not count:
+        return files
+    else:
+        return files, n_files
+
+
+def get_apoapse_files(orbit_number, data_directory, channel=&#39;muv&#39;):
+    &#34;&#34;&#34;Convenience function for apoapse data. In addition to returning
+    file paths to the data, it determines how many swaths were taken,
+    which swath each file belongs to since there are often 2-3 files
+    per swath, whether the MCP voltage settings were for daytime or
+    nighttime, the mirror step between integrations, and the
+    beta-angle orientation of the APP.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute path to your IUVS level 1B data directory which has
+        the orbit blocks, e.g., &#34;orbit03400, orbit03500,&#34; etc.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+
+    Returns
+    -------
+    swath_info : dict
+        A dictionary containing filepaths to the requested data files,
+        the number of swaths, the swath number for each data file,
+        whether or not the file is a dayside file, and whether the APP
+        was beta-flipped during this orbit.
+
+    &#34;&#34;&#34;
+
+    # get list of FITS files for given orbit number
+    files, n_files = get_files(orbit_number, data_directory,
+                               segment=&#39;apoapse&#39;, channel=channel, count=True)
+
+    # set initial counters
+    n_swaths = 0
+    prev_ang = 999
+
+    # arrays to hold final file paths, etc.
+    filepaths = []
+    daynight = []
+    swath = []
+    flipped = &#39;unknown&#39;
+
+    # loop through files...
+    for i in range(n_files):
+
+        # open FITS file
+        hdul = fits.open(files[i])
+
+        # skip single integrations, they are more trouble than they&#39;re worth
+        if hdul[&#39;primary&#39;].data.ndim == 2:
+            continue
+
+        # determine if beta-flipped
+        if flipped == &#39;unknown&#39;:
+            beta_flip(hdul)
+
+        # store filepath
+        filepaths.append(files[i])
+
+        # determine if dayside or nightside
+        if hdul[&#39;observation&#39;].data[&#39;mcp_volt&#39;] &gt; 700:
+            daynight.append(False)
+        else:
+            daynight.append(True)
+
+        # calcualte mirror direction
+        mirror_dir = np.sign(hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][-1]
+                             - hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][0])
+        if prev_ang == 999:
+            prev_ang *= mirror_dir
+
+        # check the angles by seeing if the mirror is still scanning
+        # in the same direction
+        ang0 = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][0]
+        if (((mirror_dir == 1) &amp; (prev_ang &gt; ang0))
+            | ((mirror_dir == -1) &amp; (prev_ang &lt; ang0))):
+            # increment the swath count
+            n_swaths += 1
+
+        # store swath number
+        swath.append(n_swaths - 1)
+
+        # change the previous angle comparison value
+        prev_ang = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][-1]
+
+    # make a dictionary to hold all this shit
+    swath_info = {
+        &#39;files&#39;: np.array(filepaths),
+        &#39;n_swaths&#39;: n_swaths,
+        &#39;swath_number&#39;: np.array(swath),
+        &#39;dayside&#39;: np.array(daynight),
+        &#39;beta_flip&#39;: flipped,
+    }
+
+    # return the dictionary
+    return swath_info
+
+
+def find_all_l1b(pattern,
+                 data_directory=None,
+                 use_index=None):
+    &#34;&#34;&#34;
+    Return file paths to FITS files for a given glob pattern.
+
+    Parameters
+    ----------
+    pattern : str
+        glob pattern to match in file directory
+
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+
+        If None, system will use l1b_dir defined in user_paths.py or
+        prompt user to set this up
+
+    use_index : bool
+        Whether to use the index of files created by sync_data to
+        speed up file finding. If False, filesystem glob is used.
+
+        If data_directory == None, defaults to True, otherwise False.
+
+    count : bool
+        Whether or not to return the number of files.
+
+    Returns
+    -------
+    files : array
+        A sorted list of the file paths to the FITS files.
+
+    n_files : int
+        The number of files, if requested.
+
+    &#34;&#34;&#34;
+
+    if data_directory is None:
+        from maven_iuvs.download import setup_user_paths  # don&#39;t move
+        # ^^^ avoids circular import
+        setup_user_paths()
+        # get the path from the possibly newly created file
+        from maven_iuvs.user_paths import l1b_dir  # don&#39;t move this
+        if not os.path.exists(l1b_dir):
+            raise Exception(&#34;Cannot find specified L1B directory.&#34;
+                            &#34; Is it accessible?&#34;)
+
+        data_directory = l1b_dir
+        if use_index is None:
+            use_index = True
+            all_iuvs_filenames = np.load(os.path.join(l1b_dir,
+                                                      &#39;filenames.npy&#39;))
+    else:
+        use_index = False
+
+    # print(dir)
+    if use_index:
+        # use the index of files saved in the
+        # l1b_data directory and loaded on startup
+        orbfiles = fnmatch.filter(all_iuvs_filenames,
+                                  pattern)
+    else:
+        # go to the disk and glob directly (slow)
+        iuvs_dir = data_directory+&#39;*/&#39;
+        orbfiles = sorted(glob.glob(iuvs_dir+pattern))
+
+    n_files = len(orbfiles)
+
+    if n_files == 0:
+        return []
+    else:
+        return get_latest_files(dropxml(orbfiles))
+
+
+def get_file_version(orbit_number, data_directory,
+                     segment=&#39;apoapse&#39;, channel=&#39;muv&#39;):
+    &#34;&#34;&#34;Return file version and revision of FITS files for a given orbit
+    number.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+    segment : str
+        The orbit segment for which you want data files. Defaults to
+        &#39;apoapse&#39;.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+
+    Returns
+    -------
+    data_version : str
+        The data version. If no files exist, then it&#39;s
+        &#39;missing&#39;. Otherwise, it&#39;s an &#39;r##&#39; or &#39;s##&#39; version type of
+        the format &#34;v##_r##&#34; or &#34;v##_s##&#34;.
+
+    &#34;&#34;&#34;
+
+    # get files and extract data versions; if no files version is
+    # &#39;missing&#39;
+    try:
+        files = get_files(orbit_number, data_directory=data_directory,
+                          segment=segment, channel=channel)
+        version_str = files[0].split(&#39;_&#39;)[-2:]
+        data_version = &#39;%s_%s&#39; % (version_str[0], version_str[1][0:3])
+    except IndexError:
+        data_version = &#39;missing&#39;
+
+    # return data version string
+    return data_version
+
+
+def get_latest_files(files):
+    &#34;&#34;&#34;
+    Given a list of input files, return the most recent version of each file.
+
+    Prefers highest version number, then production files to stage files,
+    and finally highest revision number.
+
+    Preserves order of initial list.
+
+    Parameters
+    ----------
+    files : iterable
+        list of string IUVS filenames, relative or absolute.
+
+    Returns
+    -------
+    unique_files : np.array
+        list of string IUVS filenames, containing only the most recent version
+        of each file.
+
+    &#34;&#34;&#34;
+
+    # create a list of [file_basename, index in initial list, filename]
+    #   in the basename, replace _r with _x
+    #   this allows a standard sort to put the file we want last
+    #
+    #   keeping the initial index allows us to put the list back
+    #   in its initial order at the end of the process
+    filenames = [[os.path.basename(f).split(&#34;.&#34;)[0].replace(&#34;_r&#34;, &#34;_x&#34;), i, f]
+                 for i, f in enumerate(files)]
+
+    # sort the list by the file basename with the replacement above
+    # reverse is specified because of the interaction with np.unique below
+    filenames.sort(reverse=True, key=lambda x: x[0])
+
+    # get the file identifiers (file_basename up to the _vXX_yXX part)
+    filetags = [f[0][:-8] for f in filenames]
+
+    # find the location of the unique file identifiers
+    # np.unique returns the first unique entry, hence the reverse flag above
+    uniquetags, uniquetagindices = np.unique(filetags, return_index=True)
+
+    # now we can select the unique entries from our original list
+    uniquefilenames = np.array(filenames)[uniquetagindices]
+
+    # we no longer need the basename we constructed, so get rid of it
+    uniquefilenames = uniquefilenames[:, 1:].tolist()  # tolist for sorting
+
+    # sort by original position in provided files list
+    uniquefilenames.sort(key=lambda x: int(x[0]))
+
+    # we don&#39;t need the initial index anymore,
+    # so retain only the original filename provided
+    uniquefilenames = np.array(uniquefilenames)[:, 1]
+
+    return uniquefilenames
+
+
+def relay_file(hdul):
+    &#34;&#34;&#34;
+        Determines whether a particular file was taken during relay mode.
+
+        Parameters
+        ----------
+        hdul : HDUList
+            Opened FITS file.
+
+        Returns
+        -------
+        relay : bool
+            True if a file was taken during a relay.
+        &#34;&#34;&#34;
+
+    # get mirror angles
+    angles = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;]
+
+    # determine if relay by evaluating minimum and maximum mirror angles
+    min_ang = np.nanmin(angles)
+    max_ang = np.nanmax(angles)
+    relay = False
+    if min_ang == 30.2508544921875 and max_ang == 59.6502685546875:
+        relay = True
+
+    return relay
+
+
+def dropxml(files):
+    &#34;&#34;&#34;
+    Removes all xml files from supplied file list.
+
+    Parameters
+    ----------
+    files : iterable
+       List of input files from which xml files will be dropped.
+
+    Returns
+    -------
+    files : list
+       List of files, excluding all xml files
+    &#34;&#34;&#34;
+
+    return [f for f in files if f[-3:] != &#39;xml&#39;]
+
+
+def get_euvm_l2b_filename():
+    &#34;&#34;&#34;
+    Returns the most recent EUVM L2B file available
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_fname : str
+       Filename of EUVM L2B save file.
+    &#34;&#34;&#34;
+    from maven_iuvs.download import get_euvm_l2b_dir
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+&#34;*l2b*.sav&#34;))[-1]
+
+    return euvm_l2b_fname</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="maven_iuvs.search.dropxml"><code class="name flex">
+<span>def <span class="ident">dropxml</span></span>(<span>files)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Removes all xml files from supplied file list.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>iterable</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>List of input files from which xml files will be dropped.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>list</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>List of files, excluding all xml files</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def dropxml(files):
+    &#34;&#34;&#34;
+    Removes all xml files from supplied file list.
+
+    Parameters
+    ----------
+    files : iterable
+       List of input files from which xml files will be dropped.
+
+    Returns
+    -------
+    files : list
+       List of files, excluding all xml files
+    &#34;&#34;&#34;
+
+    return [f for f in files if f[-3:] != &#39;xml&#39;]</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.find_all_l1b"><code class="name flex">
+<span>def <span class="ident">find_all_l1b</span></span>(<span>pattern, data_directory=None, use_index=None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return file paths to FITS files for a given glob pattern.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>pattern</code></strong> :&ensp;<code>str</code></dt>
+<dd>glob pattern to match in file directory</dd>
+<dt><strong><code>data_directory</code></strong> :&ensp;<code>str</code></dt>
+<dd>
+<p>Absolute system path to the location containing orbit block
+folders ("orbit01300", orbit01400", etc.)</p>
+<p>If None, system will use l1b_dir defined in user_paths.py or
+prompt user to set this up</p>
+</dd>
+<dt><strong><code>use_index</code></strong> :&ensp;<code>bool</code></dt>
+<dd>
+<p>Whether to use the index of files created by sync_data to
+speed up file finding. If False, filesystem glob is used.</p>
+<p>If data_directory == None, defaults to True, otherwise False.</p>
+</dd>
+<dt><strong><code>count</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether or not to return the number of files.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>array</code></dt>
+<dd>A sorted list of the file paths to the FITS files.</dd>
+<dt><strong><code>n_files</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of files, if requested.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def find_all_l1b(pattern,
+                 data_directory=None,
+                 use_index=None):
+    &#34;&#34;&#34;
+    Return file paths to FITS files for a given glob pattern.
+
+    Parameters
+    ----------
+    pattern : str
+        glob pattern to match in file directory
+
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+
+        If None, system will use l1b_dir defined in user_paths.py or
+        prompt user to set this up
+
+    use_index : bool
+        Whether to use the index of files created by sync_data to
+        speed up file finding. If False, filesystem glob is used.
+
+        If data_directory == None, defaults to True, otherwise False.
+
+    count : bool
+        Whether or not to return the number of files.
+
+    Returns
+    -------
+    files : array
+        A sorted list of the file paths to the FITS files.
+
+    n_files : int
+        The number of files, if requested.
+
+    &#34;&#34;&#34;
+
+    if data_directory is None:
+        from maven_iuvs.download import setup_user_paths  # don&#39;t move
+        # ^^^ avoids circular import
+        setup_user_paths()
+        # get the path from the possibly newly created file
+        from maven_iuvs.user_paths import l1b_dir  # don&#39;t move this
+        if not os.path.exists(l1b_dir):
+            raise Exception(&#34;Cannot find specified L1B directory.&#34;
+                            &#34; Is it accessible?&#34;)
+
+        data_directory = l1b_dir
+        if use_index is None:
+            use_index = True
+            all_iuvs_filenames = np.load(os.path.join(l1b_dir,
+                                                      &#39;filenames.npy&#39;))
+    else:
+        use_index = False
+
+    # print(dir)
+    if use_index:
+        # use the index of files saved in the
+        # l1b_data directory and loaded on startup
+        orbfiles = fnmatch.filter(all_iuvs_filenames,
+                                  pattern)
+    else:
+        # go to the disk and glob directly (slow)
+        iuvs_dir = data_directory+&#39;*/&#39;
+        orbfiles = sorted(glob.glob(iuvs_dir+pattern))
+
+    n_files = len(orbfiles)
+
+    if n_files == 0:
+        return []
+    else:
+        return get_latest_files(dropxml(orbfiles))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.get_apoapse_files"><code class="name flex">
+<span>def <span class="ident">get_apoapse_files</span></span>(<span>orbit_number, data_directory, channel='muv')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Convenience function for apoapse data. In addition to returning
+file paths to the data, it determines how many swaths were taken,
+which swath each file belongs to since there are often 2-3 files
+per swath, whether the MCP voltage settings were for daytime or
+nighttime, the mirror step between integrations, and the
+beta-angle orientation of the APP.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>orbit_number</code></strong> :&ensp;<code>int</code></dt>
+<dd>The MAVEN orbit number.</dd>
+<dt><strong><code>data_directory</code></strong> :&ensp;<code>str</code></dt>
+<dd>Absolute path to your IUVS level 1B data directory which has
+the orbit blocks, e.g., "orbit03400, orbit03500," etc.</dd>
+<dt><strong><code>channel</code></strong> :&ensp;<code>str</code></dt>
+<dd>The instrument channel. Defaults to 'muv'.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>swath_info</code></strong> :&ensp;<code>dict</code></dt>
+<dd>A dictionary containing filepaths to the requested data files,
+the number of swaths, the swath number for each data file,
+whether or not the file is a dayside file, and whether the APP
+was beta-flipped during this orbit.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_apoapse_files(orbit_number, data_directory, channel=&#39;muv&#39;):
+    &#34;&#34;&#34;Convenience function for apoapse data. In addition to returning
+    file paths to the data, it determines how many swaths were taken,
+    which swath each file belongs to since there are often 2-3 files
+    per swath, whether the MCP voltage settings were for daytime or
+    nighttime, the mirror step between integrations, and the
+    beta-angle orientation of the APP.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute path to your IUVS level 1B data directory which has
+        the orbit blocks, e.g., &#34;orbit03400, orbit03500,&#34; etc.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+
+    Returns
+    -------
+    swath_info : dict
+        A dictionary containing filepaths to the requested data files,
+        the number of swaths, the swath number for each data file,
+        whether or not the file is a dayside file, and whether the APP
+        was beta-flipped during this orbit.
+
+    &#34;&#34;&#34;
+
+    # get list of FITS files for given orbit number
+    files, n_files = get_files(orbit_number, data_directory,
+                               segment=&#39;apoapse&#39;, channel=channel, count=True)
+
+    # set initial counters
+    n_swaths = 0
+    prev_ang = 999
+
+    # arrays to hold final file paths, etc.
+    filepaths = []
+    daynight = []
+    swath = []
+    flipped = &#39;unknown&#39;
+
+    # loop through files...
+    for i in range(n_files):
+
+        # open FITS file
+        hdul = fits.open(files[i])
+
+        # skip single integrations, they are more trouble than they&#39;re worth
+        if hdul[&#39;primary&#39;].data.ndim == 2:
+            continue
+
+        # determine if beta-flipped
+        if flipped == &#39;unknown&#39;:
+            beta_flip(hdul)
+
+        # store filepath
+        filepaths.append(files[i])
+
+        # determine if dayside or nightside
+        if hdul[&#39;observation&#39;].data[&#39;mcp_volt&#39;] &gt; 700:
+            daynight.append(False)
+        else:
+            daynight.append(True)
+
+        # calcualte mirror direction
+        mirror_dir = np.sign(hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][-1]
+                             - hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][0])
+        if prev_ang == 999:
+            prev_ang *= mirror_dir
+
+        # check the angles by seeing if the mirror is still scanning
+        # in the same direction
+        ang0 = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][0]
+        if (((mirror_dir == 1) &amp; (prev_ang &gt; ang0))
+            | ((mirror_dir == -1) &amp; (prev_ang &lt; ang0))):
+            # increment the swath count
+            n_swaths += 1
+
+        # store swath number
+        swath.append(n_swaths - 1)
+
+        # change the previous angle comparison value
+        prev_ang = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;][-1]
+
+    # make a dictionary to hold all this shit
+    swath_info = {
+        &#39;files&#39;: np.array(filepaths),
+        &#39;n_swaths&#39;: n_swaths,
+        &#39;swath_number&#39;: np.array(swath),
+        &#39;dayside&#39;: np.array(daynight),
+        &#39;beta_flip&#39;: flipped,
+    }
+
+    # return the dictionary
+    return swath_info</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.get_euvm_l2b_filename"><code class="name flex">
+<span>def <span class="ident">get_euvm_l2b_filename</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the most recent EUVM L2B file available</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>none</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>euvm_l2b_fname</code></strong> :&ensp;<code>str</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>Filename of EUVM L2B save file.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_euvm_l2b_filename():
+    &#34;&#34;&#34;
+    Returns the most recent EUVM L2B file available
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_fname : str
+       Filename of EUVM L2B save file.
+    &#34;&#34;&#34;
+    from maven_iuvs.download import get_euvm_l2b_dir
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+&#34;*l2b*.sav&#34;))[-1]
+
+    return euvm_l2b_fname</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.get_file_version"><code class="name flex">
+<span>def <span class="ident">get_file_version</span></span>(<span>orbit_number, data_directory, segment='apoapse', channel='muv')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return file version and revision of FITS files for a given orbit
+number.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>orbit_number</code></strong> :&ensp;<code>int</code></dt>
+<dd>The MAVEN orbit number.</dd>
+<dt><strong><code>data_directory</code></strong> :&ensp;<code>str</code></dt>
+<dd>Absolute system path to the location containing orbit block
+folders ("orbit01300", orbit01400", etc.)</dd>
+<dt><strong><code>segment</code></strong> :&ensp;<code>str</code></dt>
+<dd>The orbit segment for which you want data files. Defaults to
+'apoapse'.</dd>
+<dt><strong><code>channel</code></strong> :&ensp;<code>str</code></dt>
+<dd>The instrument channel. Defaults to 'muv'.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>data_version</code></strong> :&ensp;<code>str</code></dt>
+<dd>The data version. If no files exist, then it's
+'missing'. Otherwise, it's an 'r##' or 's##' version type of
+the format "v##_r##" or "v##_s##".</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_file_version(orbit_number, data_directory,
+                     segment=&#39;apoapse&#39;, channel=&#39;muv&#39;):
+    &#34;&#34;&#34;Return file version and revision of FITS files for a given orbit
+    number.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+    segment : str
+        The orbit segment for which you want data files. Defaults to
+        &#39;apoapse&#39;.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+
+    Returns
+    -------
+    data_version : str
+        The data version. If no files exist, then it&#39;s
+        &#39;missing&#39;. Otherwise, it&#39;s an &#39;r##&#39; or &#39;s##&#39; version type of
+        the format &#34;v##_r##&#34; or &#34;v##_s##&#34;.
+
+    &#34;&#34;&#34;
+
+    # get files and extract data versions; if no files version is
+    # &#39;missing&#39;
+    try:
+        files = get_files(orbit_number, data_directory=data_directory,
+                          segment=segment, channel=channel)
+        version_str = files[0].split(&#39;_&#39;)[-2:]
+        data_version = &#39;%s_%s&#39; % (version_str[0], version_str[1][0:3])
+    except IndexError:
+        data_version = &#39;missing&#39;
+
+    # return data version string
+    return data_version</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.get_files"><code class="name flex">
+<span>def <span class="ident">get_files</span></span>(<span>orbit_number, data_directory, segment='apoapse', channel='muv', count=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return file paths to FITS files for a given orbit number.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>orbit_number</code></strong> :&ensp;<code>int</code></dt>
+<dd>The MAVEN orbit number.</dd>
+<dt><strong><code>data_directory</code></strong> :&ensp;<code>str</code></dt>
+<dd>Absolute system path to the location containing orbit block
+folders ("orbit01300", orbit01400", etc.)</dd>
+<dt><strong><code>segment</code></strong> :&ensp;<code>str</code></dt>
+<dd>The orbit segment for which you want data files. Defaults to
+'apoapse'.</dd>
+<dt><strong><code>channel</code></strong> :&ensp;<code>str</code></dt>
+<dd>The instrument channel. Defaults to 'muv'.</dd>
+<dt><strong><code>count</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether or not to return the number of files.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>array</code></dt>
+<dd>A sorted list of the file paths to the FITS files.</dd>
+<dt><strong><code>n_files</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of files, if requested.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_files(orbit_number, data_directory,
+              segment=&#39;apoapse&#39;, channel=&#39;muv&#39;, count=False):
+    &#34;&#34;&#34;Return file paths to FITS files for a given orbit number.
+
+    Parameters
+    ----------
+    orbit_number : int
+        The MAVEN orbit number.
+    data_directory : str
+        Absolute system path to the location containing orbit block
+        folders (&#34;orbit01300&#34;, orbit01400&#34;, etc.)
+    segment : str
+        The orbit segment for which you want data files. Defaults to
+        &#39;apoapse&#39;.
+    channel : str
+        The instrument channel. Defaults to &#39;muv&#39;.
+    count : bool
+        Whether or not to return the number of files.
+
+    Returns
+    -------
+    files : array
+        A sorted list of the file paths to the FITS files.
+    n_files : int
+        The number of files, if requested.
+
+    &#34;&#34;&#34;
+
+    # determine orbit block (directories which group data by 100s)
+    orbit_block = int(orbit_number / 100) * 100
+
+    # location of FITS files (this will change depending on the user)
+    filepath = os.path.join(data_directory, &#39;level1b/orbit%.5d/&#39; % orbit_block)
+
+    # format of FITS file names
+    filename_str = (&#39;*%s-orbit%.5d-%s*.fits.gz&#39;
+                    % (segment, orbit_number, channel))
+
+    # get list of files
+    files = sorted(glob.glob(os.path.join(filepath, filename_str)))
+
+    # get number of files
+    n_files = int(len(files))
+
+    # return the list of files with the count if requested
+    if not count:
+        return files
+    else:
+        return files, n_files</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.get_latest_files"><code class="name flex">
+<span>def <span class="ident">get_latest_files</span></span>(<span>files)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Given a list of input files, return the most recent version of each file.</p>
+<p>Prefers highest version number, then production files to stage files,
+and finally highest revision number.</p>
+<p>Preserves order of initial list.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>iterable</code></dt>
+<dd>list of string IUVS filenames, relative or absolute.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>unique_files</code></strong> :&ensp;<code>np.array</code></dt>
+<dd>list of string IUVS filenames, containing only the most recent version
+of each file.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_latest_files(files):
+    &#34;&#34;&#34;
+    Given a list of input files, return the most recent version of each file.
+
+    Prefers highest version number, then production files to stage files,
+    and finally highest revision number.
+
+    Preserves order of initial list.
+
+    Parameters
+    ----------
+    files : iterable
+        list of string IUVS filenames, relative or absolute.
+
+    Returns
+    -------
+    unique_files : np.array
+        list of string IUVS filenames, containing only the most recent version
+        of each file.
+
+    &#34;&#34;&#34;
+
+    # create a list of [file_basename, index in initial list, filename]
+    #   in the basename, replace _r with _x
+    #   this allows a standard sort to put the file we want last
+    #
+    #   keeping the initial index allows us to put the list back
+    #   in its initial order at the end of the process
+    filenames = [[os.path.basename(f).split(&#34;.&#34;)[0].replace(&#34;_r&#34;, &#34;_x&#34;), i, f]
+                 for i, f in enumerate(files)]
+
+    # sort the list by the file basename with the replacement above
+    # reverse is specified because of the interaction with np.unique below
+    filenames.sort(reverse=True, key=lambda x: x[0])
+
+    # get the file identifiers (file_basename up to the _vXX_yXX part)
+    filetags = [f[0][:-8] for f in filenames]
+
+    # find the location of the unique file identifiers
+    # np.unique returns the first unique entry, hence the reverse flag above
+    uniquetags, uniquetagindices = np.unique(filetags, return_index=True)
+
+    # now we can select the unique entries from our original list
+    uniquefilenames = np.array(filenames)[uniquetagindices]
+
+    # we no longer need the basename we constructed, so get rid of it
+    uniquefilenames = uniquefilenames[:, 1:].tolist()  # tolist for sorting
+
+    # sort by original position in provided files list
+    uniquefilenames.sort(key=lambda x: int(x[0]))
+
+    # we don&#39;t need the initial index anymore,
+    # so retain only the original filename provided
+    uniquefilenames = np.array(uniquefilenames)[:, 1]
+
+    return uniquefilenames</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.search.relay_file"><code class="name flex">
+<span>def <span class="ident">relay_file</span></span>(<span>hdul)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Determines whether a particular file was taken during relay mode.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>hdul</code></strong> :&ensp;<code>HDUList</code></dt>
+<dd>Opened FITS file.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>relay</code></strong> :&ensp;<code>bool</code></dt>
+<dd>True if a file was taken during a relay.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def relay_file(hdul):
+    &#34;&#34;&#34;
+        Determines whether a particular file was taken during relay mode.
+
+        Parameters
+        ----------
+        hdul : HDUList
+            Opened FITS file.
+
+        Returns
+        -------
+        relay : bool
+            True if a file was taken during a relay.
+        &#34;&#34;&#34;
+
+    # get mirror angles
+    angles = hdul[&#39;integration&#39;].data[&#39;mirror_deg&#39;]
+
+    # determine if relay by evaluating minimum and maximum mirror angles
+    min_ang = np.nanmin(angles)
+    max_ang = np.nanmax(angles)
+    relay = False
+    if min_ang == 30.2508544921875 and max_ang == 59.6502685546875:
+        relay = True
+
+    return relay</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="maven_iuvs" href="index.html">maven_iuvs</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="maven_iuvs.search.dropxml" href="#maven_iuvs.search.dropxml">dropxml</a></code></li>
+<li><code><a title="maven_iuvs.search.find_all_l1b" href="#maven_iuvs.search.find_all_l1b">find_all_l1b</a></code></li>
+<li><code><a title="maven_iuvs.search.get_apoapse_files" href="#maven_iuvs.search.get_apoapse_files">get_apoapse_files</a></code></li>
+<li><code><a title="maven_iuvs.search.get_euvm_l2b_filename" href="#maven_iuvs.search.get_euvm_l2b_filename">get_euvm_l2b_filename</a></code></li>
+<li><code><a title="maven_iuvs.search.get_file_version" href="#maven_iuvs.search.get_file_version">get_file_version</a></code></li>
+<li><code><a title="maven_iuvs.search.get_files" href="#maven_iuvs.search.get_files">get_files</a></code></li>
+<li><code><a title="maven_iuvs.search.get_latest_files" href="#maven_iuvs.search.get_latest_files">get_latest_files</a></code></li>
+<li><code><a title="maven_iuvs.search.relay_file" href="#maven_iuvs.search.relay_file">relay_file</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+</footer>
+</body>
+</html>

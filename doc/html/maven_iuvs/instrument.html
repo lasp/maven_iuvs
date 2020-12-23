@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.9.2" />
+<title>maven_iuvs.instrument API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>maven_iuvs.instrument</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import os
+import numpy as np
+import pkg_resources
+
+# instrument variables
+slit_width_deg = 10  # [deg]
+&#34;&#34;&#34;The width of the IUVS slit in degrees.&#34;&#34;&#34;
+
+slit_width_mm = 0.1  # [mm]
+&#34;&#34;&#34;The width of the IUVS slit in millimeters.&#34;&#34;&#34;
+
+limb_port_for = (12.5, 24)  # [deg]
+&#34;&#34;&#34;The IUVS limb port field-of-regard in degrees. The first number
+(12.5 degrees) is the width of the port (slightly wider than the
+slit). The second number (24 degrees) is the angular size of the
+direction of mirror motion.&#34;&#34;&#34;
+
+nadir_port_for = (12.5, 60)  # [deg]
+&#34;&#34;&#34;The IUVS nadir port field-of-regard in degrees. The first number
+(12.5 degrees) is the width of the port (slightly wider than the
+slit). The second number (24 degrees) is the angular size of the
+direction of mirror motion.&#34;&#34;&#34;
+
+port_separation = 36  # [deg]
+&#34;&#34;&#34;The angular separation of the IUVS nadir and limb ports in
+degrees.&#34;&#34;&#34;
+
+pixel_size_mm = 0.0234  # [mm]
+&#34;&#34;&#34;The width/height of an IUVS detector pixel in millimeters.&#34;&#34;&#34;
+
+focal_length_mm = 100.  # [mm]
+&#34;&#34;&#34;The focal length of the IUVS telescope in millimeters.&#34;&#34;&#34;
+
+muv_dispersion = 0.16325  # [nm/pix]
+&#34;&#34;&#34;The dispersion of the MUV detector in nanometers/pixel.&#34;&#34;&#34;
+
+fuv_dispersion = 0.08134  # [nm/pix]
+&#34;&#34;&#34;The dispersion of the FUV detector in nanometers/pixel.&#34;&#34;&#34;
+
+slit_pix_min = 77  # starting pixel position of slit out of 1023 (0 indexing)
+&#34;&#34;&#34;The pixel index (starting from 0) corresponding to the start of the
+slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
+detector.&#34;&#34;&#34;
+
+slit_pix_max = 916  # ending pixel position of slit out of 1023 (0 indexing)
+&#34;&#34;&#34;The pixel index (starting from 0) corresponding to the end of the
+slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
+detector.&#34;&#34;&#34;
+
+
+def calculate_calibration_curve(hdul):
+    &#34;&#34;&#34;Generates a spectral calibration curve in DN/kR. The FITS file
+    (from which the spectrum comes) provides the necessary calibration
+    factors. Note: this requires a level 1B FITS file, it cannot
+    produce a &#34;de-calibration&#34; curve from a level 1C file.
+
+    Parameters
+    ----------
+    hdul : HDUList
+        Opened level 1B FITS file.
+
+    Returns
+    -------
+    calibration_curve : array
+        The calibration curve in DN/kR. Dividing a DN spectrum by this
+        curve produces a calibrated spectrum.
+
+    &#34;&#34;&#34;
+
+    # get integration information
+    gain = hdul[&#39;observation&#39;].data[&#39;mcp_gain&#39;][0]
+    int_time = hdul[&#39;observation&#39;].data[&#39;int_time&#39;][0]
+    wavelengths = np.squeeze(hdul[&#39;observation&#39;].data[&#39;wavelength&#39;])
+    dwavelength = hdul[&#39;observation&#39;].data[0][&#39;wavelength_width&#39;]
+    spa_bin_width = hdul[&#39;primary&#39;].header[&#39;spa_size&#39;]
+    xuv = hdul[&#39;observation&#39;].data[&#39;channel&#39;][0]
+
+    # calculate pixel angular dispersion along the slit
+    pixel_omega = pixel_size_mm/focal_length_mm * slit_width_mm/focal_length_mm
+
+    # load IUVS sensitivity curve for given channel
+    sens_file_basename = &#39;mvn_iuv_sensitivity-%s.npy&#39; % xuv.lower()
+    sens_fname = os.path.join(pkg_resources.resource_filename(&#39;maven_iuvs&#39;,
+                                                              &#39;ancillary/&#39;),
+                              sens_file_basename)
+    sensitivity = np.load(sens_fname, allow_pickle=True)
+    sens_wv = sensitivity.item().get(&#39;wavelength&#39;)
+    sens = sensitivity.item().get(&#39;sensitivity_curve&#39;)
+
+    # calculate line effective area
+    if wavelengths.ndim == 1:
+        wavelengths = np.array([wavelengths])
+        dwavelength = np.array([dwavelength])
+
+    line_effective_area = np.zeros_like(wavelengths)
+    for i in range(wavelengths.shape[0]):
+        line_effective_area[i] = np.exp(np.interp(wavelengths[i],
+                                                  sens_wv,
+                                                  np.log(sens)))
+
+    # calculate bin angular and spectral dispersion
+    bin_omega = pixel_omega * spa_bin_width  # sr / spatial bin
+
+    # calculate calibration curve
+    kR = 1e9 / (4 * np.pi)  # [photon/kR]
+    calibration_curve = (dwavelength * gain * int_time
+                         * kR * line_effective_area * bin_omega)  # [DN/kR]
+
+    # return the calibration curve
+    return calibration_curve</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-variables">Global variables</h2>
+<dl>
+<dt id="maven_iuvs.instrument.focal_length_mm"><code class="name">var <span class="ident">focal_length_mm</span></code></dt>
+<dd>
+<div class="desc"><p>The focal length of the IUVS telescope in millimeters.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.fuv_dispersion"><code class="name">var <span class="ident">fuv_dispersion</span></code></dt>
+<dd>
+<div class="desc"><p>The dispersion of the FUV detector in nanometers/pixel.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.limb_port_for"><code class="name">var <span class="ident">limb_port_for</span></code></dt>
+<dd>
+<div class="desc"><p>The IUVS limb port field-of-regard in degrees. The first number
+(12.5 degrees) is the width of the port (slightly wider than the
+slit). The second number (24 degrees) is the angular size of the
+direction of mirror motion.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.muv_dispersion"><code class="name">var <span class="ident">muv_dispersion</span></code></dt>
+<dd>
+<div class="desc"><p>The dispersion of the MUV detector in nanometers/pixel.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.nadir_port_for"><code class="name">var <span class="ident">nadir_port_for</span></code></dt>
+<dd>
+<div class="desc"><p>The IUVS nadir port field-of-regard in degrees. The first number
+(12.5 degrees) is the width of the port (slightly wider than the
+slit). The second number (24 degrees) is the angular size of the
+direction of mirror motion.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.pixel_size_mm"><code class="name">var <span class="ident">pixel_size_mm</span></code></dt>
+<dd>
+<div class="desc"><p>The width/height of an IUVS detector pixel in millimeters.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.port_separation"><code class="name">var <span class="ident">port_separation</span></code></dt>
+<dd>
+<div class="desc"><p>The angular separation of the IUVS nadir and limb ports in
+degrees.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.slit_pix_max"><code class="name">var <span class="ident">slit_pix_max</span></code></dt>
+<dd>
+<div class="desc"><p>The pixel index (starting from 0) corresponding to the end of the
+slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
+detector.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.slit_pix_min"><code class="name">var <span class="ident">slit_pix_min</span></code></dt>
+<dd>
+<div class="desc"><p>The pixel index (starting from 0) corresponding to the start of the
+slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
+detector.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.slit_width_deg"><code class="name">var <span class="ident">slit_width_deg</span></code></dt>
+<dd>
+<div class="desc"><p>The width of the IUVS slit in degrees.</p></div>
+</dd>
+<dt id="maven_iuvs.instrument.slit_width_mm"><code class="name">var <span class="ident">slit_width_mm</span></code></dt>
+<dd>
+<div class="desc"><p>The width of the IUVS slit in millimeters.</p></div>
+</dd>
+</dl>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="maven_iuvs.instrument.calculate_calibration_curve"><code class="name flex">
+<span>def <span class="ident">calculate_calibration_curve</span></span>(<span>hdul)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates a spectral calibration curve in DN/kR. The FITS file
+(from which the spectrum comes) provides the necessary calibration
+factors. Note: this requires a level 1B FITS file, it cannot
+produce a "de-calibration" curve from a level 1C file.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>hdul</code></strong> :&ensp;<code>HDUList</code></dt>
+<dd>Opened level 1B FITS file.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>calibration_curve</code></strong> :&ensp;<code>array</code></dt>
+<dd>The calibration curve in DN/kR. Dividing a DN spectrum by this
+curve produces a calibrated spectrum.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def calculate_calibration_curve(hdul):
+    &#34;&#34;&#34;Generates a spectral calibration curve in DN/kR. The FITS file
+    (from which the spectrum comes) provides the necessary calibration
+    factors. Note: this requires a level 1B FITS file, it cannot
+    produce a &#34;de-calibration&#34; curve from a level 1C file.
+
+    Parameters
+    ----------
+    hdul : HDUList
+        Opened level 1B FITS file.
+
+    Returns
+    -------
+    calibration_curve : array
+        The calibration curve in DN/kR. Dividing a DN spectrum by this
+        curve produces a calibrated spectrum.
+
+    &#34;&#34;&#34;
+
+    # get integration information
+    gain = hdul[&#39;observation&#39;].data[&#39;mcp_gain&#39;][0]
+    int_time = hdul[&#39;observation&#39;].data[&#39;int_time&#39;][0]
+    wavelengths = np.squeeze(hdul[&#39;observation&#39;].data[&#39;wavelength&#39;])
+    dwavelength = hdul[&#39;observation&#39;].data[0][&#39;wavelength_width&#39;]
+    spa_bin_width = hdul[&#39;primary&#39;].header[&#39;spa_size&#39;]
+    xuv = hdul[&#39;observation&#39;].data[&#39;channel&#39;][0]
+
+    # calculate pixel angular dispersion along the slit
+    pixel_omega = pixel_size_mm/focal_length_mm * slit_width_mm/focal_length_mm
+
+    # load IUVS sensitivity curve for given channel
+    sens_file_basename = &#39;mvn_iuv_sensitivity-%s.npy&#39; % xuv.lower()
+    sens_fname = os.path.join(pkg_resources.resource_filename(&#39;maven_iuvs&#39;,
+                                                              &#39;ancillary/&#39;),
+                              sens_file_basename)
+    sensitivity = np.load(sens_fname, allow_pickle=True)
+    sens_wv = sensitivity.item().get(&#39;wavelength&#39;)
+    sens = sensitivity.item().get(&#39;sensitivity_curve&#39;)
+
+    # calculate line effective area
+    if wavelengths.ndim == 1:
+        wavelengths = np.array([wavelengths])
+        dwavelength = np.array([dwavelength])
+
+    line_effective_area = np.zeros_like(wavelengths)
+    for i in range(wavelengths.shape[0]):
+        line_effective_area[i] = np.exp(np.interp(wavelengths[i],
+                                                  sens_wv,
+                                                  np.log(sens)))
+
+    # calculate bin angular and spectral dispersion
+    bin_omega = pixel_omega * spa_bin_width  # sr / spatial bin
+
+    # calculate calibration curve
+    kR = 1e9 / (4 * np.pi)  # [photon/kR]
+    calibration_curve = (dwavelength * gain * int_time
+                         * kR * line_effective_area * bin_omega)  # [DN/kR]
+
+    # return the calibration curve
+    return calibration_curve</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="maven_iuvs" href="index.html">maven_iuvs</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-variables">Global variables</a></h3>
+<ul class="two-column">
+<li><code><a title="maven_iuvs.instrument.focal_length_mm" href="#maven_iuvs.instrument.focal_length_mm">focal_length_mm</a></code></li>
+<li><code><a title="maven_iuvs.instrument.fuv_dispersion" href="#maven_iuvs.instrument.fuv_dispersion">fuv_dispersion</a></code></li>
+<li><code><a title="maven_iuvs.instrument.limb_port_for" href="#maven_iuvs.instrument.limb_port_for">limb_port_for</a></code></li>
+<li><code><a title="maven_iuvs.instrument.muv_dispersion" href="#maven_iuvs.instrument.muv_dispersion">muv_dispersion</a></code></li>
+<li><code><a title="maven_iuvs.instrument.nadir_port_for" href="#maven_iuvs.instrument.nadir_port_for">nadir_port_for</a></code></li>
+<li><code><a title="maven_iuvs.instrument.pixel_size_mm" href="#maven_iuvs.instrument.pixel_size_mm">pixel_size_mm</a></code></li>
+<li><code><a title="maven_iuvs.instrument.port_separation" href="#maven_iuvs.instrument.port_separation">port_separation</a></code></li>
+<li><code><a title="maven_iuvs.instrument.slit_pix_max" href="#maven_iuvs.instrument.slit_pix_max">slit_pix_max</a></code></li>
+<li><code><a title="maven_iuvs.instrument.slit_pix_min" href="#maven_iuvs.instrument.slit_pix_min">slit_pix_min</a></code></li>
+<li><code><a title="maven_iuvs.instrument.slit_width_deg" href="#maven_iuvs.instrument.slit_width_deg">slit_width_deg</a></code></li>
+<li><code><a title="maven_iuvs.instrument.slit_width_mm" href="#maven_iuvs.instrument.slit_width_mm">slit_width_mm</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="maven_iuvs.instrument.calculate_calibration_curve" href="#maven_iuvs.instrument.calculate_calibration_curve">calculate_calibration_curve</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+</footer>
+</body>
+</html>

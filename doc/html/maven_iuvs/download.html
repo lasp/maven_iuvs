@@ -1,0 +1,1751 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.9.2" />
+<title>maven_iuvs.download API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>maven_iuvs.download</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import os
+import glob
+import subprocess
+import time
+import tempfile
+import datetime
+from getpass import getpass
+
+# twill&#39;s __init__.py is dumb, we need to work around it to play nice
+# with jupyter:
+import sys
+_stdout = sys.stdout
+_stderr = sys.stdout
+
+import twill
+twill.set_output(_stdout)
+twill.set_errout(_stderr)
+twill.set_loglevel(twill.loglevels[&#39;WARNING&#39;])
+
+
+import pexpect
+import paramiko
+
+import numpy as np
+
+from maven_iuvs.miscellaneous import clear_line
+from maven_iuvs.search import get_latest_files
+
+
+def get_user_paths_filename():
+    &#34;&#34;&#34;
+    Determines whether user_paths.py exists and returns the filename
+    if it does.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    file_exists : bool
+        Whether user_paths.py exists
+
+    user_paths_py : str
+       Absolute file path to user_paths.py
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    file_exists = os.path.exists(user_paths_py)
+
+    return file_exists, user_paths_py
+
+
+def setup_user_paths():
+    &#34;&#34;&#34;
+    Generates user_paths.py, used by sync_data to read data from the
+    IUVS VM and store it locally
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    none
+
+    Notes
+    -------
+
+    This is an interactive routine called once, generally the first
+    time the user calls sync_data.
+
+    &#34;&#34;&#34;
+
+    # if user_paths.py already exists then assume that the user has
+    # set everything up already
+    file_exists, user_paths_py = get_user_paths_filename()
+    if file_exists:
+        return
+
+    # get the location of the default L1B and SPICE directory
+    print(&#34;Syncing all of the L1B data could take up to 2TB of disk space.&#34;)
+    l1b_dir = input(&#34;Where would you like IUVS l1b FITS files&#34;
+                    &#34; to be stored by sync_data? &#34;)
+    print(&#34;Syncing all of the SPICE kernels could take up to 300GB of disk&#34;
+          &#34; space.&#34;)
+    spice_dir = input(&#34;Where would you like MAVEN/IUVS SPICE&#34;
+                      &#34; kernels to be stored by sync_data? &#34;)
+    # get the VM username to be used in rsync calls
+    vm_username = input(&#34;What is your username for the&#34;
+                        &#34; IUVS VM to sync files? &#34;)
+
+    user_paths_file = open(user_paths_py, &#34;x&#34;)
+
+    user_paths_file.write(&#34;# This file automatically generated by&#34;
+                          &#34; maven_iuvs.download.setup_file_paths\n&#34;)
+    user_paths_file.write(&#34;l1b_dir = \&#34;&#34;+l1b_dir+&#34;\&#34;\n&#34;)
+    user_paths_file.write(&#34;spice_dir = \&#34;&#34;+spice_dir+&#34;\&#34;\n&#34;)
+    user_paths_file.write(&#34;iuvs_vm_username = \&#34;&#34;+vm_username+&#34;\&#34;\n&#34;)
+
+    user_paths_file.close()
+    # now scripts can import the relevant directories from user_paths
+
+
+def call_rsync(remote_path,
+               local_path,
+               ssh_password,
+               extra_flags=&#34;&#34;):
+    &#34;&#34;&#34;
+    Updates the SPICE kernels by rsyncing the VM folders to the local machine.
+
+    Parameters
+    ----------
+    remote_path : str
+        Path to sync on the remote machine.
+
+    local_path : str
+        Path to the sync on the local machine.
+
+    ssh_password : str
+        Plain text to send to process when it prompts for a password
+
+    extra_flags : str
+        Extra flags for rsync command.
+
+        -trzL and -info=progress2 are already specified, extra_flags
+         text are inserted afterward. Defaults to &#34;&#34;.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+    # get the version number of rsync
+    try:
+        result = subprocess.run([&#39;rsync&#39;, &#39;--version&#39;],
+                                stdout=subprocess.PIPE,
+                                check=True)
+        version = result.stdout.split(b&#39;version&#39;)[1].split()[0]
+        version = int(version.replace(b&#34;.&#34;, b&#34;&#34;))
+    except subprocess.CalledProcessError:
+        raise Exception(&#34;rsync failed ---&#34;
+                        &#34; is rsync installed on your system?&#34;)
+
+    if version &gt;= 313:
+        # we can print total transfer progress
+        progress_flag = &#39;--info=progress2&#39;
+    else:
+        progress_flag = &#39;--progress&#39;
+
+    rsync_command = &#34; &#34;.join([&#39;rsync -trvzL&#39;,
+                              progress_flag,
+                              extra_flags,
+                              remote_path,
+                              local_path])
+
+    print(&#34;running rsync_command: &#34; + rsync_command)
+    child = pexpect.spawn(rsync_command,
+                          encoding=&#39;utf-8&#39;)
+
+    cpl = child.compile_pattern_list([&#39;.* password: &#39;,
+                                      &#39;[0-9]+%&#39;])
+    child.expect_list(cpl)
+
+    if &#39;password&#39; in child.after:
+        # respond to server password request
+        child.sendline(ssh_password)
+
+    # print some progress info by searching for lines with a
+    # percentage progress
+    cpl = child.compile_pattern_list([pexpect.EOF,
+                                      &#39;[0-9]+%&#39;])
+    while True:
+        i = child.expect_list(cpl, timeout=None)
+        if i == 0:  # end of file
+            break
+        if i == 1:
+            percent = child.after.strip(&#34; \t\n\t&#34;)
+
+            # get file left to check also
+            child.expect(&#39;[0-9]+/[0-9]+&#39;, timeout=None)
+            file_numbers = child.after
+
+            if version &lt; 313:
+                # compute progress from file numbers
+                fnum1, fnum2 = list(map(int, file_numbers.split(&#34;/&#34;)))
+                percent = 1.0 - fnum1 / fnum2
+                percent = str(int(percent*100)) + &#34;%&#34;
+
+            clear_line()
+            print(&#34;rsync progress: &#34; +
+                  percent +
+                  &#39; (files left: &#39; + file_numbers + &#39;)&#39;,
+                  end=&#39;\r&#39;)
+
+    child.close()
+    clear_line()  # clear last rsync message
+
+
+def get_vm_file_list(server,
+                     serverdir,
+                     username,
+                     password,
+                     pattern=&#34;*.fits*&#34;,
+                     minorb=100, maxorb=100000,
+                     include_cruise=False,
+                     status_tag=&#34;&#34;):
+    &#34;&#34;&#34;
+    Get a list of files from the VM that match a given pattern.
+
+    Parameters
+    ----------
+    server : str
+        name of the server to get files from (normally maven-iuvs-itf)
+
+    serverdir : str
+        directory to search for files matching the pattern
+
+    username : str
+        username for server access
+
+    password : str
+        password for server access
+
+    pattern : str
+        glob pattern used to search for matching files
+        Defaults to &#39;*.fits*&#39; (matches all FITS files)
+
+    minorb, maxorb : int
+        Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
+        Defaults to 100 and 100000, but smaller ranges than the available data
+        will sync faster.
+
+    include_cruise : bool
+        Whether to sync cruise data in addition to the orbit range above.
+        Defaults to False.
+
+    status_tag : str
+        Tag to decorate orbit number print string and inform user of progress.
+        Defaults to &#34;&#34;.
+
+    Returns
+    -------
+    files : np.array
+        list of server filenames that match the pattern
+    &#34;&#34;&#34;
+
+    # connect to the server using paramiko
+    ssh = paramiko.SSHClient()
+    ssh.load_system_host_keys()
+    ssh.connect(server, username=username, password=password)
+
+    # get the list of folders on the VM
+    stdin, stdout, stderr = ssh.exec_command(&#39;ls &#39;+serverdir)
+    server_orbit_folders = np.loadtxt(stdout, dtype=str)
+
+    # determine what folders to look for files in
+    sync_orbit_folders = [&#34;orbit&#34;+str(orbno).zfill(5)
+                          for orbno in np.arange(minorb, maxorb, 100)]
+    if include_cruise:
+        sync_orbit_folders = np.append([&#34;cruise&#34;], sync_orbit_folders)
+
+    # sync only folders that belong to both groups
+    sync_orbit_folders = server_orbit_folders[np.isin(server_orbit_folders,
+                                                      sync_orbit_folders,
+                                                      assume_unique=True)]
+
+    # set up the output files array
+    files = []
+
+    # iterate through the folder list and get the filenames that match
+    # the input pattern
+    for folder in sync_orbit_folders:
+        clear_line()
+        print(status_tag+folder, end=&#34;\r&#34;)
+
+        cmd = &#34;ls &#34;+serverdir+folder+&#34;/&#34;+pattern
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+
+        if len(stderr.read()) == 0:
+            files.append(np.loadtxt(stdout, dtype=str))
+        else:
+            continue
+    ssh.close()
+
+    if len(files) == 0:
+        return []
+    else:
+        return np.concatenate(np.array(files, dtype=object))
+
+
+def sync_data(spice=True, l1b=True,
+              pattern=&#34;*.fits*&#34;,
+              minorb=100, maxorb=100000,
+              include_cruise=False):
+    &#34;&#34;&#34;
+    Synchronize new SPICE kernels and L1B data from the VM and remove
+    any old files that have been replaced by newer versions.
+
+    Parameters
+    ----------
+    spice : bool
+        Whether or not to sync SPICE kernels. Defaults to True.
+
+    l1b : bool
+        Whether or not to sync level 1B data. Defaults to True.
+
+    pattern : str
+        glob pattern used to search for matching files
+
+        Defaults to &#39;*.fits*&#39; (matches all FITS files)
+
+    minorb, maxorb : int
+        Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
+
+        Defaults to 100 and 100000, but smaller ranges than the available data
+        will sync faster.
+
+    include_cruise : bool
+        Whether to sync cruise data in addition to the orbit range above.
+
+        Defaults to False.
+
+    Returns
+    -------
+    None.
+
+    &#34;&#34;&#34;
+
+    #  check if user path data exists and set it if not
+    setup_user_paths()
+    #  load user path data from file
+    from maven_iuvs.user_paths import l1b_dir, spice_dir, iuvs_vm_username
+    if not os.path.exists(spice_dir):
+        raise Exception(&#34;Cannot find specified SPICE directory.&#34;
+                        &#34; Is it accessible?&#34;)
+    if not os.path.exists(l1b_dir):
+        raise Exception(&#34;Cannot find specified L1B directory.&#34;
+                        &#34; Is it accessible?&#34;)
+
+    # get starting time
+    t0 = time.time()
+
+    # define VM-related variables
+    vm = &#39;maven-iuvs-itf&#39;
+    login = iuvs_vm_username + &#39;@&#39; + vm + &#39;:&#39;
+    production_l1b = &#39;/maven_iuvs/production/products/level1b/&#39;
+    stage_l1b = &#39;/maven_iuvs/stage/products/level1b/&#39;
+    vm_spice = login + &#39;/maven_iuvs/stage/anc/spice/&#39;
+
+    # try to sync the files, if it fails, user probably isn&#39;t on the VPN
+    try:
+        # get user password for the VM
+        iuvs_vm_password = getpass(&#39;input password for &#39;+login+&#39; &#39;)
+
+        # sync SPICE kernels
+        if spice is True:
+            print(&#39;Updating SPICE kernels...&#39;)
+            call_rsync(vm_spice, spice_dir, iuvs_vm_password,
+                       extra_flags=&#34;--delete&#34;)
+
+        # sync level 1B data
+        if l1b is True:
+            # get the file names of all the relevant files
+            print(&#39;Fetching names of level 1B production and stage&#39;
+                  &#39; files from the VM...&#39;)
+            prod_filenames = get_vm_file_list(vm,
+                                              production_l1b,
+                                              iuvs_vm_username,
+                                              iuvs_vm_password,
+                                              pattern=pattern,
+                                              minorb=minorb,
+                                              maxorb=maxorb,
+                                              include_cruise=include_cruise,
+                                              status_tag=&#39;production: &#39;)
+            stage_filenames = get_vm_file_list(vm,
+                                               stage_l1b,
+                                               iuvs_vm_username,
+                                               iuvs_vm_password,
+                                               pattern=pattern,
+                                               minorb=minorb,
+                                               maxorb=maxorb,
+                                               include_cruise=include_cruise,
+                                               status_tag=&#39;stage: &#39;)
+            local_filenames = glob.glob(l1b_dir+&#34;/*/&#34;+pattern)
+
+            # get the list of most recent files, no matter where they are
+            #    order matters! putting local_filenames first ensures
+            #    duplicates aren&#39;t transferred
+            if (len(prod_filenames) == 0 and len(stage_filenames) == 0):
+                print(&#34;No matching files on VM&#34;)
+                return
+
+            files_to_sync = get_latest_files(np.concatenate([local_filenames,
+                                                             prod_filenames,
+                                                             stage_filenames]))
+
+            # figure out which files to get from production and stage
+            files_from_production = [a[len(production_l1b):]
+                                     for a in files_to_sync
+                                     if (a[:len(production_l1b)]
+                                         ==
+                                         production_l1b)]
+            files_from_stage = [a[len(stage_l1b):]
+                                for a in files_to_sync
+                                if a[:len(stage_l1b)] == stage_l1b]
+
+            # production
+            # save the files to rsync to temporary files
+            # this way rsync can use the files_from flag
+            transfer_from_production_file = tempfile.NamedTemporaryFile()
+            np.savetxt(transfer_from_production_file.name,
+                       files_from_production,
+                       fmt=&#34;%s&#34;)
+
+            print(&#39;Syncing &#39; + str(len(files_from_production)) +
+                  &#39; files from production...&#39;)
+            call_rsync(login+production_l1b,
+                       l1b_dir,
+                       iuvs_vm_password,
+                       extra_flags=(&#39;--files-from=&#39; +
+                                    transfer_from_production_file.name))
+
+            # stage, identical to above
+            transfer_from_stage_file = tempfile.NamedTemporaryFile()
+            np.savetxt(transfer_from_stage_file.name,
+                       files_from_stage,
+                       fmt=&#34;%s&#34;)
+
+            print(&#39;Syncing &#39; + str(len(files_from_stage)) +
+                  &#39; files from stage...&#39;)
+            call_rsync(login+stage_l1b,
+                       l1b_dir,
+                       iuvs_vm_password,
+                       extra_flags=(&#39;--files-from=&#39; +
+                                    transfer_from_stage_file.name))
+
+            # now delete all of the old files superseded by newer versions
+            clear_line()
+            print(&#39;Cleaning up old files...&#39;)
+
+            # figure out what files need to be deleted
+            local_filenames = glob.glob(l1b_dir+&#34;/*/*.fits*&#34;)
+            latest_local_files = get_latest_files(local_filenames)
+            local_files_to_delete = np.setdiff1d(local_filenames,
+                                                 latest_local_files)
+
+            # ask if it&#39;s OK to delete the old files
+            while True and len(local_files_to_delete) &gt; 0:
+                del_files = input(&#39;Delete &#39; +
+                                  str(len(local_files_to_delete)) +
+                                  &#39; old files? (y/n/p)&#39;)
+                if del_files == &#39;n&#39;:
+                    # don&#39;t delete the files
+                    break
+                if del_files == &#39;y&#39;:
+                    # delete the files
+                    [os.remove(f) for f in local_files_to_delete]
+                    break
+                if del_files == &#39;p&#39;:
+                    print(local_files_to_delete)
+                else:
+                    print(&#34;Please answer y or n, or p to print the file list.&#34;)
+
+            # Question for merge manager:
+            # Kyle&#39;s code keeps a list of these deleted files
+            # in excluded_files.txt --- is this necessary?
+
+            # index all local files to speed up later finding
+            local_filenames = sorted(glob.glob(l1b_dir+&#34;/*/*.fits*&#34;))
+            np.save(l1b_dir+&#39;/filenames&#39;, sorted(local_filenames))
+
+    except OSError:
+        raise Exception(&#39;rsync failed --- are you connected to the VPN?&#39;)
+
+    # get ending time
+    t1 = time.time()
+    seconds = t1 - t0
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+
+    # tell us how long it took
+    print(&#39;Data syncing and cleanup took %.2d:%.2d:%.2d.&#39; % (h, m, s))
+
+
+def get_euvm_l2b_dir():
+    &#34;&#34;&#34;
+    Returns the directory where euvm_l2b data should be stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_dir : str
+       Directory to store EUVM L2B files in.
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from maven_iuvs.user_paths import euvm_l2b_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        euvm_l2b_dir = input(&#34;Where should euvm_l2b data be stored?&#34;)
+        with open(user_paths_py, &#34;a+&#34;) as f:
+            f.write(&#34;# This line added by get_euvm_l2b_dir.py\n&#34;)
+            f.write(&#34;euvm_l2b_dir = &#39;&#34;+euvm_l2b_dir+&#34;&#39;\n&#34;)
+
+    return euvm_l2b_dir
+
+
+def sync_euvm_l2b(sdc_username, sdc_password):
+    &#34;&#34;&#34;
+    Sync EUVM L2B data file from MAVEN SDC. This deletes all old data
+    in euvm_l2b_dir and replaces it with a newly downloaded file.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+    print(&#34;syncing EUVM L2B...&#34;)
+
+    url = &#39;https://lasp.colorado.edu/maven/data/sci/euv/l2b/&#39;
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv(&#34;1&#34;, &#39;username&#39;, sdc_username)
+    twill.commands.fv(&#34;1&#34;, &#39;password&#39;, sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we&#39;re authenticated
+    twill.browser.go(url)
+
+    # find the most recent save file on the page
+    files = sorted([f.url for f in twill.browser.links if &#39;.sav&#39; in f.url])
+    most_recent = files[-1]
+
+    # navigate to that file
+    twill.browser.go(url+most_recent)
+
+    # delete old EUVM files in the EUVM l2b directory
+    old_fnames = glob.glob(euvm_l2b_dir+&#39;*l2b*.sav&#39;)
+    [os.remove(f) for f in old_fnames]
+
+    # save the new file to disk
+    fname = euvm_l2b_dir + most_recent
+    with open(fname, &#34;wb&#34;) as file:
+        file.write(twill.browser.dump)
+
+
+def get_integrated_reports_dir():
+    &#34;&#34;&#34;
+    Returns the directory where MAVEN integrated reports files should be
+    stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    integrated_reports_dir : str
+        Directory to store MAVEN integrated reports in.
+
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from maven_iuvs.user_paths import integrated_reports_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        integrated_reports_dir = input(&#34;Where should MAVEN Integrated Reports&#34;
+                                       &#34; data be stored?&#34;)
+        with open(user_paths_py, &#34;a+&#34;) as f:
+            f.write(&#34;# This line added by get_integrated_reports_dir.py\n&#34;)
+            f.write(&#34;integrated_reports_dir = &#39;&#34;+integrated_reports_dir+&#34;&#39;\n&#34;)
+
+    return integrated_reports_dir
+
+
+def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
+    &#34;&#34;&#34;Sync Integrated Reports data from MAVEN Ops page. Syncs all new
+    files and all files from last 180 days by default.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+
+    print(&#34;syncing Integrated Reports...&#34;)
+    
+    url = (&#39;https://lasp.colorado.edu/ops/maven/team/&#39;
+           + &#39;inst_ops.php?content=msa_ir&amp;show_all&#39;)
+
+    local_ir_dir = get_integrated_reports_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv(&#34;1&#34;, &#39;username&#39;, sdc_username)
+    twill.commands.fv(&#34;1&#34;, &#39;password&#39;, sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we&#39;re authenticated
+    twill.browser.go(url)
+
+    # get the list of integrated report files on the server
+    server_links = sorted([f for f in twill.browser.links if &#39;.txt&#39; in f.text])
+
+    # get the list of local integrated report files
+    local_files = [os.path.basename(f)
+                   for f in glob.glob(os.path.join(local_ir_dir, &#39;*&#39;))]
+
+    if check_old:
+        # check all the files, not just the ones we don&#39;t have
+        to_download = server_links
+    else:
+        # figure out which ones on the server are new
+        old_time = datetime.datetime.now() - datetime.timedelta(days=180)
+        old_time = old_time.strftime(&#34;%y%m%d&#34;)
+        to_download = [f for f in server_links if ((int(f.text.split(&#34;_&#34;)[2])
+                                                    &gt; int(old_time))
+                                                   or (f.text
+                                                       not in local_files))]
+
+    # download the new files
+    from lxml.etree import ParserError
+    for link in to_download:
+        clear_line()
+        print(link.text, end=&#34;\r&#34;)
+
+        # modify the page link to a download link
+        download_link = link.url.replace(&#34;inst_ops.php?content=file&amp;file=&#34;,
+                                         &#34;download-file.php?public/&#34;)
+
+        # get the binary of the file
+        try:
+            twill.browser.go(download_link)
+            server_binary_data = twill.browser.dump
+        except ParserError:
+            # sometimes the files have zero size,
+            # which results in a ParserError
+            server_binary_data = b&#34;&#34;
+
+        # get the local filename
+        fname = os.path.join(local_ir_dir, link.text)
+
+        # look at the local file contents and compare with remote
+        if os.path.exists(fname):
+            with open(fname, &#34;rb&#34;) as file:
+                if file.read() == twill.browser.dump:
+                    # file is the same as the server, keep it
+                    continue
+
+        # if we&#39;re here either the local file doesn&#39;t exist
+        # or it&#39;s different from the server copy.
+        # Either way, download the server version
+        fname = os.path.join(local_ir_dir, link.text)
+        with open(fname, &#34;wb&#34;) as file:
+            file.write(server_binary_data)
+
+    clear_line()
+
+
+def sync_sdc(check_old=False):
+    &#34;&#34;&#34;Wrapper routine to sync EUVM L2B data and Integrated Reports from
+    MAVEN SDC.
+
+    Parameters
+    ----------
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+
+    username = input(&#39;Username for MAVEN Team SDC: &#39;)
+    password = getpass(&#39;password for &#39;+username+&#39; on MAVEN Team SDC: &#39;)
+
+    sync_euvm_l2b(username, password)
+    sync_integrated_reports(username, password, check_old=check_old)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="maven_iuvs.download.call_rsync"><code class="name flex">
+<span>def <span class="ident">call_rsync</span></span>(<span>remote_path, local_path, ssh_password, extra_flags='')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Updates the SPICE kernels by rsyncing the VM folders to the local machine.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>remote_path</code></strong> :&ensp;<code>str</code></dt>
+<dd>Path to sync on the remote machine.</dd>
+<dt><strong><code>local_path</code></strong> :&ensp;<code>str</code></dt>
+<dd>Path to the sync on the local machine.</dd>
+<dt><strong><code>ssh_password</code></strong> :&ensp;<code>str</code></dt>
+<dd>Plain text to send to process when it prompts for a password</dd>
+<dt><strong><code>extra_flags</code></strong> :&ensp;<code>str</code></dt>
+<dd>
+<p>Extra flags for rsync command.</p>
+<p>-trzL and -info=progress2 are already specified, extra_flags
+text are inserted afterward. Defaults to "".</p>
+</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>none</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def call_rsync(remote_path,
+               local_path,
+               ssh_password,
+               extra_flags=&#34;&#34;):
+    &#34;&#34;&#34;
+    Updates the SPICE kernels by rsyncing the VM folders to the local machine.
+
+    Parameters
+    ----------
+    remote_path : str
+        Path to sync on the remote machine.
+
+    local_path : str
+        Path to the sync on the local machine.
+
+    ssh_password : str
+        Plain text to send to process when it prompts for a password
+
+    extra_flags : str
+        Extra flags for rsync command.
+
+        -trzL and -info=progress2 are already specified, extra_flags
+         text are inserted afterward. Defaults to &#34;&#34;.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+    # get the version number of rsync
+    try:
+        result = subprocess.run([&#39;rsync&#39;, &#39;--version&#39;],
+                                stdout=subprocess.PIPE,
+                                check=True)
+        version = result.stdout.split(b&#39;version&#39;)[1].split()[0]
+        version = int(version.replace(b&#34;.&#34;, b&#34;&#34;))
+    except subprocess.CalledProcessError:
+        raise Exception(&#34;rsync failed ---&#34;
+                        &#34; is rsync installed on your system?&#34;)
+
+    if version &gt;= 313:
+        # we can print total transfer progress
+        progress_flag = &#39;--info=progress2&#39;
+    else:
+        progress_flag = &#39;--progress&#39;
+
+    rsync_command = &#34; &#34;.join([&#39;rsync -trvzL&#39;,
+                              progress_flag,
+                              extra_flags,
+                              remote_path,
+                              local_path])
+
+    print(&#34;running rsync_command: &#34; + rsync_command)
+    child = pexpect.spawn(rsync_command,
+                          encoding=&#39;utf-8&#39;)
+
+    cpl = child.compile_pattern_list([&#39;.* password: &#39;,
+                                      &#39;[0-9]+%&#39;])
+    child.expect_list(cpl)
+
+    if &#39;password&#39; in child.after:
+        # respond to server password request
+        child.sendline(ssh_password)
+
+    # print some progress info by searching for lines with a
+    # percentage progress
+    cpl = child.compile_pattern_list([pexpect.EOF,
+                                      &#39;[0-9]+%&#39;])
+    while True:
+        i = child.expect_list(cpl, timeout=None)
+        if i == 0:  # end of file
+            break
+        if i == 1:
+            percent = child.after.strip(&#34; \t\n\t&#34;)
+
+            # get file left to check also
+            child.expect(&#39;[0-9]+/[0-9]+&#39;, timeout=None)
+            file_numbers = child.after
+
+            if version &lt; 313:
+                # compute progress from file numbers
+                fnum1, fnum2 = list(map(int, file_numbers.split(&#34;/&#34;)))
+                percent = 1.0 - fnum1 / fnum2
+                percent = str(int(percent*100)) + &#34;%&#34;
+
+            clear_line()
+            print(&#34;rsync progress: &#34; +
+                  percent +
+                  &#39; (files left: &#39; + file_numbers + &#39;)&#39;,
+                  end=&#39;\r&#39;)
+
+    child.close()
+    clear_line()  # clear last rsync message</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.get_euvm_l2b_dir"><code class="name flex">
+<span>def <span class="ident">get_euvm_l2b_dir</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the directory where euvm_l2b data should be stored.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>none</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>euvm_l2b_dir</code></strong> :&ensp;<code>str</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>Directory to store EUVM L2B files in.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_euvm_l2b_dir():
+    &#34;&#34;&#34;
+    Returns the directory where euvm_l2b data should be stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_dir : str
+       Directory to store EUVM L2B files in.
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from maven_iuvs.user_paths import euvm_l2b_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        euvm_l2b_dir = input(&#34;Where should euvm_l2b data be stored?&#34;)
+        with open(user_paths_py, &#34;a+&#34;) as f:
+            f.write(&#34;# This line added by get_euvm_l2b_dir.py\n&#34;)
+            f.write(&#34;euvm_l2b_dir = &#39;&#34;+euvm_l2b_dir+&#34;&#39;\n&#34;)
+
+    return euvm_l2b_dir</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.get_integrated_reports_dir"><code class="name flex">
+<span>def <span class="ident">get_integrated_reports_dir</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the directory where MAVEN integrated reports files should be
+stored.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>none</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>integrated_reports_dir</code></strong> :&ensp;<code>str</code></dt>
+<dd>Directory to store MAVEN integrated reports in.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_integrated_reports_dir():
+    &#34;&#34;&#34;
+    Returns the directory where MAVEN integrated reports files should be
+    stored.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    integrated_reports_dir : str
+        Directory to store MAVEN integrated reports in.
+
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    if not os.path.exists(user_paths_py):
+        setup_user_paths()
+
+    try:
+        from maven_iuvs.user_paths import integrated_reports_dir
+    except ImportError:
+        # need to set euvm_l2b_dir
+        integrated_reports_dir = input(&#34;Where should MAVEN Integrated Reports&#34;
+                                       &#34; data be stored?&#34;)
+        with open(user_paths_py, &#34;a+&#34;) as f:
+            f.write(&#34;# This line added by get_integrated_reports_dir.py\n&#34;)
+            f.write(&#34;integrated_reports_dir = &#39;&#34;+integrated_reports_dir+&#34;&#39;\n&#34;)
+
+    return integrated_reports_dir</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.get_user_paths_filename"><code class="name flex">
+<span>def <span class="ident">get_user_paths_filename</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Determines whether user_paths.py exists and returns the filename
+if it does.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>none</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>file_exists</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether user_paths.py exists</dd>
+<dt><strong><code>user_paths_py</code></strong> :&ensp;<code>str</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>Absolute file path to user_paths.py</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_user_paths_filename():
+    &#34;&#34;&#34;
+    Determines whether user_paths.py exists and returns the filename
+    if it does.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    file_exists : bool
+        Whether user_paths.py exists
+
+    user_paths_py : str
+       Absolute file path to user_paths.py
+    &#34;&#34;&#34;
+
+    pyuvs_path = os.path.dirname(os.path.realpath(__file__))
+    user_paths_py = os.path.join(pyuvs_path, &#34;user_paths.py&#34;)
+
+    file_exists = os.path.exists(user_paths_py)
+
+    return file_exists, user_paths_py</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.get_vm_file_list"><code class="name flex">
+<span>def <span class="ident">get_vm_file_list</span></span>(<span>server, serverdir, username, password, pattern='*.fits*', minorb=100, maxorb=100000, include_cruise=False, status_tag='')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Get a list of files from the VM that match a given pattern.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>server</code></strong> :&ensp;<code>str</code></dt>
+<dd>name of the server to get files from (normally maven-iuvs-itf)</dd>
+<dt><strong><code>serverdir</code></strong> :&ensp;<code>str</code></dt>
+<dd>directory to search for files matching the pattern</dd>
+<dt><strong><code>username</code></strong> :&ensp;<code>str</code></dt>
+<dd>username for server access</dd>
+<dt><strong><code>password</code></strong> :&ensp;<code>str</code></dt>
+<dd>password for server access</dd>
+<dt><strong><code>pattern</code></strong> :&ensp;<code>str</code></dt>
+<dd>glob pattern used to search for matching files
+Defaults to '<em>.fits</em>' (matches all FITS files)</dd>
+<dt><strong><code>minorb</code></strong>, <strong><code>maxorb</code></strong> :&ensp;<code>int</code></dt>
+<dd>Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
+Defaults to 100 and 100000, but smaller ranges than the available data
+will sync faster.</dd>
+<dt><strong><code>include_cruise</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether to sync cruise data in addition to the orbit range above.
+Defaults to False.</dd>
+<dt><strong><code>status_tag</code></strong> :&ensp;<code>str</code></dt>
+<dd>Tag to decorate orbit number print string and inform user of progress.
+Defaults to "".</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>files</code></strong> :&ensp;<code>np.array</code></dt>
+<dd>list of server filenames that match the pattern</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_vm_file_list(server,
+                     serverdir,
+                     username,
+                     password,
+                     pattern=&#34;*.fits*&#34;,
+                     minorb=100, maxorb=100000,
+                     include_cruise=False,
+                     status_tag=&#34;&#34;):
+    &#34;&#34;&#34;
+    Get a list of files from the VM that match a given pattern.
+
+    Parameters
+    ----------
+    server : str
+        name of the server to get files from (normally maven-iuvs-itf)
+
+    serverdir : str
+        directory to search for files matching the pattern
+
+    username : str
+        username for server access
+
+    password : str
+        password for server access
+
+    pattern : str
+        glob pattern used to search for matching files
+        Defaults to &#39;*.fits*&#39; (matches all FITS files)
+
+    minorb, maxorb : int
+        Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
+        Defaults to 100 and 100000, but smaller ranges than the available data
+        will sync faster.
+
+    include_cruise : bool
+        Whether to sync cruise data in addition to the orbit range above.
+        Defaults to False.
+
+    status_tag : str
+        Tag to decorate orbit number print string and inform user of progress.
+        Defaults to &#34;&#34;.
+
+    Returns
+    -------
+    files : np.array
+        list of server filenames that match the pattern
+    &#34;&#34;&#34;
+
+    # connect to the server using paramiko
+    ssh = paramiko.SSHClient()
+    ssh.load_system_host_keys()
+    ssh.connect(server, username=username, password=password)
+
+    # get the list of folders on the VM
+    stdin, stdout, stderr = ssh.exec_command(&#39;ls &#39;+serverdir)
+    server_orbit_folders = np.loadtxt(stdout, dtype=str)
+
+    # determine what folders to look for files in
+    sync_orbit_folders = [&#34;orbit&#34;+str(orbno).zfill(5)
+                          for orbno in np.arange(minorb, maxorb, 100)]
+    if include_cruise:
+        sync_orbit_folders = np.append([&#34;cruise&#34;], sync_orbit_folders)
+
+    # sync only folders that belong to both groups
+    sync_orbit_folders = server_orbit_folders[np.isin(server_orbit_folders,
+                                                      sync_orbit_folders,
+                                                      assume_unique=True)]
+
+    # set up the output files array
+    files = []
+
+    # iterate through the folder list and get the filenames that match
+    # the input pattern
+    for folder in sync_orbit_folders:
+        clear_line()
+        print(status_tag+folder, end=&#34;\r&#34;)
+
+        cmd = &#34;ls &#34;+serverdir+folder+&#34;/&#34;+pattern
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+
+        if len(stderr.read()) == 0:
+            files.append(np.loadtxt(stdout, dtype=str))
+        else:
+            continue
+    ssh.close()
+
+    if len(files) == 0:
+        return []
+    else:
+        return np.concatenate(np.array(files, dtype=object))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.setup_user_paths"><code class="name flex">
+<span>def <span class="ident">setup_user_paths</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates user_paths.py, used by sync_data to read data from the
+IUVS VM and store it locally</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>none</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>none</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<h2 id="notes">Notes</h2>
+<p>This is an interactive routine called once, generally the first
+time the user calls sync_data.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup_user_paths():
+    &#34;&#34;&#34;
+    Generates user_paths.py, used by sync_data to read data from the
+    IUVS VM and store it locally
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    none
+
+    Notes
+    -------
+
+    This is an interactive routine called once, generally the first
+    time the user calls sync_data.
+
+    &#34;&#34;&#34;
+
+    # if user_paths.py already exists then assume that the user has
+    # set everything up already
+    file_exists, user_paths_py = get_user_paths_filename()
+    if file_exists:
+        return
+
+    # get the location of the default L1B and SPICE directory
+    print(&#34;Syncing all of the L1B data could take up to 2TB of disk space.&#34;)
+    l1b_dir = input(&#34;Where would you like IUVS l1b FITS files&#34;
+                    &#34; to be stored by sync_data? &#34;)
+    print(&#34;Syncing all of the SPICE kernels could take up to 300GB of disk&#34;
+          &#34; space.&#34;)
+    spice_dir = input(&#34;Where would you like MAVEN/IUVS SPICE&#34;
+                      &#34; kernels to be stored by sync_data? &#34;)
+    # get the VM username to be used in rsync calls
+    vm_username = input(&#34;What is your username for the&#34;
+                        &#34; IUVS VM to sync files? &#34;)
+
+    user_paths_file = open(user_paths_py, &#34;x&#34;)
+
+    user_paths_file.write(&#34;# This file automatically generated by&#34;
+                          &#34; maven_iuvs.download.setup_file_paths\n&#34;)
+    user_paths_file.write(&#34;l1b_dir = \&#34;&#34;+l1b_dir+&#34;\&#34;\n&#34;)
+    user_paths_file.write(&#34;spice_dir = \&#34;&#34;+spice_dir+&#34;\&#34;\n&#34;)
+    user_paths_file.write(&#34;iuvs_vm_username = \&#34;&#34;+vm_username+&#34;\&#34;\n&#34;)
+
+    user_paths_file.close()</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.sync_data"><code class="name flex">
+<span>def <span class="ident">sync_data</span></span>(<span>spice=True, l1b=True, pattern='*.fits*', minorb=100, maxorb=100000, include_cruise=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Synchronize new SPICE kernels and L1B data from the VM and remove
+any old files that have been replaced by newer versions.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>spice</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether or not to sync SPICE kernels. Defaults to True.</dd>
+<dt><strong><code>l1b</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether or not to sync level 1B data. Defaults to True.</dd>
+<dt><strong><code>pattern</code></strong> :&ensp;<code>str</code></dt>
+<dd>
+<p>glob pattern used to search for matching files</p>
+<p>Defaults to '<em>.fits</em>' (matches all FITS files)</p>
+</dd>
+<dt><strong><code>minorb</code></strong>, <strong><code>maxorb</code></strong> :&ensp;<code>int</code></dt>
+<dd>
+<p>Minimum and maximum orbit numbers to sync from VM, in multiples of 100.</p>
+<p>Defaults to 100 and 100000, but smaller ranges than the available data
+will sync faster.</p>
+</dd>
+<dt><strong><code>include_cruise</code></strong> :&ensp;<code>bool</code></dt>
+<dd>
+<p>Whether to sync cruise data in addition to the orbit range above.</p>
+<p>Defaults to False.</p>
+</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>None.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def sync_data(spice=True, l1b=True,
+              pattern=&#34;*.fits*&#34;,
+              minorb=100, maxorb=100000,
+              include_cruise=False):
+    &#34;&#34;&#34;
+    Synchronize new SPICE kernels and L1B data from the VM and remove
+    any old files that have been replaced by newer versions.
+
+    Parameters
+    ----------
+    spice : bool
+        Whether or not to sync SPICE kernels. Defaults to True.
+
+    l1b : bool
+        Whether or not to sync level 1B data. Defaults to True.
+
+    pattern : str
+        glob pattern used to search for matching files
+
+        Defaults to &#39;*.fits*&#39; (matches all FITS files)
+
+    minorb, maxorb : int
+        Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
+
+        Defaults to 100 and 100000, but smaller ranges than the available data
+        will sync faster.
+
+    include_cruise : bool
+        Whether to sync cruise data in addition to the orbit range above.
+
+        Defaults to False.
+
+    Returns
+    -------
+    None.
+
+    &#34;&#34;&#34;
+
+    #  check if user path data exists and set it if not
+    setup_user_paths()
+    #  load user path data from file
+    from maven_iuvs.user_paths import l1b_dir, spice_dir, iuvs_vm_username
+    if not os.path.exists(spice_dir):
+        raise Exception(&#34;Cannot find specified SPICE directory.&#34;
+                        &#34; Is it accessible?&#34;)
+    if not os.path.exists(l1b_dir):
+        raise Exception(&#34;Cannot find specified L1B directory.&#34;
+                        &#34; Is it accessible?&#34;)
+
+    # get starting time
+    t0 = time.time()
+
+    # define VM-related variables
+    vm = &#39;maven-iuvs-itf&#39;
+    login = iuvs_vm_username + &#39;@&#39; + vm + &#39;:&#39;
+    production_l1b = &#39;/maven_iuvs/production/products/level1b/&#39;
+    stage_l1b = &#39;/maven_iuvs/stage/products/level1b/&#39;
+    vm_spice = login + &#39;/maven_iuvs/stage/anc/spice/&#39;
+
+    # try to sync the files, if it fails, user probably isn&#39;t on the VPN
+    try:
+        # get user password for the VM
+        iuvs_vm_password = getpass(&#39;input password for &#39;+login+&#39; &#39;)
+
+        # sync SPICE kernels
+        if spice is True:
+            print(&#39;Updating SPICE kernels...&#39;)
+            call_rsync(vm_spice, spice_dir, iuvs_vm_password,
+                       extra_flags=&#34;--delete&#34;)
+
+        # sync level 1B data
+        if l1b is True:
+            # get the file names of all the relevant files
+            print(&#39;Fetching names of level 1B production and stage&#39;
+                  &#39; files from the VM...&#39;)
+            prod_filenames = get_vm_file_list(vm,
+                                              production_l1b,
+                                              iuvs_vm_username,
+                                              iuvs_vm_password,
+                                              pattern=pattern,
+                                              minorb=minorb,
+                                              maxorb=maxorb,
+                                              include_cruise=include_cruise,
+                                              status_tag=&#39;production: &#39;)
+            stage_filenames = get_vm_file_list(vm,
+                                               stage_l1b,
+                                               iuvs_vm_username,
+                                               iuvs_vm_password,
+                                               pattern=pattern,
+                                               minorb=minorb,
+                                               maxorb=maxorb,
+                                               include_cruise=include_cruise,
+                                               status_tag=&#39;stage: &#39;)
+            local_filenames = glob.glob(l1b_dir+&#34;/*/&#34;+pattern)
+
+            # get the list of most recent files, no matter where they are
+            #    order matters! putting local_filenames first ensures
+            #    duplicates aren&#39;t transferred
+            if (len(prod_filenames) == 0 and len(stage_filenames) == 0):
+                print(&#34;No matching files on VM&#34;)
+                return
+
+            files_to_sync = get_latest_files(np.concatenate([local_filenames,
+                                                             prod_filenames,
+                                                             stage_filenames]))
+
+            # figure out which files to get from production and stage
+            files_from_production = [a[len(production_l1b):]
+                                     for a in files_to_sync
+                                     if (a[:len(production_l1b)]
+                                         ==
+                                         production_l1b)]
+            files_from_stage = [a[len(stage_l1b):]
+                                for a in files_to_sync
+                                if a[:len(stage_l1b)] == stage_l1b]
+
+            # production
+            # save the files to rsync to temporary files
+            # this way rsync can use the files_from flag
+            transfer_from_production_file = tempfile.NamedTemporaryFile()
+            np.savetxt(transfer_from_production_file.name,
+                       files_from_production,
+                       fmt=&#34;%s&#34;)
+
+            print(&#39;Syncing &#39; + str(len(files_from_production)) +
+                  &#39; files from production...&#39;)
+            call_rsync(login+production_l1b,
+                       l1b_dir,
+                       iuvs_vm_password,
+                       extra_flags=(&#39;--files-from=&#39; +
+                                    transfer_from_production_file.name))
+
+            # stage, identical to above
+            transfer_from_stage_file = tempfile.NamedTemporaryFile()
+            np.savetxt(transfer_from_stage_file.name,
+                       files_from_stage,
+                       fmt=&#34;%s&#34;)
+
+            print(&#39;Syncing &#39; + str(len(files_from_stage)) +
+                  &#39; files from stage...&#39;)
+            call_rsync(login+stage_l1b,
+                       l1b_dir,
+                       iuvs_vm_password,
+                       extra_flags=(&#39;--files-from=&#39; +
+                                    transfer_from_stage_file.name))
+
+            # now delete all of the old files superseded by newer versions
+            clear_line()
+            print(&#39;Cleaning up old files...&#39;)
+
+            # figure out what files need to be deleted
+            local_filenames = glob.glob(l1b_dir+&#34;/*/*.fits*&#34;)
+            latest_local_files = get_latest_files(local_filenames)
+            local_files_to_delete = np.setdiff1d(local_filenames,
+                                                 latest_local_files)
+
+            # ask if it&#39;s OK to delete the old files
+            while True and len(local_files_to_delete) &gt; 0:
+                del_files = input(&#39;Delete &#39; +
+                                  str(len(local_files_to_delete)) +
+                                  &#39; old files? (y/n/p)&#39;)
+                if del_files == &#39;n&#39;:
+                    # don&#39;t delete the files
+                    break
+                if del_files == &#39;y&#39;:
+                    # delete the files
+                    [os.remove(f) for f in local_files_to_delete]
+                    break
+                if del_files == &#39;p&#39;:
+                    print(local_files_to_delete)
+                else:
+                    print(&#34;Please answer y or n, or p to print the file list.&#34;)
+
+            # Question for merge manager:
+            # Kyle&#39;s code keeps a list of these deleted files
+            # in excluded_files.txt --- is this necessary?
+
+            # index all local files to speed up later finding
+            local_filenames = sorted(glob.glob(l1b_dir+&#34;/*/*.fits*&#34;))
+            np.save(l1b_dir+&#39;/filenames&#39;, sorted(local_filenames))
+
+    except OSError:
+        raise Exception(&#39;rsync failed --- are you connected to the VPN?&#39;)
+
+    # get ending time
+    t1 = time.time()
+    seconds = t1 - t0
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+
+    # tell us how long it took
+    print(&#39;Data syncing and cleanup took %.2d:%.2d:%.2d.&#39; % (h, m, s))</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.sync_euvm_l2b"><code class="name flex">
+<span>def <span class="ident">sync_euvm_l2b</span></span>(<span>sdc_username, sdc_password)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Sync EUVM L2B data file from MAVEN SDC. This deletes all old data
+in euvm_l2b_dir and replaces it with a newly downloaded file.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>sdc_username</code></strong> :&ensp;<code>str</code></dt>
+<dd>Web login username for MAVEN SDC Team site.</dd>
+<dt><strong><code>sdc_password</code></strong> :&ensp;<code>str</code></dt>
+<dd>Web login password for MAVEN SDC Team site.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>none</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def sync_euvm_l2b(sdc_username, sdc_password):
+    &#34;&#34;&#34;
+    Sync EUVM L2B data file from MAVEN SDC. This deletes all old data
+    in euvm_l2b_dir and replaces it with a newly downloaded file.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+    print(&#34;syncing EUVM L2B...&#34;)
+
+    url = &#39;https://lasp.colorado.edu/maven/data/sci/euv/l2b/&#39;
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv(&#34;1&#34;, &#39;username&#39;, sdc_username)
+    twill.commands.fv(&#34;1&#34;, &#39;password&#39;, sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we&#39;re authenticated
+    twill.browser.go(url)
+
+    # find the most recent save file on the page
+    files = sorted([f.url for f in twill.browser.links if &#39;.sav&#39; in f.url])
+    most_recent = files[-1]
+
+    # navigate to that file
+    twill.browser.go(url+most_recent)
+
+    # delete old EUVM files in the EUVM l2b directory
+    old_fnames = glob.glob(euvm_l2b_dir+&#39;*l2b*.sav&#39;)
+    [os.remove(f) for f in old_fnames]
+
+    # save the new file to disk
+    fname = euvm_l2b_dir + most_recent
+    with open(fname, &#34;wb&#34;) as file:
+        file.write(twill.browser.dump)</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.sync_integrated_reports"><code class="name flex">
+<span>def <span class="ident">sync_integrated_reports</span></span>(<span>sdc_username, sdc_password, check_old=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Sync Integrated Reports data from MAVEN Ops page. Syncs all new
+files and all files from last 180 days by default.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>sdc_username</code></strong> :&ensp;<code>str</code></dt>
+<dd>Web login username for MAVEN SDC Team site.</dd>
+<dt><strong><code>sdc_password</code></strong> :&ensp;<code>str</code></dt>
+<dd>Web login password for MAVEN SDC Team site.</dd>
+<dt><strong><code>check_old</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether to check all files in the integrated_reports_dir
+against the server. Defaults to False.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>none</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
+    &#34;&#34;&#34;Sync Integrated Reports data from MAVEN Ops page. Syncs all new
+    files and all files from last 180 days by default.
+
+    Parameters
+    ----------
+    sdc_username : str
+        Web login username for MAVEN SDC Team site.
+    sdc_password : str
+        Web login password for MAVEN SDC Team site.
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+
+    print(&#34;syncing Integrated Reports...&#34;)
+    
+    url = (&#39;https://lasp.colorado.edu/ops/maven/team/&#39;
+           + &#39;inst_ops.php?content=msa_ir&amp;show_all&#39;)
+
+    local_ir_dir = get_integrated_reports_dir()
+
+    # go to the SDC webpage and expect to see a login form
+    twill.browser.reset()
+    twill.browser.go(url)
+
+    # enter the login info
+    twill.commands.fv(&#34;1&#34;, &#39;username&#39;, sdc_username)
+    twill.commands.fv(&#34;1&#34;, &#39;password&#39;, sdc_password)
+    twill.browser.submit()
+
+    # load the page now that we&#39;re authenticated
+    twill.browser.go(url)
+
+    # get the list of integrated report files on the server
+    server_links = sorted([f for f in twill.browser.links if &#39;.txt&#39; in f.text])
+
+    # get the list of local integrated report files
+    local_files = [os.path.basename(f)
+                   for f in glob.glob(os.path.join(local_ir_dir, &#39;*&#39;))]
+
+    if check_old:
+        # check all the files, not just the ones we don&#39;t have
+        to_download = server_links
+    else:
+        # figure out which ones on the server are new
+        old_time = datetime.datetime.now() - datetime.timedelta(days=180)
+        old_time = old_time.strftime(&#34;%y%m%d&#34;)
+        to_download = [f for f in server_links if ((int(f.text.split(&#34;_&#34;)[2])
+                                                    &gt; int(old_time))
+                                                   or (f.text
+                                                       not in local_files))]
+
+    # download the new files
+    from lxml.etree import ParserError
+    for link in to_download:
+        clear_line()
+        print(link.text, end=&#34;\r&#34;)
+
+        # modify the page link to a download link
+        download_link = link.url.replace(&#34;inst_ops.php?content=file&amp;file=&#34;,
+                                         &#34;download-file.php?public/&#34;)
+
+        # get the binary of the file
+        try:
+            twill.browser.go(download_link)
+            server_binary_data = twill.browser.dump
+        except ParserError:
+            # sometimes the files have zero size,
+            # which results in a ParserError
+            server_binary_data = b&#34;&#34;
+
+        # get the local filename
+        fname = os.path.join(local_ir_dir, link.text)
+
+        # look at the local file contents and compare with remote
+        if os.path.exists(fname):
+            with open(fname, &#34;rb&#34;) as file:
+                if file.read() == twill.browser.dump:
+                    # file is the same as the server, keep it
+                    continue
+
+        # if we&#39;re here either the local file doesn&#39;t exist
+        # or it&#39;s different from the server copy.
+        # Either way, download the server version
+        fname = os.path.join(local_ir_dir, link.text)
+        with open(fname, &#34;wb&#34;) as file:
+            file.write(server_binary_data)
+
+    clear_line()</code></pre>
+</details>
+</dd>
+<dt id="maven_iuvs.download.sync_sdc"><code class="name flex">
+<span>def <span class="ident">sync_sdc</span></span>(<span>check_old=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Wrapper routine to sync EUVM L2B data and Integrated Reports from
+MAVEN SDC.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>check_old</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether to check all files in the integrated_reports_dir
+against the server. Defaults to False.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>none</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def sync_sdc(check_old=False):
+    &#34;&#34;&#34;Wrapper routine to sync EUVM L2B data and Integrated Reports from
+    MAVEN SDC.
+
+    Parameters
+    ----------
+    check_old : bool
+        Whether to check all files in the integrated_reports_dir
+        against the server. Defaults to False.
+
+    Returns
+    -------
+    none
+
+    &#34;&#34;&#34;
+
+    username = input(&#39;Username for MAVEN Team SDC: &#39;)
+    password = getpass(&#39;password for &#39;+username+&#39; on MAVEN Team SDC: &#39;)
+
+    sync_euvm_l2b(username, password)
+    sync_integrated_reports(username, password, check_old=check_old)</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="maven_iuvs" href="index.html">maven_iuvs</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="maven_iuvs.download.call_rsync" href="#maven_iuvs.download.call_rsync">call_rsync</a></code></li>
+<li><code><a title="maven_iuvs.download.get_euvm_l2b_dir" href="#maven_iuvs.download.get_euvm_l2b_dir">get_euvm_l2b_dir</a></code></li>
+<li><code><a title="maven_iuvs.download.get_integrated_reports_dir" href="#maven_iuvs.download.get_integrated_reports_dir">get_integrated_reports_dir</a></code></li>
+<li><code><a title="maven_iuvs.download.get_user_paths_filename" href="#maven_iuvs.download.get_user_paths_filename">get_user_paths_filename</a></code></li>
+<li><code><a title="maven_iuvs.download.get_vm_file_list" href="#maven_iuvs.download.get_vm_file_list">get_vm_file_list</a></code></li>
+<li><code><a title="maven_iuvs.download.setup_user_paths" href="#maven_iuvs.download.setup_user_paths">setup_user_paths</a></code></li>
+<li><code><a title="maven_iuvs.download.sync_data" href="#maven_iuvs.download.sync_data">sync_data</a></code></li>
+<li><code><a title="maven_iuvs.download.sync_euvm_l2b" href="#maven_iuvs.download.sync_euvm_l2b">sync_euvm_l2b</a></code></li>
+<li><code><a title="maven_iuvs.download.sync_integrated_reports" href="#maven_iuvs.download.sync_integrated_reports">sync_integrated_reports</a></code></li>
+<li><code><a title="maven_iuvs.download.sync_sdc" href="#maven_iuvs.download.sync_sdc">sync_sdc</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+</footer>
+</body>
+</html>
