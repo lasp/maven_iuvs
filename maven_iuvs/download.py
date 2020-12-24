@@ -109,7 +109,7 @@ def call_rsync(remote_path,
                ssh_password,
                extra_flags=""):
     """
-    Updates the SPICE kernels by rsyncing the VM folders to the local machine.
+    Updates data (e.g., L1b data and SPICE kernels) by rsyncing the VM folders to the local machine.
 
     Parameters
     ----------
@@ -417,11 +417,12 @@ def sync_data(spice=True, l1b=True,
 
             print('Syncing ' + str(len(files_from_production)) +
                   ' files from production...')
-            call_rsync(login+production_l1b,
-                       l1b_dir,
-                       iuvs_vm_password,
-                       extra_flags=('--files-from=' +
-                                    transfer_from_production_file.name))
+            if len(prod_filenames) > 0:
+                call_rsync(login+production_l1b,
+                           l1b_dir,
+                           iuvs_vm_password,
+                           extra_flags=('--files-from=' +
+                                        transfer_from_production_file.name))
 
             # stage, identical to above
             transfer_from_stage_file = tempfile.NamedTemporaryFile()
@@ -625,7 +626,7 @@ def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
     """
 
     print("syncing Integrated Reports...")
-    
+
     url = ('https://lasp.colorado.edu/ops/maven/team/'
            + 'inst_ops.php?content=msa_ir&show_all')
 
