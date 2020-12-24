@@ -414,12 +414,11 @@ def sync_data(spice=True, l1b=True,
 
             print('Syncing ' + str(len(files_from_production)) +
                   ' files from production...')
-            if len(prod_filenames) > 0:
-                call_rsync(login+production_l1b,
-                           l1b_dir,
-                           iuvs_vm_password,
-                           extra_flags=('--files-from=' +
-                                        transfer_from_production_file.name))
+            call_rsync(login+production_l1b,
+                       l1b_dir,
+                       iuvs_vm_password,
+                       extra_flags=('--files-from=' +
+                                    transfer_from_production_file.name))
 
             # stage, identical to above
             transfer_from_stage_file = tempfile.NamedTemporaryFile()
