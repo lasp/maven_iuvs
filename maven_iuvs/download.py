@@ -163,7 +163,7 @@ def call_rsync(remote_path,
 
     # interpret rsync output by searching for patterns
     cpl = child.compile_pattern_list([pexpect.EOF,
-                                      '.* password: '
+                                      '.* password: ',
                                       '[0-9]+%'])
     while True:
         i = child.expect_list(cpl, timeout=None)
