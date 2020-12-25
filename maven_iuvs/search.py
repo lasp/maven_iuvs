@@ -8,19 +8,17 @@ from astropy.io import fits
 #  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
 from maven_iuvs.geometry import beta_flip
+from maven_iuvs.user_paths import root_data_dir as data_directory
 
 
-def get_files(orbit_number, data_directory,
-              segment='apoapse', channel='muv', count=False):
+def get_files(orbit_number,
+              segment='apoapse', channel='muv', level='1b', count=False):
     """Return file paths to FITS files for a given orbit number.
 
     Parameters
     ----------
     orbit_number : int
         The MAVEN orbit number.
-    data_directory : str
-        Absolute system path to the location containing orbit block
-        folders ("orbit01300", orbit01400", etc.)
     segment : str
         The orbit segment for which you want data files. Defaults to
         'apoapse'.
@@ -42,7 +40,7 @@ def get_files(orbit_number, data_directory,
     orbit_block = int(orbit_number / 100) * 100
 
     # location of FITS files (this will change depending on the user)
-    filepath = os.path.join(data_directory, 'level1b/orbit%.5d/' % orbit_block)
+    filepath = os.path.join(data_directory, 'level'+level+'/orbit%.5d/' % orbit_block)
 
     # format of FITS file names
     filename_str = ('*%s-orbit%.5d-%s*.fits.gz'
@@ -61,7 +59,7 @@ def get_files(orbit_number, data_directory,
         return files, n_files
 
 
-def get_apoapse_files(orbit_number, data_directory, channel='muv'):
+def get_apoapse_files(orbit_number, channel='muv', level='1b'):
     """Convenience function for apoapse data. In addition to returning
     file paths to the data, it determines how many swaths were taken,
     which swath each file belongs to since there are often 2-3 files
@@ -73,9 +71,6 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     ----------
     orbit_number : int
         The MAVEN orbit number.
-    data_directory : str
-        Absolute path to your IUVS level 1B data directory which has
-        the orbit blocks, e.g., "orbit03400, orbit03500," etc.
     channel : str
         The instrument channel. Defaults to 'muv'.
 
@@ -90,8 +85,8 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     """
 
     # get list of FITS files for given orbit number
-    files, n_files = get_files(orbit_number, data_directory,
-                               segment='apoapse', channel=channel, count=True)
+    files, n_files = get_files(orbit_number,
+                               segment='apoapse', channel=channel, level=level, count=True)
 
     # set initial counters
     n_swaths = 0
