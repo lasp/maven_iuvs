@@ -8,11 +8,7 @@ import warnings
 from astropy.io import fits
 import numpy as np
 
-# TODO: It seems like a good design choice to me to make `filenames` and
-#     : `absolute_paths' read-only, but this would break methods that remove
-#     : undesireable files and break the functions that create these classes.
-#     : I may consider making a "add_files" method and do something clever with
-#     : getters and setters. It'd also fix Pycharm's issue hating attributes.
+
 class Files:
     """ A Files object stores the absolute paths to files, along with some file
     handling routines. """
@@ -25,14 +21,6 @@ class Files:
         pattern: str
             Glob pattern to match filenames to.
 
-        Attributes:
-        ----------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
-
         Notes
         -----
         This class uses glob-style matching, so a pattern of '**/*.foo' will
@@ -40,8 +28,8 @@ class Files:
         """
         self.__check_path_exists(path)
         self.__input_glob = list(Path(path).glob(pattern))
-        self.absolute_paths = self.__get_absolute_paths_of_input_pattern()
-        self.filenames = self.__get_filenames_of_input_pattern()
+        self.__absolute_paths = self.__get_absolute_paths_of_input_glob()
+        self.__filenames = self.__get_filenames_of_input_glob()
         self._raise_value_error_if_no_files_found(self.absolute_paths)
 
     @staticmethod
@@ -49,15 +37,77 @@ class Files:
         try:
             if not os.path.exists(path):
                 raise OSError(f'The path "{path}" does not exist on this '
-                              f'computer.')
+                              'computer.')
         except TypeError:
-            raise TypeError('The input value of "path" must be a string.')
+            raise TypeError('The input value of path must be a string.')
 
-    def __get_absolute_paths_of_input_pattern(self):
+    def __get_absolute_paths_of_input_glob(self):
         return sorted([str(f) for f in self.__input_glob if f.is_file()])
 
-    def __get_filenames_of_input_pattern(self):
+    def __get_filenames_of_input_glob(self):
         return sorted([f.name for f in self.__input_glob if f.is_file()])
+
+    @staticmethod
+    def _raise_value_error_if_no_files_found(files):
+        if not files:
+            raise ValueError('No files found matching the input pattern.')
+
+    @property
+    def absolute_paths(self):
+        """ Get the absolute paths.
+
+        Returns
+        -------
+        absolute_paths: list
+            Strings of absolute paths of all files matching 'pattern' in
+            'path'.
+        """
+        return self.__absolute_paths
+
+    @absolute_paths.setter
+    def absolute_paths(self, val):
+        """ Set absolute_paths.
+
+        Parameters
+        ----------
+        val: list
+            Strings of absolute paths to set "absolute_paths" to.
+
+        Returns
+        -------
+        None
+        """
+        warnings.warn('Changing absolute_paths is not recommended. '
+                      'Consider creating a new object instead.')
+        self.__absolute_paths = val
+
+    @property
+    def filenames(self):
+        """ Get the filenames.
+
+        Returns
+        -------
+        filenames: list
+            Strings of filenames of all files matching 'pattern' in 'path'.
+        """
+        return self.__filenames
+
+    @filenames.setter
+    def filenames(self, val):
+        """ Set filenames.
+
+        Parameters
+        ----------
+        val: list
+            Strings of filenames to set "filenames" to.
+
+        Returns
+        -------
+        None
+        """
+        warnings.warn('Changing filenames is not recommended. '
+                      'Consider creating a new object instead.')
+        self.__filenames = val
 
     def downselect_absolute_paths(self, pattern):
         """ Downselect the absolute paths of filenames matching an input
@@ -75,10 +125,9 @@ class Files:
             input pattern.
         """
         try:
-            matching_paths = []
-            for counter, file in enumerate(self.filenames):
-                if fnm.fnmatch(file, pattern):
-                    matching_paths.append(str(self.absolute_paths[counter]))
+            matching_paths = [str(self.absolute_paths[counter]) for
+                              counter, file in enumerate(self.filenames) if
+                              fnm.fnmatch(file, pattern)]
             self.__warn_if_no_files_found(matching_paths)
             return sorted(matching_paths)
         except TypeError:
@@ -110,11 +159,6 @@ class Files:
         if not files:
             warnings.warn('No files found matching the input pattern.')
 
-    @staticmethod
-    def _raise_value_error_if_no_files_found(files):
-        if not files:
-            raise ValueError('No files found matching the input pattern.')
-
 
 class IUVSFiles(Files):
     """ An IUVSFiles object stores the absolute paths to files and downselects
@@ -127,14 +171,6 @@ class IUVSFiles(Files):
             The location where to start looking for files.
         pattern: str
             Glob pattern to match filenames to.
-
-        Attributes:
-        ----------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
 
         Notes
         -----
@@ -165,14 +201,6 @@ class IUVSDataFiles(IUVSFiles):
         pattern: str
             Glob pattern to match filenames to.
 
-        Attributes:
-        ----------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
-
         Notes
         -----
         This class uses glob-style matching, so a pattern of '**/*.foo' will
@@ -201,14 +229,6 @@ class L1bFiles(IUVSDataFiles):
             The location where to start looking for files.
         pattern: str
             Glob pattern to match filenames to.
-
-        Attributes:
-        ----------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
 
         Notes
         -----
@@ -309,14 +329,6 @@ class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
         pattern: str
             Glob pattern to match filenames to.
 
-        Attributes:
-        ----------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
-
         Notes
         -----
         This class uses glob-style matching, so a pattern of '**/*.foo' will
@@ -363,8 +375,6 @@ class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
             raise ValueError(f'The input files are not from from a single '
                              f'{name}.')
 
-    # TODO: This gives a non-breaking issue that Iterable does not have getters
-    #  so I cannot use '[]' notation. Unsure how to fix.
     @property
     def orbit(self):
         """ Get the orbit number of these files.
@@ -376,8 +386,6 @@ class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
         """
         return int(self.__get_orbit_from_filename(self.filenames[0]))
 
-    # TODO: This gives a non-breaking issue that Iterable does not have getters
-    #  so I cannot use '[]' notation. Unsure how to fix.
     @property
     def sequence(self):
         """ Get the observing sequence of these files.
@@ -389,8 +397,6 @@ class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
         """
         return self.__get_sequence_from_filename(self.filenames[0])
 
-    # TODO: This gives a non-breaking issue that Iterable does not have getters
-    #  so I cannot use '[]' notation. Unsure how to fix.
     @property
     def channel(self):
         """ Get the observing channel of these files.
@@ -401,6 +407,14 @@ class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
             The observing channel.
         """
         return self.__get_channel_from_filename(self.filenames[0])
+
+
+# TODO: I'd like to design Files such that it can make filenames and
+#  absolute_paths, and that all Files-derived classes can also set these
+#  attributes, but the user cannot modify them (f.filenames ['asdf'] is
+#  impossible, as is f.filenames.append(['asdf'). I don't know how to make a
+#  setter protected. Also, since setters are for replacing values, I'm not sure
+#  if they can ever protect against appending, etc.
 
 
 def single_orbit_segment(path, orbit, channel='muv', sequence='apoapse'):
