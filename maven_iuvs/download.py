@@ -109,7 +109,8 @@ def call_rsync(remote_path,
                ssh_password,
                extra_flags=""):
     """
-    Updates the SPICE kernels by rsyncing the VM folders to the local machine.
+    Updates data (e.g., L1b data and SPICE kernels) by rsyncing the VM
+    folders to the local machine.
 
     Parameters
     ----------
@@ -156,32 +157,28 @@ def call_rsync(remote_path,
                               remote_path,
                               local_path])
 
-    print("running rsync_command: " + rsync_command)
+    # print("running rsync_command: " + rsync_command)
     child = pexpect.spawn(rsync_command,
                           encoding='utf-8')
 
-    cpl = child.compile_pattern_list(['.* password: ',
-                                      '[0-9]+%'])
-    child.expect_list(cpl)
-
-    if 'password' in child.after:
-        # respond to server password request
-        child.sendline(ssh_password)
-
-    # print some progress info by searching for lines with a
-    # percentage progress
+    # interpret rsync output by searching for patterns
     cpl = child.compile_pattern_list([pexpect.EOF,
+                                      '.* password: ',
                                       '[0-9]+%'])
     while True:
         i = child.expect_list(cpl, timeout=None)
         if i == 0:  # end of file
             break
-        if i == 1:
+        if i == 1:  # password request
+            # respond to server password request
+            child.sendline(ssh_password)
+        if i == 2:  # rsyncing and printing progress
+            # print some progress info
             percent = child.after.strip(" \t\n\t")
 
-            # get file left to check also
+            # get files left to check also
             child.expect('[0-9]+/[0-9]+', timeout=None)
-            file_numbers = child.after
+            file_numbers = child.after.strip(" \t\n\t")
 
             if version < 313:
                 # compute progress from file numbers
@@ -625,7 +622,7 @@ def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
     """
 
     print("syncing Integrated Reports...")
-    
+
     url = ('https://lasp.colorado.edu/ops/maven/team/'
            + 'inst_ops.php?content=msa_ir&show_all')
 
