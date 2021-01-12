@@ -1,36 +1,457 @@
 # Built-in imports
 import fnmatch as fnm
 import os
-from pathlib import Path
 import warnings
 
+# Built-in imports
+import os
+from pathlib import Path
+
 # 3rd-party imports
-from astropy.io import fits
 import numpy as np
 
 
-class Files:
-    """ A Files object stores the absolute paths to files, along with some file
-    handling routines. """
-    def __init__(self, path, pattern):
+class IUVSDataFilename:
+    """ And IUVSDataFilename object contains methods to extract info from a
+    filename of an IUVS data product. """
+    def __init__(self, filename):
         """
         Parameters
         ----------
-        path: str
-            The location where to start looking for files.
-        pattern: str
-            Glob pattern to match filenames to.
-
-        Notes
-        -----
-        This class uses glob-style matching, so a pattern of '**/*.foo' will
-        recursively search for .foo files starting from path.
+        filename: str
+            The IUVS data filename.
         """
+        self.__filename = filename
+        self.__check_input_is_iuvs_data_filename()
+
+    def __str__(self):
+        return self.__filename
+
+    def __check_input_is_iuvs_data_filename(self):
+        self.__check_spacecraft_is_mvn()
+        self.__check_instrument_is_iuv()
+        self.__check_filename_has_fits_extension()
+        self.__check_filename_contains_6_underscores()
+        self.__check_filename_contains_orbit()
+
+    def __check_spacecraft_is_mvn(self):
+        if not self.spacecraft == 'mvn':
+            raise ValueError('The input file is not an IUVS data file.')
+
+    def __check_instrument_is_iuv(self):
+        if not self.instrument == 'iuv':
+            raise ValueError('The input file is not an IUVS data file.')
+
+    def __check_filename_has_fits_extension(self):
+        if 'fits' not in self.extension:
+            raise ValueError('The input file is not an IUVS data file.')
+
+    def __check_filename_contains_6_underscores(self):
+        if self.filename.count('_') != 6:
+            raise ValueError('The input file is not an IUVS data file.')
+
+    def __check_filename_contains_orbit(self):
+        if 'orbit' not in self.filename:
+            raise ValueError('The input file is not an IUVS data file.')
+
+    @property
+    def filename(self):
+        """ Get the input filename.
+
+        Returns
+        -------
+        filename: str
+            The input filename.
+        """
+        return self.__filename
+
+    @property
+    def spacecraft(self):
+        """ Get the spacecraft code from the filename.
+
+        Returns
+        -------
+        spacecraft: str
+            The spacecraft code.
+        """
+        return self.__split_filename()[0]
+
+    @property
+    def instrument(self):
+        """ Get the instrument code from the filename.
+
+        Returns
+        -------
+        instrument: str
+            The instrument code.
+        """
+        return self.__split_filename()[1]
+
+    @property
+    def level(self):
+        """ Get the data product level from the filename.
+
+        Returns
+        -------
+        level: str
+            The data product level.
+        """
+        return self.__split_filename()[2]
+
+    @property
+    def observation(self):
+        """ Get the observation ID from the filename.
+
+        Returns
+        -------
+        observation: str
+            The observation ID.
+        """
+        return self.__split_filename()[3]
+
+    @property
+    def segment(self):
+        """ Get the observation segment from the filename.
+
+        Returns
+        -------
+        segment: str
+            The observation segment.
+        """
+        if len(splits := self.__split_observation()) == 3:
+            return splits[0]
+        else:
+            return splits[0] + '-' + splits[1]
+
+    @property
+    def orbit(self):
+        """ Get the orbit number from the filename.
+
+        Returns
+        -------
+        orbit: int
+            The orbit number.
+        """
+        return int(self.__split_observation()[-2].removeprefix('orbit'))
+
+    @property
+    def channel(self):
+        """ Get the observation channel from the filename.
+
+        Returns
+        -------
+        channel: str
+            The observation channel.
+        """
+        return self.__split_observation()[-1]
+
+    @property
+    def timestamp(self):
+        """ Get the timestamp of the observation from the filename.
+
+        Returns
+        -------
+        timestamp: str
+            The timestamp of the observation.
+        """
+        return self.__split_filename()[4]
+
+    @property
+    def date(self):
+        """ Get the date of the observation from the filename.
+
+        Returns
+        -------
+        date: str
+            The date of the observation.
+        """
+        return self.__split_timestamp()[0]
+
+    @property
+    def year(self):
+        """ Get the year of the observation from the filename.
+
+        Returns
+        -------
+        year: int
+            The year of the observation.
+        """
+        return int(self.date[:4])
+
+    @property
+    def month(self):
+        """ Get the month of the observation from the filename.
+
+        Returns
+        -------
+        month: int
+            The month of the observation.
+        """
+        return int(self.date[4:6])
+
+    @property
+    def day(self):
+        """ Get the day of the observation from the filename.
+
+        Returns
+        -------
+        day: int
+            The day of the observation.
+        """
+        return int(self.date[6:])
+
+    @property
+    def time(self):
+        """ Get the time of the observation from the filename.
+
+        Returns
+        -------
+        time: str
+            The time of the observation.
+        """
+        return self.__split_timestamp()[1]
+
+    @property
+    def hour(self):
+        """ Get the hour of the observation from the filename.
+
+        Returns
+        -------
+        hour: int
+            The hour of the observation.
+        """
+        return int(self.time[:2])
+
+    @property
+    def minute(self):
+        """ Get the minute of the observation from the filename.
+
+        Returns
+        -------
+        minute: int
+            The minute of the observation.
+        """
+        return int(self.time[2:4])
+
+    @property
+    def second(self):
+        """ Get the second of the observation from the filename.
+
+        Returns
+        -------
+        second: int
+            The second of the observation.
+        """
+        return int(self.time[4:])
+
+    @property
+    def version(self):
+        """ Get the version code from the filename.
+
+        Returns
+        -------
+        version: str
+            The version code.
+        """
+        return self.__split_filename()[5]
+
+    @property
+    def revision(self):
+        """ Get the revision code from the filename.
+
+        Returns
+        -------
+        revision: str
+            The revision code.
+        """
+        return self.__split_filename()[6]
+
+    @property
+    def extension(self):
+        """ Get the extension of filename.
+
+        Returns
+        -------
+        extension: str
+            The extension.
+        """
+        return self.__split_stem_from_extension()[1]
+
+    def __split_stem_from_extension(self):
+        extension_index = self.filename.find('.')
+        stem = self.filename[:extension_index]
+        extension = self.filename[extension_index + 1:]
+        return [stem, extension]
+
+    def __split_filename(self):
+        stem = self.__split_stem_from_extension()[0]
+        return stem.split('_')
+
+    def __split_timestamp(self):
+        return self.timestamp.split('T')
+
+    def __split_observation(self):
+        return self.observation.split('-')
+
+
+class OrbitBlock:
+    @staticmethod
+    def _orbit_to_string(orbit):
+        return str(orbit).zfill(5)
+
+
+class DataPath(OrbitBlock):
+    """ A DataPath object creates absolute paths to where data reside, given a
+     set of assumptions. """
+    def block_path(self, path, orbit):
+        """ Make the path to an orbit, assuming orbits are organized in blocks
+        of 100 orbits.
+
+        Parameters
+        ----------
+        path: str
+            The stem of the path where data are organized into blocks.
+        orbit: int
+            The orbit number.
+
+        Returns
+        -------
+        path: str
+            The path with orbit block corresponding to the input orbit.
+        """
+        return os.path.join(path, self.__make_orbit_block_folder_name(orbit))
+
+    def orbit_block_paths(self, path, orbits):
+        """ Make paths to orbits, assuming orbits are organized in blocks of
+        100 orbits.
+
+        Parameters
+        ----------
+        path: str
+            The stem of the path where data are organized into blocks.
+        orbits: list
+            List of ints of orbits.
+
+        Returns
+        -------
+        paths: list
+            The path with orbit block corresponding to the input orbits.
+        """
+        return [self.block_path(path, f) for f in orbits]
+
+    def __make_orbit_block_folder_name(self, orbit):
+        rounded_orbit = self.__round_to_nearest_hundred(orbit)
+        return f'orbit{self._orbit_to_string(rounded_orbit)}'
+
+    @staticmethod
+    def __round_to_nearest_hundred(orbit):
+        return int(np.floor(orbit / 100) * 100)
+
+
+class PatternGlob(OrbitBlock):
+    """ A PatternGlob object creates glob search patterns tailored to IUVS
+    data. """
+    def pattern(self, orbit, segment, channel, extension='fits'):
+        """ Make a glob pattern for an orbit, segment, and channel.
+
+        Parameters
+        ----------
+        orbit: str or int
+            The orbit to get data from. Can be '*' to get all orbits.
+        segment: str or int
+            The segment to get data from. Can be '*' to get all segments.
+        channel: str or int
+            The channel to get data from. Can be '*' to get all channels.
+        extension: str
+            The file extension to use. Default is 'fits'
+
+        Returns
+        -------
+        pattern: str
+            The glob pattern that matches the input parameters.
+        """
+        if orbit == '*':
+            pattern = f'*{segment}-*-{channel}*.{extension}*'
+        else:
+            pattern = f'*{segment}-*{self._orbit_to_string(orbit)}-' \
+                      f'{channel}*.{extension}*'
+        return self.__remove_recursive_glob_pattern(pattern)
+
+    def recursive_pattern(self, orbit, segment, channel):
+        """ Make a recursive glob pattern for an orbit, segment, and channel.
+
+        Parameters
+        ----------
+        orbit: str or int
+            The orbit to get data from. Can be '*' to get all orbits.
+        segment: str or int
+            The segment to get data from. Can be '*' to get all segments.
+        channel: str or int
+            The channel to get data from. Can be '*' to get all channels.
+
+        Returns
+        -------
+        pattern: str
+            The recursive glob pattern that matches the input parameters.
+        """
+        pattern = self.pattern(orbit, segment, channel)
+        return self.__prepend_recursive_glob_pattern(pattern)
+
+    def orbit_patterns(self, orbits, segment, channel):
+        """ Make glob patterns for each orbit in a list of orbits.
+
+        Parameters
+        ----------
+        orbits: list
+            List of ints or strings of orbits to make patterns for.
+        segment: str or int
+            The segment to get data from. Can be '*' to get all segments.
+        channel: str or int
+            The channel to get data from. Can be '*' to get all channels.
+
+        Returns
+        -------
+        patterns: list
+            List of patterns of len(orbits) that match the inputs.
+        """
+        orbs = [self._orbit_to_string(orbit) for orbit in orbits]
+        return [self.pattern(orbit, segment, channel) for orbit in orbs]
+
+    def recursive_orbit_patterns(self, orbits, sequence, channel):
+        """ Make recursive glob patterns for each orbit in a list of orbits.
+
+        Parameters
+        ----------
+        orbits: list
+            List of ints or strings of orbits to make patterns for.
+        sequence: str or int
+            The sequence to get data from. Can be '*' to get all sequences.
+        channel: str or int
+            The channel to get data from. Can be '*' to get all channels.
+
+        Returns
+        -------
+        patterns: list
+            List of recursive patterns of len(orbits) that match the inputs.
+        """
+        return [self.__prepend_recursive_glob_pattern(f) for f in
+                self.orbit_patterns(orbits, sequence, channel)]
+
+    @staticmethod
+    def __remove_recursive_glob_pattern(pattern):
+        return pattern.replace('**', '*')
+
+    @staticmethod
+    def __prepend_recursive_glob_pattern(pattern):
+        return f'**/{pattern}'
+
+
+class GlobFiles:
+    def __init__(self, path, pattern):
         self.__check_path_exists(path)
         self.__input_glob = list(Path(path).glob(pattern))
-        self.__absolute_paths = self.__get_absolute_paths_of_input_glob()
+        self.__abs_paths = self.__get_absolute_paths_of_input_glob()
         self.__filenames = self.__get_filenames_of_input_glob()
-        self._raise_value_error_if_no_files_found(self.absolute_paths)
 
     @staticmethod
     def __check_path_exists(path):
@@ -47,71 +468,112 @@ class Files:
     def __get_filenames_of_input_glob(self):
         return sorted([f.name for f in self.__input_glob if f.is_file()])
 
-    @staticmethod
-    def _raise_value_error_if_no_files_found(files):
-        if not files:
-            raise ValueError('No files found matching the input pattern.')
-
     @property
-    def absolute_paths(self):
-        """ Get the absolute paths.
-
-        Returns
-        -------
-        absolute_paths: list
-            Strings of absolute paths of all files matching 'pattern' in
-            'path'.
-        """
-        return self.__absolute_paths
-
-    @absolute_paths.setter
-    def absolute_paths(self, val):
-        """ Set absolute_paths.
-
-        Parameters
-        ----------
-        val: list
-            Strings of absolute paths to set "absolute_paths" to.
-
-        Returns
-        -------
-        None
-        """
-        warnings.warn('Changing absolute_paths is not recommended. '
-                      'Consider creating a new object instead.')
-        self.__absolute_paths = val
+    def abs_paths(self):
+        return self.__abs_paths
 
     @property
     def filenames(self):
-        """ Get the filenames.
+        return self.__filenames
+
+
+class IUVSDataFiles:
+    """ An IUVSDataFiles is a container for holding IUVS data files, and
+    provides methods for getting subsets of that data. """
+    def __init__(self, files):
+        """
+        Parameters
+        ----------
+        files: list
+            List of strings of absolute paths to the data files.
+        """
+        self.__abs_paths, self.__filenames = \
+            self.__make_absolute_paths_and_filenames(files)
+
+    def __make_absolute_paths_and_filenames(self, files):
+        input_abs_paths = self.__get_unique_absolute_paths(files)
+        input_filenames = self.__get_filenames_from_paths(input_abs_paths)
+        iuvs_data_filenames = self.__make_filenames(input_filenames)
+        latest_filenames = self.__get_latest_filenames(iuvs_data_filenames)
+        latest_abs_paths = self.__get_latest_abs_paths(latest_filenames,
+                                                       input_abs_paths)
+        return latest_abs_paths, latest_filenames
+
+    @staticmethod
+    def __get_unique_absolute_paths(files):
+        return list(set(files))
+
+    @staticmethod
+    def __get_filenames_from_paths(paths):
+        return [os.path.basename(f) for f in paths]
+
+    def __make_filenames(self, filenames):
+        return [self.__make_filename(f) for f in filenames]
+
+    @staticmethod
+    def __make_filename(filename):
+        try:
+            return IUVSDataFilename(filename)
+        except ValueError:
+            return None
+
+    # TODO: make this suck less
+    def __get_latest_filenames(self, filenames):
+        input_filenames = [f.filename for f in filenames]
+        modified_fnames = sorted([f.replace('s0', 'a0') for f in
+                                  input_filenames])
+        data_filenames = [IUVSDataFilename(f) for f in modified_fnames]
+        old_filename_indices = self.__get_old_filename_indices(data_filenames)
+        latest_modified_filenames = [f for counter, f in
+                                     enumerate(data_filenames) if
+                                     counter not in old_filename_indices]
+        latest_filenames = [IUVSDataFilename(f.filename.replace('a0', 's0'))
+                            for f in latest_modified_filenames]
+        return latest_filenames
+
+    # TODO: make this suck less
+    @staticmethod
+    def __get_old_filename_indices(filenames):
+        old_filename_indices = []
+        for i in range(len(filenames)):
+            if i == len(filenames)-1:
+                continue
+            if filenames[i].timestamp == filenames[i+1].timestamp:
+                old_filename_indices.append(i)
+        return old_filename_indices
+
+    @staticmethod
+    def __get_latest_abs_paths(filenames, abs_paths):
+        return [f for f in abs_paths for g in filenames if g.filename in f]
+
+    def __raise_value_error_if_no_files_found(self):
+        if not self.__abs_paths:
+            raise ValueError('No files found matching the input pattern.')
+
+    @property
+    def abs_paths(self):
+        """ Get the absolute paths of the input IUVS data files.
+
+        Returns
+        -------
+        abs_paths: list
+            List of strings of absolute paths of the data files.
+        """
+        return self.__abs_paths
+
+    @property
+    def filenames(self):
+        """ Get the filenames of the input IUVS data files.
 
         Returns
         -------
         filenames: list
-            Strings of filenames of all files matching 'pattern' in 'path'.
+            List of IUVSDataFilenames.
         """
         return self.__filenames
 
-    @filenames.setter
-    def filenames(self, val):
-        """ Set filenames.
-
-        Parameters
-        ----------
-        val: list
-            Strings of filenames to set "filenames" to.
-
-        Returns
-        -------
-        None
-        """
-        warnings.warn('Changing filenames is not recommended. '
-                      'Consider creating a new object instead.')
-        self.__filenames = val
-
-    def downselect_absolute_paths(self, pattern):
-        """ Downselect the absolute paths of filenames matching an input
-        pattern.
+    def get_matching_abs_paths(self, pattern):
+        """ Get the absolute paths of filenames matching an input pattern.
 
         Parameters
         ----------
@@ -121,20 +583,20 @@ class Files:
         Returns
         -------
         matching_paths: list
-            Sorted list of absolute file paths containing files matching the
+            List of absolute file paths containing files matching the
             input pattern.
         """
         try:
-            matching_paths = [str(self.absolute_paths[counter]) for
+            matching_paths = [self.abs_paths[counter] for
                               counter, file in enumerate(self.filenames) if
-                              fnm.fnmatch(file, pattern)]
+                              fnm.fnmatch(str(file), pattern)]
             self.__warn_if_no_files_found(matching_paths)
-            return sorted(matching_paths)
+            return matching_paths
         except TypeError:
             raise TypeError('pattern must be a string.')
 
-    def downselect_filenames(self, pattern):
-        """ Downselect the filenames matching an input pattern.
+    def get_matching_filenames(self, pattern):
+        """ Get the filenames matching an input pattern.
 
         Parameters
         ----------
@@ -144,424 +606,58 @@ class Files:
         Returns
         -------
         matching_filenames: list
-            Sorted list of filenames matching the input pattern.
+            List of IUVSDataFilenames matching the input pattern.
         """
         try:
             matching_filenames = [f for f in self.filenames if
-                                  fnm.fnmatch(f, pattern)]
+                                  fnm.fnmatch(str(f), pattern)]
             self.__warn_if_no_files_found(matching_filenames)
-            return sorted(matching_filenames)
+            return matching_filenames
         except TypeError:
             raise TypeError('pattern must be a string.')
+
+    # TODO: I'm getting a warning about match not being an iterable
+    def downselect_abs_paths(self, match):
+        """ Downselect the absolute paths of filenames matching a boolean list.
+
+        Parameters
+        ----------
+        match: list
+            List of booleans to filter files. Must be same length as abs_files.
+
+        Returns
+        -------
+        abs_paths: list
+            List of IUVSDataFilenames where match==True.
+        """
+        return self.__downselect_based_on_boolean(self.abs_paths, match)
+
+    # TODO: I'm getting a warning about match not being an iterable
+    def downselect_filenames(self, match):
+        """ Downselect the filenames matching a boolean list.
+
+        Parameters
+        ----------
+        match: list
+            List of booleans to filter files. Must be same length as filenames.
+
+        Returns
+        -------
+        filenames: list
+            List of strings where match==True.
+        """
+        return self.__downselect_based_on_boolean(self.filenames, match)
+
+    def __downselect_based_on_boolean(self, files, match):
+        if len(match) != len(self.abs_paths):
+            raise ValueError('The length of bools must match the number of '
+                             'files.')
+        matching_paths = [f for counter, f in enumerate(files) if
+                          match[counter]]
+        self.__warn_if_no_files_found(matching_paths)
+        return matching_paths
 
     @staticmethod
     def __warn_if_no_files_found(files):
         if not files:
             warnings.warn('No files found matching the input pattern.')
-
-
-class IUVSFiles(Files):
-    """ An IUVSFiles object stores the absolute paths to files and downselects
-    these files to ensure they are IUVS files. """
-    def __init__(self, path, pattern):
-        """
-        Parameters
-        ----------
-        path: str
-            The location where to start looking for files.
-        pattern: str
-            Glob pattern to match filenames to.
-
-        Notes
-        -----
-        This class uses glob-style matching, so a pattern of '**/*.foo' will
-        recursively search for .foo files starting from path.
-        """
-        super().__init__(path, pattern)
-        self.__remove_non_iuvs_files()
-
-    def __remove_non_iuvs_files(self):
-        iuvs_pattern = 'mvn_iuv*'
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            self.absolute_paths = self.downselect_absolute_paths(iuvs_pattern)
-            self.filenames = self.downselect_filenames(iuvs_pattern)
-            self._raise_value_error_if_no_files_found(self.absolute_paths)
-
-
-class IUVSDataFiles(IUVSFiles):
-    """ An IUVSDataFiles object stores the absolute paths to files and
-    downselects these files to ensure they are IUVS data files. """
-    def __init__(self, path, pattern):
-        """
-        Parameters
-        ----------
-        path: str
-            The location where to start looking for files.
-        pattern: str
-            Glob pattern to match filenames to.
-
-        Notes
-        -----
-        This class uses glob-style matching, so a pattern of '**/*.foo' will
-        recursively search for .foo files starting from path.
-        """
-        super().__init__(path, pattern)
-        self.__remove_non_iuvs_data_files()
-
-    def __remove_non_iuvs_data_files(self):
-        extension = '*.fits*'
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            self.absolute_paths = self.downselect_absolute_paths(extension)
-            self.filenames = self.downselect_filenames(extension)
-            self._raise_value_error_if_no_files_found(self.absolute_paths)
-
-
-class L1bFiles(IUVSDataFiles):
-    """ An L1bFiles object stores the absolute paths to files and downselects
-    these files to ensure they are IUVS level 1b data files. """
-    def __init__(self, path, pattern):
-        """
-        Parameters
-        ----------
-        path: str
-            The location where to start looking for files.
-        pattern: str
-            Glob pattern to match filenames to.
-
-        Notes
-        -----
-        This class uses glob-style matching, so a pattern of '**/*.foo' will
-        recursively search for .foo files starting from path.
-        """
-        super().__init__(path, pattern)
-        self.__remove_non_l1b_data_files()
-
-    def __remove_non_l1b_data_files(self):
-        identifier = '*l1b*'
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            self.absolute_paths = self.downselect_absolute_paths(identifier)
-            self.filenames = self.downselect_filenames(identifier)
-            self._raise_value_error_if_no_files_found(self.absolute_paths)
-
-    @property
-    def maximum_mirror_angle(self):
-        """ Get the maximum mirror angle of the IUVS mirror.
-
-        Returns
-        -------
-        maximum_mirror_angle: float
-            The maximum mirror angle [degrees].
-        """
-        return 59.6502685546875
-
-    @property
-    def minimum_mirror_angle(self):
-        """ Get the minimum mirror angle of the IUVS mirror.
-
-        Returns
-        -------
-        minimum_mirror_angle: float
-            The minimum mirror angle [degrees].
-        """
-        return 30.2508544921875
-
-    def check_relays(self):
-        """ Get which files associated with this object are relay files.
-
-        Returns
-        -------
-        relay_files: list
-            A list of booleans. True if the corresponding file is as relay
-            file; False otherwise.
-        """
-        relay_files = []
-        for counter, f in enumerate(self.absolute_paths):
-            with fits.open(f) as hdulist:
-                relay_files.append(
-                    self.__check_if_hdulist_is_relay_swath(hdulist))
-        return relay_files
-
-    def all_relays(self):
-        """ Check if all of the files associated with this object are relay
-        files.
-
-        Returns
-        -------
-        relay_files: bool
-            True if all files are relay files; False otherwise.
-        """
-        relay_files = self.check_relays()
-        return all(relay_files)
-
-    def any_relays(self):
-        """ Check if any of the files associated with this object are relay
-        files.
-
-        Returns
-        -------
-        relay_files: bool
-            True if any files are relay files; False otherwise.
-        """
-        relay_files = self.check_relays()
-        return any(relay_files)
-
-    def __check_if_hdulist_is_relay_swath(self, hdulist):
-        angles = hdulist['integration'].data['mirror_deg']
-        min_ang = np.amin(angles)
-        max_ang = np.amax(angles)
-        return True if min_ang == self.minimum_mirror_angle and \
-                       max_ang == self.maximum_mirror_angle else False
-
-
-class SingleOrbitSequenceChannelL1bFiles(L1bFiles):
-    """ A SingleOrbitSequenceChannelL1bFiles object stores the absolute paths
-    to files and performs checks that the files are IUVS files from a single
-    orbit, sequence, and channel. """
-    def __init__(self, path, pattern):
-        """
-        Parameters
-        ----------
-        path: str
-            The location where to start looking for files.
-        pattern: str
-            Glob pattern to match filenames to.
-
-        Notes
-        -----
-        This class uses glob-style matching, so a pattern of '**/*.foo' will
-        recursively search for .foo files starting from path.
-        """
-        super().__init__(path, pattern)
-        self.__check_files_are_single_orbit_sequence_channel()
-
-    def __check_files_are_single_orbit_sequence_channel(self):
-        self.__check_files_are_single_orbit()
-        self.__check_files_are_single_sequence()
-        self.__check_files_are_single_channel()
-
-    def __check_files_are_single_orbit(self):
-        orbits = [self.__get_orbit_from_filename(f) for f in self.filenames]
-        self.__check_list_contains_1_unique_element(orbits, 'orbit')
-
-    def __check_files_are_single_sequence(self):
-        sequences = [self.__get_sequence_from_filename(f) for f in
-                     self.filenames]
-        self.__check_list_contains_1_unique_element(sequences, 'sequence')
-
-    def __check_files_are_single_channel(self):
-        channels = [self.__get_channel_from_filename(f) for f in
-                    self.filenames]
-        self.__check_list_contains_1_unique_element(channels, 'channel')
-
-    @staticmethod
-    def __get_sequence_from_filename(filename):
-        return filename.split('_')[3].split('-')[0]
-
-    @staticmethod
-    def __get_orbit_from_filename(filename):
-        return filename.split('_')[3].split('orbit')[1][:5]
-
-    @staticmethod
-    def __get_channel_from_filename(filename):
-        return filename.split('_')[3].split('-')[2]
-
-    @staticmethod
-    def __check_list_contains_1_unique_element(segment, name):
-        n_unique_elements = len(list(set(segment)))
-        if n_unique_elements != 1:
-            raise ValueError(f'The input files are not from from a single '
-                             f'{name}.')
-
-    @property
-    def orbit(self):
-        """ Get the orbit number of these files.
-
-        Returns
-        -------
-        orbit: int
-            The orbit number.
-        """
-        return int(self.__get_orbit_from_filename(self.filenames[0]))
-
-    @property
-    def sequence(self):
-        """ Get the observing sequence of these files.
-
-        Returns
-        -------
-        sequence: str
-            The observing sequence.
-        """
-        return self.__get_sequence_from_filename(self.filenames[0])
-
-    @property
-    def channel(self):
-        """ Get the observing channel of these files.
-
-        Returns
-        -------
-        channel: str
-            The observing channel.
-        """
-        return self.__get_channel_from_filename(self.filenames[0])
-
-
-# TODO: I'd like to design Files such that it can make filenames and
-#  absolute_paths, and that all Files-derived classes can also set these
-#  attributes, but the user cannot modify them (f.filenames ['asdf'] is
-#  impossible, as is f.filenames.append(['asdf'). I don't know how to make a
-#  setter protected. Also, since setters are for replacing values, I'm not sure
-#  if they can ever protect against appending, etc.
-
-
-# TODO: My functions here seem awfully clunky. It may be nice to define
-#  addition or summation as a method to combine multiple L1bFiles. But that too
-#  seems clunky since glob cannot handle an orbit range.
-# TODO: I iterate over an input list of orbits, but it would be nice to iterate
-#  over an input list of sequences and channels too so they're more general.
-# TODO: My helper functions may go elsewhere since they're not necessarily
-#  specific to the 3 major functions here.
-# TODO: The 3 major function names aren't very good...
-
-
-def single_orbit_segment(path, orbit, sequence='apoapse', channel='muv',
-                         recursive=False):
-    """ Make a SingleOrbitSequenceChannelL1bFiles for files matching an input
-    orbit, sequence, and channel.
-
-    Parameters
-    ----------
-    path: str
-        The location where to start looking for files.
-    orbit: int
-        The orbit to get files from.
-    sequence: str
-        The observing sequence to get files from.
-    channel: str
-        The observing mode to get files from.
-    recursive: bool
-        Denote whether to look recursively in path. Default is False.
-
-    Returns
-    -------
-    files: SingleOrbitSequenceChannelL1bFiles:
-        A SingleOrbitSequenceChannelL1bFiles containing files from the
-        requested orbit, sequence, and channel.
-    """
-    pattern = make_recursive_glob_pattern(orbit, channel, sequence, recursive)
-    return SingleOrbitSequenceChannelL1bFiles(path, pattern)
-
-
-# TODO: allow multiple paths so user could specify files in multiple dirs
-#     : like, if they want 3495--3510.
-def orbital_segment(path, orbits, sequence='apoapse', channel='muv',
-                    recursive=False):
-    """ Make an L1bFiles for an input list of orbits.
-
-    Parameters
-    ----------
-    path: str
-        The location where to start looking for files.
-    orbits: list
-        List of ints of orbits to get files from.
-    sequence: str
-        The observing sequence. Can be '*'. Default is 'apoapse'.
-    channel: str
-        The observing channel. Can be '*'. Default is 'muv'.
-    recursive: bool
-        Denote whether to look recursively in path. Default is False.
-
-    Returns
-    -------
-    files: list
-        An L1bFiles of all files at the input orbits.
-    """
-    orbits = orbits_to_strings(orbits)
-    patterns = make_patterns_from_orbits(orbits, sequence, channel, recursive)
-
-    # TODO: abstract this
-    single_orbit_files = []
-    for pattern in patterns:
-        try:
-            file = L1bFiles(path, pattern)
-            single_orbit_files.append(file)
-        except ValueError:
-            continue
-
-    return combine_multiple_l1b_files(single_orbit_files)
-
-
-def orbit_range_segment(path, orbit_start, orbit_end, sequence='apoapse',
-                        channel='muv', recursive=False):
-    """ Make an L1bFiles for all orbits between two endpoints.
-
-    Parameters
-    ----------
-    path: str
-        The location where to start looking for files.
-    orbit_start: int
-        The starting orbit to get files from.
-    orbit_end: int
-        The ending orbit to get files from.
-    sequence: str
-        The observing sequence. Can be '*'. Default is 'apoapse'.
-    channel: str
-        The observing channel. Can be '*'. Default is 'muv'.
-    recursive: bool
-        Denote whether to look recursively in path. Default is False.
-
-    Returns
-    -------
-    files: L1bFiles
-        An L1bFiles of all files within the input orbital range.
-    """
-    orbits = list(range(orbit_start, orbit_end + 1))
-    return orbital_segment(path, orbits, sequence=sequence, channel=channel,
-                           recursive=recursive)
-
-
-# TODO: Add try statements so the user doesn't get cryptic errors.
-def make_recursive_glob_pattern(orbit, sequence, channel, recursive):
-    pattern = make_single_segment_glob_pattern(orbit, sequence, channel)
-    if recursive:
-        pattern = prepend_recursive_glob_pattern(pattern)
-    return pattern
-
-
-def make_single_segment_glob_pattern(orbit, sequence, channel):
-    pattern = f'*{sequence}-*{orbit}-{channel}*'
-    return remove_recursive_glob_pattern(pattern)
-
-
-def remove_recursive_glob_pattern(pattern):
-    return pattern.replace('**', '*')
-
-
-def prepend_recursive_glob_pattern(pattern):
-    return f'**/{pattern}'
-
-
-def orbit_to_string(orbit):
-    return str(orbit).zfill(5)
-
-
-def orbits_to_strings(orbits):
-    return [orbit_to_string(orbit) for orbit in orbits]
-
-
-def make_patterns_from_orbits(orbits, sequence, channel, recursive):
-    return [make_recursive_glob_pattern(orbit, sequence, channel, recursive)
-            for orbit in orbits]
-
-
-def combine_multiple_l1b_files(l1b_files):
-    for counter, files in enumerate(l1b_files):
-        if counter == 0:
-            continue
-        for f in range(len(files.filenames)):
-            l1b_files[0].filenames.append(files.filenames[f])
-            l1b_files[0].absolute_paths.append(files.absolute_paths[f])
-    return l1b_files[0]
