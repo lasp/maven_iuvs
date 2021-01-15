@@ -338,22 +338,38 @@ def breakup_path(string, splitlength):
         return breakup
 
 
-def load_iuvs_spice(spice_directory, load_all_longterm=False):
-    """
-    Load SPICE kernels for MAVEN/IUVS use.
+def load_iuvs_spice(spice_directory=None, load_all_longterm=False):
+    """Load SPICE kernels for MAVEN/IUVS use.
 
     Parameters
     ----------
     spice_directory : str
-        Absolute path to your local SPICE directory.
+        Absolute path to your local SPICE directory. Defaults to value
+        defined in user_paths.py if defined.
     load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10
-        (see function load_sc_ck_type).
+        Whether or not to load all of the longterm kernels. Defaults
+        to False, which loads only the last 10 (see function
+        load_sc_ck_type).
 
     Returns
     -------
     None.
+
     """
+
+    # load SPICE directory from user_paths or define it
+    if spice_directory is None:
+        # use value defined in user_paths.py or create it
+        from maven_iuvs.download import setup_user_paths  # don't move
+        # ^^^ avoids circular import
+        setup_user_paths()
+        # get the path from the possibly newly created file
+        from maven_iuvs.user_paths import spice_dir  # don't move this
+        if not os.path.exists(spice_dir):
+            raise Exception("Cannot find specified SPICE directory."
+                            " Is it accessible?")
+
+        spice_directory = spice_dir
 
     # set kernel paths
     mvn_kpath = os.path.join(spice_directory, 'mvn')
@@ -372,7 +388,7 @@ def load_iuvs_spice(spice_directory, load_all_longterm=False):
     spice.pcpool('PATH_VALUES', path_values)
     spice.furnsh(mvn_kpath + '/mvn.tm')
 
-    # furnish spacecraft C-kernels (attitude of spacecraft structures or instruments)
+    # furnish spacecraft C-kernels (attitude of spacecraft/instruments)
     load_sc_ck(spice_directory, load_all_longterm=load_all_longterm)
 
     # furnish SP-kernels (ephemeris data (spacecraft physical location))
