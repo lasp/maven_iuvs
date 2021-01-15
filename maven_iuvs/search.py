@@ -77,7 +77,7 @@ def find_files(pattern=None,
                                            date_time)
 
     if data_directory is None:
-        # use value defined in user_paths.py or define this
+        # use value defined in user_paths.py or create it
         from maven_iuvs.download import setup_user_paths  # don't move
         # ^^^ avoids circular import
         setup_user_paths()
@@ -90,24 +90,32 @@ def find_files(pattern=None,
         data_directory = l1b_dir
         if use_index is None or use_index is True:
             use_index = True
-            all_iuvs_filenames = np.load(os.path.join(l1b_dir,
-                                                      'filenames.npy'))
     else:
         if use_index is True:
-            warnings.warn("Cannot use index when data_directory != None, "
-                          "reverting to filesystem glob.")
+            warnings.warn("Trying to use index when data_directory != None.")
         use_index = False
 
     if use_index:
-        # use the index of files saved in the
-        # l1b_data directory and loaded above
+        # check if an index is available
+        index_filename = os.path.join(l1b_dir, 'filenames.npy')
+        if not os.path.exists(index_filename):
+            warnings.warn("Cannot find index.npy in specified data_directory, "
+                          "reverting to filesystem glob."
+                          "(Use maven_iuvs.download.sync_data to sync data "
+                          "to a default directory of your choice.)")
+            use_index = False
+
+    if use_index:
+        # use the index of files saved in the l1b_data directory
+        all_iuvs_filenames = np.load(index_filename)
         orbfiles = fnmatch.filter(all_iuvs_filenames,
                                   "*"+pattern)
     else:
         # go to the disk and glob directly (slower)
-        orbfiles = sorted(glob.glob(os.path.join(data_directory,
-                                                 pattern)))
+        orbfiles = glob.glob(os.path.join(data_directory,
+                                          pattern))
 
+    orbfiles = sorted(orbfiles)
     n_files = len(orbfiles)
 
     if n_files == 0:
