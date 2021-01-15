@@ -7,7 +7,7 @@ import pytz
 import spiceypy as spice
 from astropy.io import fits
 
-from maven_iuvs.search import get_files
+from maven_iuvs.search import find_files
 
 
 def utc_to_sol(utc):
@@ -72,9 +72,10 @@ def et2datetime(et):
 
 
 def find_segment_et(orbit_number, data_directory, segment='apoapse'):
-    """
-    Calculates the ephemeris time at the moment of apoapsis or periapsis for an orbit. Requires data files exist for
-    the choice of orbit and segment. If not, use the full-mission "find_maven_apsis" function available in the "data"
+    """Calculates the ephemeris time at the moment of apoapsis or
+    periapsis for an orbit. Requires data files exist for the choice
+    of orbit and segment. If not, use the full-mission
+    "find_maven_apsis" function available in the "data"
     sub-module. Also requires furnishing of all SPICE kernels.
 
     Parameters
@@ -82,24 +83,28 @@ def find_segment_et(orbit_number, data_directory, segment='apoapse'):
     orbit_number : int
         The MAVEN orbit number.
     data_directory : str
-        Absolute system path to the location containing orbit block folders ("orbit01300", orbit01400", etc.)
+        Absolute system path to the location containing orbit block
+        folders ("orbit01300", orbit01400", etc.)
     segment : str
-        For which orbit segment you want to calculate the ephemeris time. Options are 'apoapse' and 'periapse." Default
-        choice is 'apoapse'.
+        For which orbit segment you want to calculate the ephemeris
+        time. Options are 'apoapse' and 'periapse." Default choice is
+        'apoapse'.
 
     Returns
     -------
     et : float
         The ephemeris time for the chosen segment/orbit number.
+
     """
 
     # load files
-    files = get_files(orbit_number, data_directory, segment=segment)
+    files = find_files(orbit=orbit_number, segment=segment,
+                       data_directory=data_directory)
     if len(files) == 0:
         raise Exception('No %s files for orbit %i.' % (segment, orbit_number))
-    else:
-        hdul = fits.open(files[0])
-        et_start = hdul['integration'].data['et'][0]
+
+    hdul = fits.open(files[0])
+    et_start = hdul['integration'].data['et'][0]
 
     # do very complicated SPICE stuff
     target = 'Mars'
@@ -120,7 +125,9 @@ def find_segment_et(orbit_number, data_directory, segment='apoapse'):
     spice.wninsd(et[0], et[1], cnfine)
     ninterval = 100
     result = spice.utils.support_types.SPICEDOUBLE_CELL(100)
-    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
+    spice.gfdist(target, abcorr, observer,
+                 relate, refval, adjust, step, ninterval, cnfine,
+                 result=result)
     et = spice.wnfetd(result, 0)[0]
 
     # return the ephemeris time of the orbit segment
