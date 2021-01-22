@@ -1,14 +1,183 @@
-# Built-in imports
-import fnmatch as fnm
-import os
-import warnings
+"""Routines and objects to interact with IUVS FITS files."""
 
 # Built-in imports
 import os
+import warnings
+import fnmatch as fnm
 from pathlib import Path
+import datetime
+import pytz
 
 # 3rd-party imports
 import numpy as np
+from astropy.io.fits.hdu.hdulist import HDUList
+
+
+class IUVSFITS(HDUList):
+    """
+    Wrapper around astropy HDUList with convenience functions for IUVS
+    data.
+
+    """
+    def __init__(self, filename):
+        """
+        Parameters
+        ----------
+        filename: str
+            Absolute path to the IUVS FITS file.
+        """
+        self.__filename = filename
+        self.__basename = os.path.basename(filename)
+        self.__check_input_is_iuvs_data_filename()
+        hdulist = HDUList.fromfile(filename, mode='readonly',
+                                   memmap=True, save_backup=False,
+                                   cache=True, lazy_load_hdus=True)
+        super().__init__(hdus=hdulist, file=hdulist._file)
+
+    def _printname(self):
+        return "IUVSFITS('" + self.__basename + "')"
+
+    def __str__(self):
+        return self._printname()
+
+    def __repr__(self):
+        return self._printname()
+
+    def __check_input_is_iuvs_data_filename(self):
+        return fnm.fnmatch(self.__basename, 'mvn_iuv_*_*_*_*_*.fits*')
+
+    @property
+    def filename(self):
+        """ Get the input absolute filename.
+
+        Returns
+        -------
+        filename: str
+            The input absolute filename.
+        """
+        return self.__filename
+
+    @property
+    def basename(self):
+        """ Get the input file basename.
+
+        Returns
+        -------
+        filename: str
+            The input file basename.
+        """
+        return self.__basename
+
+    @property
+    def level(self):
+        """ Get the data product level from the filename.
+
+        Returns
+        -------
+        level: str
+            The data product level.
+        """
+        return self.__split_filename()[2]
+
+    @property
+    def observation(self):
+        """ Get the observation ID from the filename.
+
+        Returns
+        -------
+        observation: str
+            The observation ID.
+        """
+        return self.__split_filename()[3]
+
+    @property
+    def segment(self):
+        """ Get the observation segment from the filename.
+
+        Returns
+        -------
+        segment: str
+            The observation segment, or the full observation tag if the
+            observation string is non-standard.
+        """
+        if self.orbit == 'cruise':
+            return self.observation
+
+        return self.__split_observation()[0]
+
+    @property
+    def orbit(self):
+        """ Get the orbit number from the filename.
+
+        Returns
+        -------
+        orbit: int, str
+            The orbit number, or 'cruise' is the file precedes Mars Orbit
+            Insertion.
+        """
+        if 'orbit' in self.observation:
+            return int(self.observation.split('orbit')[1][:5])
+
+        return 'cruise'
+
+    @property
+    def channel(self):
+        """ Get the observation channel from the filename.
+
+        Returns
+        -------
+        channel: str
+            The observation channel, 'muv', 'fuv', or 'ech'.
+        """
+        return self.__split_observation()[-1]
+
+    @property
+    def timestamp(self):
+        """ Get the timestamp of the observation from the filename.
+
+        Returns
+        -------
+        timestamp: str
+            The timestamp of the observation.
+        """
+        timestring = self.__split_filename()[4]
+        unaware = datetime.datetime.strptime(timestring,
+                                             '%Y%m%dT%H%M%S')
+        # add the UTC timezone
+        return unaware.replace(tzinfo=pytz.UTC)
+
+    @property
+    def version(self):
+        """ Get the version code from the filename.
+
+        Returns
+        -------
+        version: str
+            The version code.
+        """
+        return self.__split_filename()[5]
+
+    @property
+    def revision(self):
+        """ Get the revision code from the filename.
+
+        Returns
+        -------
+        revision: str
+            The revision code.
+        """
+        return self.__split_filename()[6]
+
+    def __remove_extension(self):
+        stem = self.__basename.split('.fits')[0]
+        return stem
+
+    def __split_filename(self):
+        stem = self.__remove_extension()
+        return stem.split('_')
+
+    def __split_observation(self):
+        return self.observation.split('-')
 
 
 class IUVSDataFilename:

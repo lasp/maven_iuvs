@@ -9,7 +9,7 @@ from astropy.io import fits
 #  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
 from maven_iuvs.geometry import beta_flip
-
+from maven_iuvs.files import IUVSFITS
 
 def find_files(pattern=None,
                level='*',
@@ -20,8 +20,7 @@ def find_files(pattern=None,
                data_directory=None,
                use_index=None,
                count=False):
-    """
-    Return file paths to FITS files for a given glob pattern.
+    """Return IUVSFITS files for a given glob pattern.
 
     Parameters
     ----------
@@ -61,7 +60,8 @@ def find_files(pattern=None,
     Returns
     -------
     files : array
-        A sorted list of the file paths to the FITS files.
+        A sorted list of IUVSFITS objects whose filenames match the
+        input.
 
     n_files : int
         The number of files, if count = True.
@@ -122,6 +122,7 @@ def find_files(pattern=None,
         orbfiles = []
     else:
         orbfiles = get_latest_files(dropxml(orbfiles))
+        orbfiles = [IUVSFITS(f) for f in orbfiles]
 
     if count:
         return orbfiles, n_files
@@ -225,7 +226,7 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     for i in range(n_files):
 
         # open FITS file
-        hdul = fits.open(files[i])
+        hdul = files[i]
 
         # skip single integrations, they are more trouble than they're worth
         if hdul['primary'].data.ndim == 2:
@@ -311,7 +312,7 @@ def get_file_version(orbit_number, data_directory,
                            segment=segment,
                            channel=channel,
                            data_directory=data_directory)
-        version_str = files[0].split('_')[-2:]
+        version_str = files[0].basename.split('_')[-2:]
         data_version = '%s_%s' % (version_str[0], version_str[1][0:3])
     except IndexError:
         data_version = 'missing'

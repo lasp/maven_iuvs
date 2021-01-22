@@ -103,7 +103,7 @@ def find_segment_et(orbit_number, data_directory, segment='apoapse'):
     if len(files) == 0:
         raise Exception('No %s files for orbit %i.' % (segment, orbit_number))
 
-    hdul = fits.open(files[0])
+    hdul = files[0]
     et_start = hdul['integration'].data['et'][0]
 
     # do very complicated SPICE stuff
