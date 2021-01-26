@@ -338,29 +338,50 @@ def breakup_path(string, splitlength):
         return breakup
 
 
-def load_iuvs_spice(spice_directory, load_all_longterm=False):
-    """
-    Load SPICE kernels for MAVEN/IUVS use.
+def load_iuvs_spice(spice_directory=None,
+                    load_all_longterm=False,
+                    clear_loaded=True):
+    """Load SPICE kernels for MAVEN/IUVS use.
 
     Parameters
     ----------
     spice_directory : str
-        Absolute path to your local SPICE directory.
+        Absolute path to your local SPICE directory. Defaults to value
+        defined in user_paths.py if None.
     load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10
-        (see function load_sc_ck_type).
+        Whether or not to load all of the longterm kernels. Defaults
+        to False, which loads only the last 10 (see function
+        load_sc_ck_type).
+    clear_loaded : bool
+        Whether to clear all loaded kernels before loading IUVS kernels.
 
     Returns
     -------
     None.
+
     """
+
+    # load SPICE directory from user_paths or define it
+    if spice_directory is None:
+        # use value defined in user_paths.py or create it
+        from maven_iuvs.download import setup_user_paths  # don't move
+        # ^^^ avoids circular import
+        setup_user_paths()
+        # get the path from the possibly newly created file
+        from maven_iuvs.user_paths import spice_dir  # don't move this
+        if not os.path.exists(spice_dir):
+            raise Exception("Cannot find specified SPICE directory."
+                            " Is it accessible?")
+
+        spice_directory = spice_dir
 
     # set kernel paths
     mvn_kpath = os.path.join(spice_directory, 'mvn')
     generic_kpath = os.path.join(spice_directory, 'generic_kernels')
 
     # clear any existing furnished kernels
-    spice.kclear()
+    if clear_loaded:
+        spice.kclear()
 
     # break up path names into chunks of length 78 so SPICE can handle it.
     path_values = breakup_path(generic_kpath, 78)
@@ -372,7 +393,7 @@ def load_iuvs_spice(spice_directory, load_all_longterm=False):
     spice.pcpool('PATH_VALUES', path_values)
     spice.furnsh(mvn_kpath + '/mvn.tm')
 
-    # furnish spacecraft C-kernels (attitude of spacecraft structures or instruments)
+    # furnish spacecraft C-kernels (attitude of spacecraft/instruments)
     load_sc_ck(spice_directory, load_all_longterm=load_all_longterm)
 
     # furnish SP-kernels (ephemeris data (spacecraft physical location))
