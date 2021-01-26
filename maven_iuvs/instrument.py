@@ -106,45 +106,24 @@ def calculate_calibration_curve(hdul, wavelengths=None):
         wavelengths = np.array([wavelengths])
         dwavelength = np.array([dwavelength])
 
-    # load IUVS sensitivity curve
-    from scipy.io.idl import readsav
-    effective_area = readsav(os.path.join(os.path.dirname(__file__),
-                                          'ancillary',
-                                          'sensitivity update 6_9_14.sav'))
-
-    # get line effective area by interpolating the sensitivity curve
+    # load IUVS sensitivity curve for given channel
     xuv = hdul['observation'].data['channel'][0]
-    adjust_cal_factor = 1.0
-    wavelength_shift = 0.0
+    # TODO: add some information about the origin of this file somewhere
+    sens_file_basename = 'mvn_iuv_sensitivity-%s.npy' % xuv.lower()
+    # These files contain calibration factors for IUVS in the MUV and
+    # FUV. For the FUV, the file values are identical to pipeline cal
+    # file 'cal_data/sensitivity update 6_9_14.sav'. For the MUV, the
+    # file values are different from the pipeline and were provided by
+    # Sonal/Justin on the basis of new stellar calibrations
+    sens_fname = os.path.join(pkg_resources.resource_filename('maven_iuvs',
+                                                              'ancillary/'),
+                              sens_file_basename)
+    sensitivity = np.load(sens_fname, allow_pickle=True)
+    sens_wv = sensitivity.item().get('wavelength')
+    sens = sensitivity.item().get('sensitivity_curve')
     if xuv == 'FUV':
-        adjust_cal_factor = 1.27  # we decided to adjust the FUV by
-                                  # this factor in 2014 to accommodate
-                                  # airglow models
-        sens_wv = effective_area['waveg'] / 10. - wavelength_shift  # A -> nm
-        sens = adjust_cal_factor * effective_area['sens_g_star']
-    elif xuv == 'MUV':
-        wavelength_shift = 7.0  # shift MUV calibration by 7 nm
-                                # redward to correct for poor
-                                # wavelength calibration in the cruise
-                                # data derived calibration
-        sens_wv = effective_area['wavef'] / 10. - wavelength_shift  # A -> nm
-        sens = adjust_cal_factor * effective_area['sens_f_star']
-    else:
-        raise ValueError("channel is not FUV or MUV")
-
-    # # Looks like Zac's routine doesn't incorporate the 1.27 FUV
-    # # factor, and the MUV line effective areas are also different in a
-    # # way I don't understand.
-
-    # # load IUVS sensitivity curve for given channel
-    # xuv = hdul['observation'].data['channel'][0]
-    # sens_file_basename = 'mvn_iuv_sensitivity-%s.npy' % xuv.lower()
-    # sens_fname = os.path.join(pkg_resources.resource_filename('maven_iuvs',
-    #                                                           'ancillary/'),
-    #                           sens_file_basename)
-    # sensitivity = np.load(sens_fname, allow_pickle=True)
-    # sens_wv = sensitivity.item().get('wavelength')
-    # sens = sensitivity.item().get('sensitivity_curve')
+        sens *= 1.27 # we decided to adjust the FUV by this factor in
+                     # 2014 to accommodate airglow models
 
     # calculate line effective area
     line_effective_area = np.zeros_like(wavelengths)
