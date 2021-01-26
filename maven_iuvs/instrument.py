@@ -58,7 +58,7 @@ def calculate_calibration_curve(hdul, wavelengths=None):
     ----------
     hdul : HDUList
         Opened level 1B FITS file.
-    wavelengths : list of floats
+    wavelengths : float or list of floats
         Wavelengths to obtain line calibration factors for in
         DN/kR. If None, returns calibration information for each
         wavelength in the file in DN/(kR/nm). Defaults to None.
