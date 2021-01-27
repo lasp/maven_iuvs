@@ -48,7 +48,9 @@ slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
 detector."""
 
 
-def calculate_calibration_curve(hdul, wavelengths=None):
+def calculate_calibration_curve(hdul,
+                                wavelengths=None,
+                                pipeline_cal=False):
     """Generates a spectral calibration curve in DN/kR. The FITS file
     (from which the spectrum comes) provides the necessary calibration
     factors. Note: this requires a level 1B FITS file, it cannot
@@ -62,13 +64,18 @@ def calculate_calibration_curve(hdul, wavelengths=None):
         Wavelengths to obtain line calibration factors for in
         DN/kR. If None, returns calibration information for each
         wavelength in the file in DN/(kR/nm). Defaults to None.
+    pipeline_cal : bool
+        Whether to return the pipeline MUV calibration, instead of the
+        current best estimate calibration for the airglow slit. If
+        hdul is an FUV file, this flag has no effect. Defaults to
+        False.
 
     Returns
     -------
     calibration_curve : array
-        The calibration curve in DN/kR. Dividing a DN spectrum by this
-        curve produces a calibrated spectrum.
-
+        The calibration values in DN/(kR/nm), or DN/kR if wavelengths
+        != None. Dividing a DN spectrum or spectral line counts by
+        these values produces a calibrated spectrum.
     """
 
     # Check that FITS file is l1b
@@ -106,32 +113,40 @@ def calculate_calibration_curve(hdul, wavelengths=None):
         wavelengths = np.array([wavelengths])
         dwavelength = np.array([dwavelength])
 
-    # load IUVS sensitivity curve for given channel
+    # load IUVS sensitivity curve file
+    sens_file_basename = 'iuvs_effective_area.h5'
+    # This file contains calibration factors for IUVS in the MUV and
+    # FUV. See group and dataset properties for more information about
+    # the origin of this information.
+    from maven_iuvs import anc_dir
+    sens_fname = os.path.join(anc_dir, sens_file_basename)
+    import h5py
+    sens_file = h5py.File(sens_fname, 'r')
+
+    # get the appropriate sensitivity information
     xuv = hdul['observation'].data['channel'][0]
-    # TODO: add some information about the origin of this file somewhere
-    sens_file_basename = 'mvn_iuv_sensitivity-%s.npy' % xuv.lower()
-    # These files contain calibration factors for IUVS in the MUV and
-    # FUV. For the FUV, the file values are identical to pipeline cal
-    # file 'cal_data/sensitivity update 6_9_14.sav'. For the MUV, the
-    # file values are different from the pipeline and were provided by
-    # Sonal/Justin on the basis of new stellar calibrations
-    sens_fname = os.path.join(pkg_resources.resource_filename('maven_iuvs',
-                                                              'ancillary/'),
-                              sens_file_basename)
-    sensitivity = np.load(sens_fname, allow_pickle=True)
-    sens_wv = sensitivity.item().get('wavelength')
-    sens = sensitivity.item().get('sensitivity_curve')
-    if xuv == 'FUV':
-        sens *= 1.27 # we decided to adjust the FUV by this factor in
-                     # 2014 to accommodate airglow models
+    if xuv == 'MUV':
+        if pipeline_cal:
+            sens_wv = sens_file['pipeline_calibration_2014/muv/wavelengths']
+            sens_wv = sens_wv/10. - 7  # see HDF5 warnings
+            sens    = sens_file['pipeline_calibration_2014/muv/effective_area']
+        else:
+            sens_wv = sens_file['muv_sensitivity_update_2018/wavelengths']
+            sens    = sens_file['muv_sensitivity_update_2018/effective_area']
+    elif xuv == 'FUV':
+        sens_wv = sens_file['pipeline_calibration_2014/muv/wavelengths']
+        sens_wv /= 10.
+        sens    = sens_file['pipeline_calibration_2014/muv/effective_area']
+        sens *= 1.27  # see HDF5 warnings
+    else:
+        raise ValueError("file XUV is not MUV or FUV.")
 
     # calculate line effective area
     line_effective_area = np.zeros_like(wavelengths)
     for i in range(wavelengths.shape[0]):
-        # TODO: discuss log vs linear interpolation
-        line_effective_area[i] = np.exp(np.interp(wavelengths[i],
-                                                  sens_wv,
-                                                  np.log(sens)))  # cm2
+        line_effective_area[i] = np.interp(wavelengths[i],
+                                           sens_wv,
+                                           sens)  # cm2
 
     # calculate pixel and bin angular dispersion along the slit
     pixel_omega = pixel_size_mm/focal_length_mm * slit_width_mm/focal_length_mm
