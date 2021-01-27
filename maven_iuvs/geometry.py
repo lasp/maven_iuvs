@@ -530,3 +530,170 @@ def rotation_matrix(axis, theta):
 
     # return the rotation matrix
     return matrix
+
+
+def get_pixel_vec_mso(myfits):
+    """Return the MSO Pixel Vectors from the input IUVS FITS
+    file. Requires IUVS SPICE kernels.
+
+    Parameters
+    ----------
+    myfits : IUVSFITS or HDUList
+        An IUVS FITS file object.
+
+    Returns
+    -------
+    pixel_vec_mso : numpy array
+        A numpy array of MSO pixel vectors with dimensions
+        (n_integrations, n_spatial_bins, 5, 3).
+    """
+    # get the pixel vectors, which must be rehaped to put them in the
+    # expected form (n_int, n_spa, 5, 3)
+    pixel_vecs = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                              (0, 2, 3, 1))
+    pixel_vecs_shape = pixel_vecs.shape
+
+    # get the rotation matrices
+    rmat_iau_to_mso = np.array([spice.pxform('IAU_MARS', 'MAVEN_MSO', t)
+                                for t in myfits['Integration'].data['ET']])
+
+    # to do the multiplication of the vectors by the rotation matrix
+    # at each time using the efficient numpy.matmul command, we need
+    # to do some somewhat technical reshaping and flattening of the
+    # input arrays.
+    rmat_reshaped = np.reshape(np.repeat(rmat_iau_to_mso[:, np.newaxis, :, :],
+                                         5*pixel_vecs.shape[1],
+                                         axis=1),
+                               (-1, 3, 3))
+    pixel_vecs_reshaped = np.reshape(pixel_vecs, (-1, 3))[:, :, np.newaxis]
+
+    # transform the vectors
+    pixel_vecs_mso = np.matmul(rmat_reshaped, pixel_vecs_reshaped)
+
+    # return to the original shape
+    pixel_vecs_mso = np.reshape(pixel_vecs_mso, pixel_vecs_shape)
+
+    return pixel_vecs_mso
+
+
+def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None,
+                    integration_cross_slit=None):
+    """Average IUVS pixel corner arrays to obtain a set of corner
+    coordinates that can be input to pyplot.pcolormesh for continuous
+    display of image data in figures.
+
+    Parameters
+    ----------
+    pixel_x, pixel_y : numpy ndarrays
+        x and y coordinates of the pixel corners. These arrays must
+        have dimensions (n_integrations, n_spatial_bins, 5), which is
+        the default dimensionality of corner coordinates as
+        represented in an IUVS FITS file.
+    pixel_z : numpy ndarray
+        Optional third dimension to include in averaging and
+        output. Defaults to None (no third dimension).
+    integration_cross_slit : bool or None
+        Whether slit movement from one integration to the next is in
+        the cross slit-direction. If None, this is inferred from the
+        input pixel_y geometry.
+
+    Returns
+    -------
+    avg_x, avg_y, avg_z : tuple of numpy arrays
+        One average array for each input dimension. These arrays have
+        dimensions (n_integrations+1, n_spatial_bins+1), corresponding
+        to the average pixel corners. When passed to
+        pyplot.pcolormesh, these coordinates can be used to visualize
+        pixel data.
+    """
+
+    n1, n2 = pixel_x.shape[:2]
+
+    # axis 0 of pixel_x, pixel_y corresponds to integration number
+    # axis 1 corresponds to slit position
+    # axis 2 corresponds to pixel corner
+    #  pixel_corner quantities look like this:
+    #
+    #      ^
+    #      | along slit (towards big keyhole)
+    #   -------
+    #   |2   3|
+    #   |  4  |---> cross slit (dispersion direction?)
+    #   |0   1|      Note: whether this is in the direction of integration
+    #   -------            depends on the direction of slit motion on the sky
+
+    if integration_cross_slit is None:
+        # attempt to determine if the 0-1 direction corresponds to the
+        # direction of integration or not. Use pixel_y to do this
+        # because:
+        #   1) pixel_x is sometimes slit-relative and meaningless
+        #   2) pixel_x is sometimes longitude with a branch cut
+        # there could still be problems with pixel_y latitude crossing
+        # the pole... ignoring this for now
+        pixel_corner_direction = pixel_y[0, 0, 1] - pixel_y[0, 0, 0]
+        integration_direction  = pixel_y[1, 0, 0] - pixel_y[0, 0, 0]
+        integration_cross_slit = ((pixel_corner_direction
+                                   * integration_direction) > 0)
+
+    # bottom/top = along slit
+    # left/right = along integration
+    if integration_cross_slit:
+        pixel_bottom_left  = 0
+        pixel_bottom_right = 1
+        pixel_top_left     = 2
+        pixel_top_right    = 3
+    else:
+        pixel_bottom_left  = 1
+        pixel_bottom_right = 0
+        pixel_top_left     = 3
+        pixel_top_right    = 2
+
+    # join and transpose so we can do averaging once for x and y (and z)
+    if pixel_z is not None:
+        pixelxy = np.transpose([pixel_x,
+                                pixel_y,
+                                pixel_z],
+                               (1, 2, 3, 0))
+        n_dim = 3
+    else:
+        pixelxy = np.transpose([pixel_x,
+                                pixel_y],
+                               (1, 2, 3, 0))
+        n_dim = 2
+
+    # add up the interior grid points to get an average grid
+    avgxy = (  pixelxy[ :-1,  :-1, pixel_top_right   ]
+             + pixelxy[1:  ,  :-1, pixel_top_left    ]
+             + pixelxy[ :-1, 1:  , pixel_bottom_right]
+             + pixelxy[1:  , 1:  , pixel_top_left    ])/4
+
+    # now let's do the first/last integration
+    first = [(  pixelxy[0,  :-1, pixel_top_left]
+              + pixelxy[0, 1:  , pixel_bottom_left])/2]
+    last = [(  pixelxy[-1,  :-1, pixel_top_right]
+             + pixelxy[-1, 1:  , pixel_bottom_right])/2]
+    avgxy = np.concatenate((first, avgxy, last), axis=0)
+
+    # now the top/bottom of the slit and observation corners
+    top = np.concatenate(([  pixelxy[0   , 0, pixel_bottom_left]],
+                          (  pixelxy[ :-1, 0, pixel_bottom_right]
+                           + pixelxy[1:  , 0, pixel_bottom_left])/2,
+                          [  pixelxy[  -1, 0, pixel_bottom_right]]),
+                         axis=0)
+    top = np.reshape(top, (n1+1, 1, n_dim))
+    bottom = np.concatenate(([  pixelxy[0   , -1, pixel_top_left]],
+                             (  pixelxy[ :-1, -1, pixel_top_right]
+                              + pixelxy[1:  , -1, pixel_top_left])/2,
+                             [  pixelxy[  -1, -1, pixel_top_right]]),
+                            axis=0)
+    bottom = np.reshape(bottom, (n1+1, 1, n_dim))
+    avgxy = np.concatenate((top, avgxy, bottom), axis=1)
+
+    # now we have an array of dimensions [n_int+1, n_slit+1, 2-3]
+    # containing the averaged corners. This lets us plot with
+    # pcolormesh without any gaps
+
+    if pixel_z is not None:
+        return avgxy[:, :, 0], avgxy[:, :, 1], avgxy[:, :, 2]
+
+    return avgxy[:, :, 0], avgxy[:, :, 1]
