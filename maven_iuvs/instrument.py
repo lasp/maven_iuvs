@@ -127,19 +127,24 @@ def calculate_calibration_curve(hdul,
     xuv = hdul['observation'].data['channel'][0]
     if xuv == 'MUV':
         if pipeline_cal:
-            sens_wv = sens_file['pipeline_calibration_2014/muv/wavelengths']
+            sens_wv = sens_file['pipeline_calibration_2014/muv/wavelength'][...]
             sens_wv = sens_wv/10. - 7  # see HDF5 warnings
-            sens    = sens_file['pipeline_calibration_2014/muv/effective_area']
+            sens    = sens_file['pipeline_calibration_2014/muv/effective_area'][...]
         else:
-            sens_wv = sens_file['muv_sensitivity_update_2018/wavelengths']
-            sens    = sens_file['muv_sensitivity_update_2018/effective_area']
+            sens_wv = sens_file['muv_sensitivity_update_2018/wavelength'][...]
+            sens    = sens_file['muv_sensitivity_update_2018/effective_area'][...]
     elif xuv == 'FUV':
-        sens_wv = sens_file['pipeline_calibration_2014/muv/wavelengths']
+        sens_wv = sens_file['pipeline_calibration_2014/fuv/wavelength'][...]
         sens_wv /= 10.
-        sens    = sens_file['pipeline_calibration_2014/muv/effective_area']
+        sens    = sens_file['pipeline_calibration_2014/fuv/effective_area'][...]
         sens *= 1.27  # see HDF5 warnings
     else:
         raise ValueError("file XUV is not MUV or FUV.")
+
+    # make sure wavelengths are (almost) inside calibration curve
+    if not (np.all(np.min(sens_wv)-5 < wavelengths)
+            and np.all(wavelengths < np.max(sens_wv)+5)):
+        raise ValueError("some wavelengths are outside the calibration range.")
 
     # calculate line effective area
     line_effective_area = np.zeros_like(wavelengths)
