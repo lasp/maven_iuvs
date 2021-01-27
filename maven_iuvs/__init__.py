@@ -1,3 +1,8 @@
+import os as _os
+
+anc_dir = _os.path.join(_os.path.dirname(__file__),
+                        'ancillary')
+
 from . import search
 from . import download
 from . import geometry

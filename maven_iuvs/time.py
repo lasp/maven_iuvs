@@ -1,3 +1,4 @@
+import os
 import datetime
 import warnings
 
@@ -7,7 +8,20 @@ import pytz
 import spiceypy as spice
 from astropy.io import fits
 
+from maven_iuvs import anc_dir
 from maven_iuvs.search import get_files
+
+
+# Load list of mars year boundaries, or generate it
+try:
+    marsyearbounds_et = np.load(os.path.join(anc_dir,
+                                             'mars_year_boundaries_et.npy'))
+except FileNotFoundError:
+    warnings.warn("Cannot load Mars Year boundaries file. Please generate"
+                  " this file by calling maven_iuvs.spice.load_iuvs_spice()"
+                  " followed by"
+                  " maven_iuvs.time.generate_marsyear_boundaries_file(),"
+                  " then reload maven_iuvs.")
 
 
 def utc_to_sol(utc):
@@ -42,6 +56,165 @@ def utc_to_sol(utc):
 
     # return the decimal sol and Mars year
     return sol, my
+
+
+def Ls(et, return_marsyear=False):
+    """Convert string or SPICE ET to Mars solar longitude. Requires SPICE
+    kernels.
+
+    Parameters
+    ----------
+    et : float or str
+        Time to convert, either an ET or a format understood
+        by spiceypy.str2et.
+    return_marsyear : bool
+        Whether to return the Mars Year of the input date.
+
+    Returns
+    -------
+    Ls : float
+        Mars Solar Longitude
+    marsyear : int
+        Mars Year, if requested.
+
+    """
+    et = check_et(et)
+    ls = spice.lspcn('MARS', et, 'NONE')
+    ls = ls*180/np.pi
+    if not return_marsyear:
+        return ls
+
+    marsyear = np.searchsorted(marsyearbounds_et, et)
+    return ls, marsyear
+
+
+def Ls_to_et(ls, marsyear=None):
+    """Convert Mars Ls to SPICE ET. Requires SPICE kernels.
+
+    Parameters
+    ----------
+    ls : float or iterable of floats
+        Input Mars Solar Longitude to convert, 0-360.
+    marsyear : int
+        Mars Year of the specified Ls values. Required.
+
+    Returns
+    -------
+    et : float
+        SPICE ET corresponding to the input Ls.
+    """
+    if marsyear is None:
+        raise Exception("Please specify a Mars year")
+
+    et_dictionary = make_ls_et_lookup_table(marsyearbounds_et[marsyear-1],
+                                            marsyearbounds_et[marsyear],
+                                            36000)
+
+    # replace Ls 360 with 359.99 so this doesn't return an ET
+    # corresponding to Ls = 0 of the specified year
+    ls = np.where(ls == 360,
+                  359.99*np.ones_like(ls),
+                  ls)
+
+    et_dictionary_indices = np.searchsorted(et_dictionary[:, 1], ls)
+
+    return et_dictionary[et_dictionary_indices, 0]
+
+
+def check_et(et):
+    """
+    Convert string to et if necessary. Used to allow other functions
+    to accept either ET or string input.
+
+    Parameters
+    ----------
+    et : float or str
+        Time to convert to SPICE ET if necessary.
+
+    Returns
+    -------
+    et : float
+        SPICE ET.
+
+    """
+    if isinstance(et, str):
+        et = spice.str2et(et)
+    return et
+
+
+def make_ls_et_lookup_table(et_start, et_end, n=10000):
+    """Make a lookup table to convert between Ls and ET.
+
+    Parameters
+    ----------
+    et_start : float or str
+        Time to start the table.
+    et_end : float or str
+        Time to end the table
+    n : int
+        Number of entries to include, linearly spaced between the
+        endpoints
+
+    Returns
+    -------
+    et_lut : numpy.ndarray
+        n x 2 numpy array of float (ET, Ls) pairs.
+
+    """
+    et_start = check_et(et_start)
+    et_end = check_et(et_end)
+    et_lut = np.array([[et, Ls(et)]
+                       for et in np.linspace(et_start,
+                                             et_end,
+                                             n)])
+    return et_lut
+
+
+def generate_marsyear_boundaries_file():
+    """Generate a lookup table of Mars Year Boundaries, and save it as an
+    ancillary file to be loaded in later sessions.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Creates a numpy save file in the maven_iuvs/ancillary directory
+    loaded on package startup. Because this file is shipped with the
+    package end users should never have to call this function.
+
+    """
+    et_lut = make_ls_et_lookup_table("1 April 1955",
+                                     "1 April 2099")
+
+    marsyearchange_guess_idx = np.where(np.diff(et_lut[:, 1]) < 0)[0]
+    marsyearchange_guess_et_before = et_lut[marsyearchange_guess_idx, 0]
+    marsyearchange_guess_et_after = et_lut[marsyearchange_guess_idx+1, 0]
+
+    from scipy.optimize import brentq
+
+    def Ls_branch(et):
+        """Helper function to find MY boundaries"""
+        ls = Ls(et)
+        if ls > np.pi:
+            ls = ls - 360
+        return ls
+
+    marsyearchange_et = [brentq(Ls_branch, t0, t1)
+                         for t0, t1 in zip(marsyearchange_guess_et_before,
+                                           marsyearchange_guess_et_after)]
+
+    # human readable dates
+    # marsyearchange_utc=[et_to_utc(t) for t in marsyearchange_et]
+    # [(i+1,utc) for i,utc in enumerate(marsyearchange_utc)]
+
+    np.save(os.path.join(anc_dir, 'mars_year_boundaries_et'),
+            marsyearchange_et)
 
 
 def et2datetime(et):
