@@ -88,6 +88,21 @@ def setup_user_paths():
           " space.")
     spice_dir = input("Where would you like MAVEN/IUVS SPICE"
                       " kernels to be stored by sync_data? ")
+
+    # determine whether to load SPICE kernels automatically on startup
+    while True:
+        auto_spice_load = input("Would you like maven_iuvs to automatically"
+                                " load SPICE kernels on startup using"
+                                " maven_iuvs.spice.load_iuvs_spice()? (y/n)")
+        if auto_spice_load == 'n':
+            auto_spice_load = "False"
+            break
+        if auto_spice_load == 'y':
+            auto_spice_load = "True"
+            break
+        else:
+            print("Please answer y or n.")
+
     # get the VM username to be used in rsync calls
     vm_username = input("What is your username for the"
                         " IUVS VM to sync files? ")
@@ -99,10 +114,9 @@ def setup_user_paths():
     user_paths_file.write("l1b_dir = \""+l1b_dir+"\"\n")
     user_paths_file.write("spice_dir = \""+spice_dir+"\"\n")
     user_paths_file.write("iuvs_vm_username = \""+vm_username+"\"\n")
-
+    user_paths_file.write("auto_spice_load = "+auto_spice_load+"\n")
     user_paths_file.close()
     # now scripts can import the relevant directories from user_paths
-
 
 def call_rsync(remote_path,
                local_path,

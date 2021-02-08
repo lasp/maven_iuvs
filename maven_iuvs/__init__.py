@@ -13,3 +13,11 @@ from . import statistics
 from . import time
 from . import instrument
 from . import constants
+
+
+try:
+    from .user_paths import auto_spice_load as _auto_spice_load
+    if _auto_spice_load:
+        spice.load_iuvs_spice()
+except ImportError:
+    pass
