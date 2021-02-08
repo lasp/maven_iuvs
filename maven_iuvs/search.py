@@ -141,7 +141,7 @@ def get_filename_glob_string(level, segment, orbit, channel, date_time):
         glob string for segment, such as 'apoapse'
     orbit : int or str
         integer referring to a specific orbit, or glob pattern
-        matching multiple orbits, such as 'orbit08*'
+        matching multiple orbits, such as 'orbit08*' or '0756*'.
     channel : str
         glob string for channel, such as 'muv', 'fuv', 'ech'
     date_time : str

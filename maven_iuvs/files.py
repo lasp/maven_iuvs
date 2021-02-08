@@ -137,7 +137,7 @@ class IUVSFITS(HDUList):
 
         Returns
         -------
-        timestamp: str
+        timestamp: datetime.datetime instance
             The timestamp of the observation.
         """
         timestring = self.__split_filename()[4]
