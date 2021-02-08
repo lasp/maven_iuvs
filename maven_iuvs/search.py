@@ -398,3 +398,92 @@ def get_euvm_l2b_filename():
     euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+"*l2b*.sav"))[-1]
 
     return euvm_l2b_fname
+
+
+def get_solar_lyman_alpha(myfits):
+    """Compute the EUVM-measured solar Lyman alpha value to use for the
+    input IUVS FITS file. Uses orbit-averaged EUVM l2b file synced
+    from MAVEN SDC with maven_iuvs.download.sync_euvm_l2b . Requires
+    SPICE to convert IUVS ET to datetime.
+
+    Parameters
+    ----------
+    myfits : IUVSFITS or HDUList
+        Input IUVS FITS file containing a time for which to return an
+        interpolated EUVM brightness.
+
+    Returns
+    -------
+    lya_interp : float or numpy.nan
+        Interpolated EUVM line center Lyman alpha brightness value at
+        Mars-Sun distance appropriate for use with this FITS
+        file. Units are photons/cm2/s/nm. If no EUVM data are
+        available within 2 days on both sides of the IUVS data, np.nan
+        is returned.
+
+    """
+    import datetime
+    from scipy.io.idl import readsav
+    import spiceypy as spice
+
+    # TODO: switch to IUVSFITS once available
+    if isinstance(myfits, str):
+        myfits = fits.open(myfits)
+
+    # load the EUVM data
+    euvm = readsav(get_euvm_l2b_filename())
+    euvm_datetime = [datetime.datetime.fromtimestamp(t)
+                     for t in euvm['mvn_euv_l2_orbit'].item()[0]]
+
+    euvm_lya = euvm['mvn_euv_l2_orbit'].item()[2][2]
+    euvm_mars_sun_dist = euvm['mvn_euv_l2_orbit'].item()[5]
+
+    # get the time of the FITS file
+    iuvs_mean_et = np.mean(myfits['Integration'].data['ET'])
+    iuvs_datetime = spice.et2datetime(iuvs_mean_et)
+    # we need to remove the timezone info to compare with EUVM times
+    iuvs_datetime = iuvs_datetime.replace(tzinfo=None)
+
+    # interpolate the EUVM data if it's close enough in time
+    euvm_idx = np.searchsorted(euvm_datetime, iuvs_datetime) - 1
+    days_adjacent = 2
+    erly_cutoff = iuvs_datetime-datetime.timedelta(days=days_adjacent)
+    late_cutoff = iuvs_datetime+datetime.timedelta(days=days_adjacent)
+
+    erly_cutoff = euvm_datetime[euvm_idx  ] > erly_cutoff
+    late_cutoff = euvm_datetime[euvm_idx+1] < late_cutoff
+    if erly_cutoff and late_cutoff:
+        iuvs_timediff = iuvs_datetime-euvm_datetime[euvm_idx]
+        euvm_timediff = euvm_datetime[euvm_idx+1]-euvm_datetime[euvm_idx]
+
+        interp_frac = iuvs_timediff / euvm_timediff
+
+        lya_interp  = (interp_frac*(euvm_lya[euvm_idx+1]
+                                    - euvm_lya[euvm_idx])
+                       + euvm_lya[euvm_idx])
+        dist_interp = (interp_frac*(euvm_mars_sun_dist[euvm_idx+1]
+                                    - euvm_mars_sun_dist[euvm_idx])
+                       + euvm_mars_sun_dist[euvm_idx])
+        dist_interp = dist_interp / 1.496e8  # convert dist_interp to AU
+
+        # new we have the band-integrated value measured at Mars, we
+        # need to convert back to Earth, then get the line center flux
+        # using the power law relation of Emerich+2005
+        lya_interp *= dist_interp**2
+        # this is now in W/m2 at Earth. We need to convert to ph/cm2/s
+        phenergy = 1.98e-25/(121.6e-9)  # energy of a lyman alpha photon in J
+        lya_interp /= phenergy
+        lya_interp /= 1e4  # convert to /cm2
+        # we're now in ph/cm2/s
+
+        # Use the power law relation of Emerich:
+        lya_interp = 0.64*((lya_interp/1e11)**1.21)
+        lya_interp *= 1e12
+        # we're now in ph/cm2/s/nm
+
+        # convert back to Mars
+        lya_interp /= dist_interp**2
+    else:
+        lya_interp = np.nan
+
+    return lya_interp
