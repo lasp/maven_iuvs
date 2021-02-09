@@ -551,8 +551,8 @@ def transform_lonlat_to_iau_vec(lon, lat):
         Array of three-vectors in IAU Mars, with a new dimension of
         size three as the last dimension of the array.
     """
-    lon = np.pi/180*np.array(lon)
-    lat = np.pi/180*np.array(lat)
+    lon = np.radians(np.array(lon))
+    lat = np.radians(np.array(lat))
     iau_vec = np.array([np.cos(lat)*np.cos(lon),
                         np.cos(lat)*np.sin(lon),
                         np.sin(lat)])
@@ -656,7 +656,7 @@ def get_pixel_corner_sza(myfits):
     mrh_vecs_iau = get_pixel_mrh_point_iau_mars_vector(myfits)
     sun_vecs_iau = get_sun_vector_iau(myfits)
     sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, mrh_vecs_iau)
-    return 180./np.pi*np.arccos(np.sum(sun_vecs_iau*mrh_vecs_iau, axis=-1))
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*mrh_vecs_iau, axis=-1)))
 
 
 def get_pixel_corner_local_time(myfits):
@@ -712,8 +712,8 @@ def get_pixel_corner_emission_angle(myfits):
     mrh_pt_iau_vec = get_pixel_mrh_point_iau_mars_vector(myfits)
     pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
                                    (0, 2, 3, 1))
-    return 180/np.pi*np.arccos(np.sum(mrh_pt_iau_vec*pixel_look_vec,
-                                      axis=-1))
+    return np.degrees(np.arccos(np.sum(mrh_pt_iau_vec*pixel_look_vec,
+                                       axis=-1)))
 
 
 def get_pixel_corner_zenith_angle(myfits):
@@ -744,8 +744,8 @@ def get_pixel_corner_zenith_angle(myfits):
     # now reshape to the size of the pixel array
     sc_zenith_vec = reshape_to_pixel_vec(sc_zenith_vec, pixel_look_vec)
 
-    return 180/np.pi*np.arccos(np.sum(sc_zenith_vec*pixel_look_vec,
-                                      axis=-1))
+    return np.degrees(np.arccos(np.sum(sc_zenith_vec*pixel_look_vec,
+                                       axis=-1)))
 
 
 def get_pixel_corner_phase_angle(myfits):
@@ -772,8 +772,8 @@ def get_pixel_corner_phase_angle(myfits):
     sun_vecs_iau = get_sun_vector_iau(myfits)
     sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, pixel_look_vec)
 
-    return 180/np.pi*np.arccos(np.sum(sun_vecs_iau*pixel_look_vec,
-                                      axis=-1))
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*pixel_look_vec,
+                                       axis=-1)))
 
 
 def get_pixel_vec_mso(myfits):
