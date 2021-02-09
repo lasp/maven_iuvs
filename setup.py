@@ -28,6 +28,7 @@ setuptools.setup(
         'twill>=2.0.1',
         'mayavi>=4.7.2',
         'PyQt5>=5.15.2',
-        'h5py>=2.10.0'
+        'h5py>=2.10.0',
+        'idl_colorbars>=1.1.2'
     ]
 )
