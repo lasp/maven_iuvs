@@ -286,8 +286,8 @@ class IUVSFITSList(list):
         """
         return [f.basename for f in super().__iter__()]
 
-    def subset_matching_filenames(self, pattern):
-        """Get the files whose filename matches an input pattern.
+    def downselect_to_matching_filenames(self, pattern):
+        """ Downselect to files whose filename matches an input pattern.
 
         Parameters
         ----------
@@ -301,13 +301,13 @@ class IUVSFITSList(list):
             pattern.
         """
         try:
-            return self.subset_boolean([fnm.fnmatch(f.filename, pattern)
-                                        for f in super().__iter__()])
+            return self.downselect_boolean([fnm.fnmatch(f.filename, pattern)
+                                            for f in super().__iter__()])
         except TypeError as context:
             raise TypeError('pattern must be a string.') from context
 
-    def subset_matching_basenames(self, pattern):
-        """ Get the files whose basename matches an input pattern.
+    def downselect_to_matching_basenames(self, pattern):
+        """Downselect to files whose basename matches an input pattern.
 
         Parameters
         ----------
@@ -320,12 +320,12 @@ class IUVSFITSList(list):
             List of IUVSDataFilenames matching the input pattern.
         """
         try:
-            return self.subset_boolean([fnm.fnmatch(f.basename, pattern)
-                                        for f in super().__iter__()])
+            return self.downselect_boolean([fnm.fnmatch(f.basename, pattern)
+                                            for f in super().__iter__()])
         except TypeError as context:
             raise TypeError('pattern must be a string.') from context
 
-    def subset_boolean(self, match):
+    def downselect_boolean(self, match):
         """Downselect based on a boolean list, returning files in positions
         where match=True.
 
