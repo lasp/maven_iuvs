@@ -180,6 +180,179 @@ class IUVSFITS(HDUList):
         return self.observation.split('-')
 
 
+class IUVSFITSList(list):
+    """ An IUVSFITSList is a container for holding IUVSFITS files. """
+
+    def __init__(self, files):
+        """
+        Parameters
+        ----------
+        files: iterable of string or IUVSFITS
+            List of IUVSFITS files
+        """
+        if np.all([isinstance(f, str) for f in files]):
+            try:
+                files = [IUVSFITS(f) for f in files]
+            except IOError as fitserror:
+                raise ValueError("Not all inputs are valid filenames.") \
+                    from fitserror
+
+        if not np.all([isinstance(f, IUVSFITS) for f in files]):
+            raise ValueError("Ensure all inputs are IUVSFITS"
+                             " or valid paths to IUVS FITS files.")
+
+        list.__init__(self, files)
+
+    @classmethod
+    def find_files(cls,
+                   pattern=None,
+                   level='*',
+                   segment='*',
+                   orbit='*',
+                   channel='*',
+                   date_time='*',
+                   data_directory=None,
+                   recursive=True,
+                   use_index=None):
+        """Populate an IUVSFITSList with files matching the input arguments.
+
+        Parameters
+        ----------
+        pattern : str
+            glob pattern to match in file directory. Overrides input to
+            other filename flags (level, segment, orbit, channel,
+            date_time).
+
+        level : str
+            glob string for data level, such as 'l1b'
+        segment : str
+            glob string for segment, such as 'apoapse'
+        orbit : int or str
+            integer referring to a specific orbit, or glob pattern
+            matching multiple orbits, such as 'orbit08*'
+        channel : str
+            glob string for channel, such as 'muv', 'fuv', 'ech'
+        date_time : str
+            glob string for date/time specification, such as '201506*'
+
+        data_directory : str
+            Absolute system path to the location containing orbit block
+            folders ("orbit01300", orbit01400", etc.)
+
+            If None, system will use l1b_dir defined in user_paths.py or
+            prompt user to set this up.
+
+        recursive : bool
+            If data_directory != None, search recursively through all
+            subfolders of the specified directory. Defaults to True.
+
+        use_index : bool
+            Whether to use the index of files created by sync_data to
+            speed up file finding. If False, filesystem glob is used.
+
+            If data_directory == None, defaults to True, otherwise False.
+
+        """
+        from maven_iuvs.search import find_files  # avoids circular import
+        return cls(find_files(pattern=pattern,
+                              level=level,
+                              segment=segment,
+                              orbit=orbit,
+                              channel=channel,
+                              date_time=date_time,
+                              data_directory=data_directory,
+                              recursive=recursive,
+                              use_index=use_index))
+
+    @property
+    def filenames(self):
+        """ Get the absolute paths of the input IUVS data files.
+
+        Returns
+        -------
+        abs_paths: list
+            List of strings of absolute paths of the data files.
+        """
+        return [f.filename for f in super().__iter__()]
+
+    @property
+    def basenames(self):
+        """ Get the filenames of the input IUVS data files.
+
+        Returns
+        -------
+        filenames: list
+            List of IUVSDataFilenames.
+        """
+        return [f.basename for f in super().__iter__()]
+
+    def subset_matching_filenames(self, pattern):
+        """Get the files whose filename matches an input pattern.
+
+        Parameters
+        ----------
+        pattern: str
+            Glob pattern to match filenames to.
+
+        Returns
+        -------
+        matching_paths: list
+            List of IUVSFITS whose absolute file paths match the input
+            pattern.
+        """
+        try:
+            return self.subset_boolean([fnm.fnmatch(f.filename, pattern)
+                                        for f in super().__iter__()])
+        except TypeError as context:
+            raise TypeError('pattern must be a string.') from context
+
+    def subset_matching_basenames(self, pattern):
+        """ Get the files whose basename matches an input pattern.
+
+        Parameters
+        ----------
+        pattern: str
+            Glob pattern to match filenames to.
+
+        Returns
+        -------
+        matching_filenames: list
+            List of IUVSDataFilenames matching the input pattern.
+        """
+        try:
+            return self.subset_boolean([fnm.fnmatch(f.basename, pattern)
+                                        for f in super().__iter__()])
+        except TypeError as context:
+            raise TypeError('pattern must be a string.') from context
+
+    def subset_boolean(self, match):
+        """Downselect based on a boolean list, returning files in positions
+        where match=True.
+
+        Parameters
+        ----------
+        match: list
+            List of booleans to filter files. Must be same length as filenames.
+
+        Returns
+        -------
+        filenames: IUVSFITSList
+            List of files where match==True.
+
+        """
+        if len(match) != super().__len__():
+            raise ValueError('The length of bools must match the number of'
+                             ' files.')
+        matching_files = [f for f, m in zip(super().__iter__(), match) if m]
+        self.__warn_if_no_files_found(matching_files)
+        return IUVSFITSList(matching_files)
+
+    @staticmethod
+    def __warn_if_no_files_found(files):
+        if not files:
+            warnings.warn('No files found matching the input pattern.')
+
+
 class IUVSDataFilename:
     """ And IUVSDataFilename object contains methods to extract info from a
     filename of an IUVS data product. """

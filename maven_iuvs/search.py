@@ -18,6 +18,7 @@ def find_files(pattern=None,
                channel='*',
                date_time='*',
                data_directory=None,
+               recursive=True,
                use_index=None,
                count=False):
     """Return IUVSFITS files for a given glob pattern.
@@ -47,6 +48,10 @@ def find_files(pattern=None,
 
         If None, system will use l1b_dir defined in user_paths.py or
         prompt user to set this up.
+
+    recursive : bool
+        If data_directory != None, search recursively through all
+        subfolders of the specified directory. Defaults to True.
 
     use_index : bool
         Whether to use the index of files created by sync_data to
@@ -109,12 +114,17 @@ def find_files(pattern=None,
         # use the index of files saved in the l1b_data directory
         all_iuvs_filenames = np.load(index_filename)
         orbfiles = fnmatch.filter(all_iuvs_filenames,
-                                  "*"+pattern)
+                                  "*"+pattern.replace('**', ''))
     else:
         # go to the disk and glob directly (slower)
         orbfiles = glob.glob(os.path.join(data_directory,
-                                          pattern))
-
+                                          pattern), recursive=True)
+        if recursive:
+            # also search subdirectories recursively
+            orbfiles.extend(glob.glob(os.path.join(data_directory,
+                                                   '**',
+                                                   pattern),
+                                      recursive=True))
     orbfiles = sorted(orbfiles)
     n_files = len(orbfiles)
 
@@ -153,14 +163,23 @@ def get_filename_glob_string(level, segment, orbit, channel, date_time):
         glob pattern for filenames constructed from the inputs
     """
 
+    # if isinstance(orbit, int):
+    #     # orbit is an integer referring to a specific orbit
+    #     orbit_block = int(orbit / 100) * 100
+    #     folder = "orbit" + str(orbit_block).zfill(5)
+    #     orbit_string = "orbit" + str(orbit).zfill(5)
+    # elif isinstance(orbit, str):
+    #     # orbit is a glob pattern matching multiple orbits
+    #     folder = "**"
+    #     orbit_string = orbit
+    # else:
+    #     raise TypeError("orbit must be int or glob string.")
+
     if isinstance(orbit, int):
         # orbit is an integer referring to a specific orbit
-        orbit_block = int(orbit / 100) * 100
-        folder = "orbit" + str(orbit_block).zfill(5)
         orbit_string = "orbit" + str(orbit).zfill(5)
     elif isinstance(orbit, str):
         # orbit is a glob pattern matching multiple orbits
-        folder = "*"
         orbit_string = orbit
     else:
         raise TypeError("orbit must be int or glob string.")
@@ -172,7 +191,8 @@ def get_filename_glob_string(level, segment, orbit, channel, date_time):
                      + channel + "_"
                      + date_time + "_"
                      + "*.fits*")
-    filename_glob = os.path.join(folder, filename_glob)
+
+    # filename_glob = os.path.join(folder, filename_glob)
 
     return filename_glob
 

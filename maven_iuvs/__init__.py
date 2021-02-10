@@ -8,3 +8,4 @@ from . import statistics
 from . import time
 from . import instrument
 from . import constants
+from . import files
