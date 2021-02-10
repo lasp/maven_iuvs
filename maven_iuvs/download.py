@@ -386,16 +386,16 @@ def sync_data(spice=True, l1b=True,
                                                status_tag='stage: ')
             local_filenames = glob.glob(l1b_dir+"/*/"+pattern)
 
-            # get the list of most recent files, no matter where they are
-            #    order matters! putting local_filenames first ensures
-            #    duplicates aren't transferred
             if (len(prod_filenames) == 0 and len(stage_filenames) == 0):
                 print("No matching files on VM")
                 return
 
-            files_to_sync = get_latest_files(np.concatenate([local_filenames,
-                                                             prod_filenames,
-                                                             stage_filenames]))
+            # get the list of most recent files, no matter where they are
+            #    order matters! putting local_filenames last ensures
+            #    duplicates aren't checked or transferred
+            files_to_sync = get_latest_files(np.concatenate([prod_filenames,
+                                                             stage_filenames,
+                                                             local_filenames]))
 
             # figure out which files to get from production and stage
             files_from_production = [a[len(production_l1b):]
