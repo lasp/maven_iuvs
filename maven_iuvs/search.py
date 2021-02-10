@@ -11,6 +11,7 @@ from astropy.io import fits
 from maven_iuvs.geometry import beta_flip
 from maven_iuvs.files import IUVSFITS
 
+
 def find_files(pattern=None,
                level='*',
                segment='*',
