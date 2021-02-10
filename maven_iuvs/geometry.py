@@ -532,6 +532,250 @@ def rotation_matrix(axis, theta):
     return matrix
 
 
+def transform_lonlat_to_iau_vec(lon, lat):
+    """Return an array of 3-vectors matching the dimension of the input
+    lon/lat arrays, containing the IAU_MARS vector defined by the
+    input lat/lon.
+
+    Parameters
+    ----------
+    lon : numpy ndarray
+        Longitudes of the points.
+    lat : numpy ndarray
+        Latitudes of the points, with the same dimensionality as the
+        Longitude array
+
+    Returns
+    -------
+    iau_vec : array
+        Array of three-vectors in IAU Mars, with a new dimension of
+        size three as the last dimension of the array.
+    """
+    lon = np.radians(np.array(lon))
+    lat = np.radians(np.array(lat))
+    iau_vec = np.array([np.cos(lat)*np.cos(lon),
+                        np.cos(lat)*np.sin(lon),
+                        np.sin(lat)])
+    return np.transpose(iau_vec,
+                        axes=np.roll(range(lon.ndim+1), -1))
+
+
+def get_sun_vector_iau(myfits):
+    """Get the IAU direction of the Sun from the input FITS file for each
+    integration.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface
+
+    Returns
+    -------
+    sun_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, 3), containing the
+        IAU_MARS direction of the Sun at each integration time.
+    """
+    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
+    subsolar_lat = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LAT']
+    return transform_lonlat_to_iau_vec(subsolar_lon, subsolar_lat)
+
+
+def get_pixel_mrh_point_iau_mars_vector(myfits):
+    """Get the IAU direction of the Pixel minimum ray height point for the
+    input FITS file.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    mrh_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5, 3),
+        containing the IAU_MARS direction of the pixel minimum ray
+        height point for this FITS file.
+
+    """
+    lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
+    lat = myfits['PixelGeometry'].data['PIXEL_CORNER_LAT']
+    return transform_lonlat_to_iau_vec(lon, lat)
+
+
+def reshape_to_pixel_vec(arr, pixel_vec):
+    """Reshape the input array to have the same dimensions at pixel_vec,
+    repeating elements along the spatial bin and pixel corner axis.
+
+    Parameters
+    ----------
+    arr : array
+        Array to be broadcast to the shape of pixel_vec. Can be 1- or
+        2- dimensional.
+    pixel_vec : array
+        Array to match the shape of.
+
+    Returns
+    -------
+    reshaped : numpy ndarray
+        Input array with elements repeated along the spatial and pixel
+        corner axis.
+
+    """
+    arr = np.array(arr)
+
+    # add the new axes to be repeated.
+    arr = arr[:, np.newaxis, np.newaxis]
+
+    reshaped = np.repeat(np.repeat(arr,
+                                   pixel_vec.shape[1],
+                                   axis=1),
+                         pixel_vec.shape[2],
+                         axis=2)
+
+    return reshaped
+
+
+def get_pixel_corner_sza(myfits):
+    """Get the pixel corner Solar Zenith Angle for the input fits
+    file. This supersedes the PIXEL_SOLAR_ZENITH_ANGLE element of the
+    PixelGeometry header, supplying all 5 pixel corner elements
+    instead of just the center.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_corner_sza : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner solar zenith angle.
+
+    """
+    mrh_vecs_iau = get_pixel_mrh_point_iau_mars_vector(myfits)
+    sun_vecs_iau = get_sun_vector_iau(myfits)
+    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, mrh_vecs_iau)
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*mrh_vecs_iau, axis=-1)))
+
+
+def get_pixel_corner_local_time(myfits):
+    """Get the pixel corner local time for the input fits
+    file. This supersedes the PIXEL_LOCAL_TIME element of the
+    PixelGeometry header, supplying all 5 pixel corner elements
+    instead of just the center. Local time is defined as the
+    difference between the pixel longitude and the subsolar longitude
+    in degrees, converted to a 24-hour clock.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_lt : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner local time.
+
+    """
+
+    pixel_lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
+
+    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
+    subsolar_lon = reshape_to_pixel_vec(subsolar_lon, pixel_lon)
+
+    pixel_lt = np.mod(24/360*(pixel_lon-subsolar_lon)+12, 24)
+
+    return pixel_lt
+
+
+def get_pixel_corner_emission_angle(myfits):
+    """Get the pixel corner emission angle for the input fits file. This
+    supersedes the PIXEL_EMISSION_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Emission angle is defined as the angle between surface
+    normal and vector to spacecraft, at tangent or impact point.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_emission_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner emission angle.
+
+    """
+    mrh_pt_iau_vec = get_pixel_mrh_point_iau_mars_vector(myfits)
+    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                   (0, 2, 3, 1))
+    return np.degrees(np.arccos(np.sum(mrh_pt_iau_vec*pixel_look_vec,
+                                       axis=-1)))
+
+
+def get_pixel_corner_zenith_angle(myfits):
+    """Get the pixel corner zenith angle for the input fits file. This
+    supersedes the PIXEL_ZENITH_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Zenith angle is the angle between pixel look direction and
+    spacecraft zenith (90deg plus lookdown angle)
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_zenith_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner zenith angle.
+
+    """
+    pixel_look_vec = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                  (0, 2, 3, 1))
+
+    sc_zenith_vec = myfits['SpacecraftGeometry'].data['V_SPACECRAFT']
+    sc_zenith_vec = np.array([v/np.linalg.norm(v) for v in sc_zenith_vec])
+
+    # now reshape to the size of the pixel array
+    sc_zenith_vec = reshape_to_pixel_vec(sc_zenith_vec, pixel_look_vec)
+
+    return np.degrees(np.arccos(np.sum(sc_zenith_vec*pixel_look_vec,
+                                       axis=-1)))
+
+
+def get_pixel_corner_phase_angle(myfits):
+    """Get the pixel corner phase angle for the input fits file. This
+    supersedes the PIXEL_PHASE_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Phase angle is defined as the angle between spacecraft
+    and sun as seen from tangent or impact point.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_phase_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner phase angle.
+
+    """
+    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                   (0, 2, 3, 1))
+    sun_vecs_iau = get_sun_vector_iau(myfits)
+    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, pixel_look_vec)
+
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*pixel_look_vec,
+                                       axis=-1)))
+
+
 def get_pixel_vec_mso(myfits):
     """Return the MSO Pixel Vectors from the input IUVS FITS
     file. Requires IUVS SPICE kernels.
