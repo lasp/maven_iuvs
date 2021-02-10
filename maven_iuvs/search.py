@@ -2,6 +2,7 @@ import warnings
 import glob
 import os
 import fnmatch
+import itertools
 
 import numpy as np
 from astropy.io import fits
@@ -358,46 +359,51 @@ def get_latest_files(files):
 
     Returns
     -------
-    unique_files : np.array
+    unique_files : list
         list of string IUVS filenames, containing only the most recent version
         of each file.
 
     """
 
-    # create a list of [file_basename, index in initial list, filename]
-    #   in the basename, replace _r with _x
-    #   this allows a standard sort to put the file we want last
+    def basename_sortable(fname):
+        # Returns the file basename without any extension, but
+        # replaces _r with x so stage files appear before production
+        # files
+        basename = os.path.basename(fname).split(".")[0].replace("_r", "_x")
+        return basename
+
+    # Create a list of [file_basename_sortable,
+    #                   index in initial list,
+    #                   filename]
     #
-    #   keeping the initial index allows us to put the list back
-    #   in its initial order at the end of the process
-    filenames = [[os.path.basename(f).split(".")[0].replace("_r", "_x"), i, f]
-                 for i, f in enumerate(files)]
+    # Keeping the initial index allows us to put the list back
+    # in its initial order at the end of the process
+    basenames = map(lambda i, f: [basename_sortable(f), i, f],
+                    range(len(files)),
+                    files)
 
-    # sort the list by the file basename with the replacement above
-    # reverse is specified because of the interaction with np.unique below
-    filenames.sort(reverse=True, key=lambda x: x[0])
+    # Sort the list by the file basename with the replacement above
+    # reverse is specified because of the interaction with np.unique
+    # below
+    basenames = sorted(basenames, key=lambda x: x[0])
 
-    # get the file identifiers (file_basename up to the _vXX_yXX part)
-    filetags = [f[0][:-8] for f in filenames]
+    # Group the files by the unique file identifiers, which is the
+    # basename up to the last 8 characters (these always contain
+    # _vXX_yXX)
+    uniquegroups = itertools.groupby(basenames, key=lambda x: x[0][:-8])
 
-    # find the location of the unique file identifiers
-    # np.unique returns the first unique entry, hence the reverse flag above
-    uniquetags, uniquetagindices = np.unique(filetags, return_index=True)
+    # Select the last (most recent) file in each group. Our original
+    # sort of basenames ensured the last file in group == most recent
+    uniquenames = [list(g)[-1] for k, g in uniquegroups]
 
-    # now we can select the unique entries from our original list
-    uniquefilenames = np.array(filenames)[uniquetagindices]
+    # Sort by original position in provided files list
+    uniquenames = sorted(uniquenames, key=lambda x: x[1])
 
-    # we no longer need the basename we constructed, so get rid of it
-    uniquefilenames = uniquefilenames[:, 1:].tolist()  # tolist for sorting
-
-    # sort by original position in provided files list
-    uniquefilenames.sort(key=lambda x: int(x[0]))
-
-    # we don't need the initial index anymore,
+    # We don't need the initial index anymore,
     # so retain only the original filename provided
-    uniquefilenames = np.array(uniquefilenames)[:, 1]
+    uniquenames = list(map(lambda x: x[-1], uniquenames))
 
-    return uniquefilenames
+    return uniquenames
 
 
 def relay_file(hdul):

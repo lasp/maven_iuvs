@@ -444,8 +444,8 @@ def sync_data(spice=True, l1b=True,
             # figure out what files need to be deleted
             local_filenames = glob.glob(l1b_dir+"/*/*.fits*")
             latest_local_files = get_latest_files(local_filenames)
-            local_files_to_delete = np.setdiff1d(local_filenames,
-                                                 latest_local_files)
+            local_files_to_delete = list(set(local_filenames)
+                                         - set(latest_local_files))
 
             # ask if it's OK to delete the old files
             while True and len(local_files_to_delete) > 0:
