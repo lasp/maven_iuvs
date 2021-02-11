@@ -224,8 +224,8 @@ def load_sc_ck(spice_directory, load_cruise=False, load_all_longterm=False):
     this_f = glob.glob(os.path.join(ck_path, 'mvn_iuv_all_l0_201[89]????_v*.bc'))
     f.extend(this_f)
 
-    # 2020 kernels
-    this_f = glob.glob(os.path.join(ck_path, 'mvn_iuv_all_l0_2020????_v*.bc'))
+    # 2020-2021 kernels
+    this_f = glob.glob(os.path.join(ck_path, 'mvn_iuv_all_l0_202[01]????_v*.bc'))
     f.extend(this_f)
 
     if len(f) > 0:
