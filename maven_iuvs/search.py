@@ -1,6 +1,8 @@
+import warnings
 import glob
 import os
 import fnmatch
+import itertools
 
 import numpy as np
 from astropy.io import fits
@@ -8,57 +10,169 @@ from astropy.io import fits
 #  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
 from maven_iuvs.geometry import beta_flip
+from maven_iuvs.file_classes import IUVSFITS
 
 
-def get_files(orbit_number, data_directory,
-              segment='apoapse', channel='muv', count=False):
-    """Return file paths to FITS files for a given orbit number.
+def find_files(data_directory=None,
+               recursive=True,
+               use_index=None,
+               count=False,
+               **filename_kwargs):
+    """Return IUVSFITS files for a given glob pattern.
 
     Parameters
     ----------
-    orbit_number : int
-        The MAVEN orbit number.
+    filename_kwargs : **kwargs
+        One or more of level, segment, orbit, channel, date_time, or
+        pattern, used to search for IUVS FITS files by by
+        maven_iuvs.search.get_filename_glob_string().
+
     data_directory : str
         Absolute system path to the location containing orbit block
         folders ("orbit01300", orbit01400", etc.)
-    segment : str
-        The orbit segment for which you want data files. Defaults to
-        'apoapse'.
-    channel : str
-        The instrument channel. Defaults to 'muv'.
+
+        If None, system will use l1b_dir defined in user_paths.py or
+        prompt user to set this up.
+
+    recursive : bool
+        If data_directory != None, search recursively through all
+        subfolders of the specified directory. Defaults to True.
+
+    use_index : bool
+        Whether to use the index of files created by sync_data to
+        speed up file finding. If False, filesystem glob is used.
+
+        If data_directory == None, defaults to True, otherwise False.
+
     count : bool
         Whether or not to return the number of files.
 
     Returns
     -------
     files : array
-        A sorted list of the file paths to the FITS files.
+        A sorted list of IUVSFITS objects whose filenames match the
+        input.
+
     n_files : int
-        The number of files, if requested.
+        The number of files, if count = True.
 
     """
 
-    # determine orbit block (directories which group data by 100s)
-    orbit_block = int(orbit_number / 100) * 100
+    # construct the filename pattern to search for
+    pattern = get_filename_glob_string(**filename_kwargs)
 
-    # location of FITS files (this will change depending on the user)
-    filepath = os.path.join(data_directory, 'level1b/orbit%.5d/' % orbit_block)
-
-    # format of FITS file names
-    filename_str = ('*%s-orbit%.5d-%s*.fits.gz'
-                    % (segment, orbit_number, channel))
-
-    # get list of files
-    files = sorted(glob.glob(os.path.join(filepath, filename_str)))
-
-    # get number of files
-    n_files = int(len(files))
-
-    # return the list of files with the count if requested
-    if not count:
-        return files
+    if data_directory is None:
+        from maven_iuvs.download import get_default_l1b_directory
+        from maven_iuvs import _iuvs_filenames_index
+        # ^^^ avoids circular import
+        data_directory = get_default_l1b_directory()
+        if use_index is None or use_index is True:
+            use_index = True
+        if len(_iuvs_filenames_index) == 0:
+            # no index was loaded, abort and go to glob
+            use_index = False
     else:
-        return files, n_files
+        if use_index is True:
+            warnings.warn("Trying to use index when data_directory != None.")
+        use_index = False
+
+    if use_index:
+        # use the index of files saved in the l1b_data directory
+        orbfiles = fnmatch.filter(_iuvs_filenames_index, "*"+pattern)
+    else:
+        # go to the disk and glob directly (slower)
+        orbfiles = glob.glob(os.path.join(data_directory,
+                                          pattern), recursive=True)
+        if recursive:
+            # also search subdirectories recursively
+            orbfiles.extend(glob.glob(os.path.join(data_directory,
+                                                   pattern),
+                                      recursive=True))
+    orbfiles = sorted(orbfiles)
+    n_files = len(orbfiles)
+
+    if n_files == 0:
+        orbfiles = []
+    else:
+        orbfiles = get_latest_files(dropxml(orbfiles))
+        orbfiles = [IUVSFITS(f) for f in orbfiles]
+
+    if count:
+        return orbfiles, n_files
+
+    return orbfiles
+
+
+def get_filename_glob_string(**filename_kwargs):
+    """Generate glob string for IUVS filenames.
+
+    Parameters
+    ----------
+    level : str
+        glob string for data level, such as 'l1b'
+    segment : str
+        glob string for segment, such as 'apoapse'
+    orbit : int or str
+        integer referring to a specific orbit, or glob pattern
+        matching multiple orbits, such as 'orbit08*' or '0756*'.
+    channel : str
+        glob string for channel, such as 'muv', 'fuv', 'ech'
+    date_time : str
+        glob string for date/time specification, such as '201506*'
+
+    pattern : str
+        glob pattern to match in file directory. Overrides input to
+        other filename flags (level, segment, orbit, channel,
+        date_time).
+
+    Returns
+    -------
+    filename_glob : str
+        glob pattern for filenames constructed from the inputs
+    """
+
+    if 'pattern' in filename_kwargs:
+        return filename_kwargs['pattern']
+
+    level     = filename_kwargs.get('level',     '*')
+    segment   = filename_kwargs.get('segment',   '*')
+    orbit     = filename_kwargs.get('orbit',     '*')
+    channel   = filename_kwargs.get('channel',   '*')
+    date_time = filename_kwargs.get('date_time', '*')
+
+    if isinstance(orbit, int):
+        # orbit is an integer referring to a specific orbit
+        orbit_block = int(orbit / 100) * 100
+        folder = "orbit" + str(orbit_block).zfill(5)
+        folder = os.path.join(folder, "")
+        orbit_string = "orbit" + str(orbit).zfill(5)
+    elif isinstance(orbit, str):
+        # orbit is a glob pattern matching multiple orbits
+        folder = ""
+        orbit_string = orbit
+    else:
+        raise TypeError("orbit must be int or glob string.")
+
+    # if isinstance(orbit, int):
+    #     # orbit is an integer referring to a specific orbit
+    #     orbit_string = "orbit" + str(orbit).zfill(5)
+    # elif isinstance(orbit, str):
+    #     # orbit is a glob pattern matching multiple orbits
+    #     orbit_string = orbit
+    # else:
+    #     raise TypeError("orbit must be int or glob string.")
+
+    filename_glob = ("mvn_iuv_"
+                     + level + "_"
+                     + segment + "-"
+                     + orbit_string + "-"
+                     + channel + "_"
+                     + date_time + "_"
+                     + "*.fits*")
+
+    filename_glob = folder+filename_glob
+    
+    return filename_glob
 
 
 def get_apoapse_files(orbit_number, data_directory, channel='muv'):
@@ -90,8 +204,11 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     """
 
     # get list of FITS files for given orbit number
-    files, n_files = get_files(orbit_number, data_directory,
-                               segment='apoapse', channel=channel, count=True)
+    files, n_files = find_files(orbit=orbit_number,
+                                segment='apoapse',
+                                channel=channel,
+                                data_directory=data_directory,
+                                count=True)
 
     # set initial counters
     n_swaths = 0
@@ -107,7 +224,7 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     for i in range(n_files):
 
         # open FITS file
-        hdul = fits.open(files[i])
+        hdul = files[i]
 
         # skip single integrations, they are more trouble than they're worth
         if hdul['primary'].data.ndim == 2:
@@ -159,80 +276,6 @@ def get_apoapse_files(orbit_number, data_directory, channel='muv'):
     return swath_info
 
 
-def find_all_l1b(pattern,
-                 data_directory=None,
-                 use_index=None):
-    """
-    Return file paths to FITS files for a given glob pattern.
-
-    Parameters
-    ----------
-    pattern : str
-        glob pattern to match in file directory
-
-    data_directory : str
-        Absolute system path to the location containing orbit block
-        folders ("orbit01300", orbit01400", etc.)
-
-        If None, system will use l1b_dir defined in user_paths.py or
-        prompt user to set this up
-
-    use_index : bool
-        Whether to use the index of files created by sync_data to
-        speed up file finding. If False, filesystem glob is used.
-
-        If data_directory == None, defaults to True, otherwise False.
-
-    count : bool
-        Whether or not to return the number of files.
-
-    Returns
-    -------
-    files : array
-        A sorted list of the file paths to the FITS files.
-
-    n_files : int
-        The number of files, if requested.
-
-    """
-
-    if data_directory is None:
-        from maven_iuvs.download import setup_user_paths  # don't move
-        # ^^^ avoids circular import
-        setup_user_paths()
-        # get the path from the possibly newly created file
-        from maven_iuvs.user_paths import l1b_dir  # don't move this
-        if not os.path.exists(l1b_dir):
-            raise Exception("Cannot find specified L1B directory."
-                            " Is it accessible?")
-
-        data_directory = l1b_dir
-        if use_index is None:
-            use_index = True
-            all_iuvs_filenames = np.load(os.path.join(l1b_dir,
-                                                      'filenames.npy'))
-    else:
-        use_index = False
-
-    # print(dir)
-    if use_index:
-        # use the index of files saved in the
-        # l1b_data directory and loaded on startup
-        orbfiles = fnmatch.filter(all_iuvs_filenames,
-                                  pattern)
-    else:
-        # go to the disk and glob directly (slow)
-        iuvs_dir = data_directory+'*/'
-        orbfiles = sorted(glob.glob(iuvs_dir+pattern))
-
-    n_files = len(orbfiles)
-
-    if n_files == 0:
-        return []
-    else:
-        return get_latest_files(dropxml(orbfiles))
-
-
 def get_file_version(orbit_number, data_directory,
                      segment='apoapse', channel='muv'):
     """Return file version and revision of FITS files for a given orbit
@@ -263,9 +306,11 @@ def get_file_version(orbit_number, data_directory,
     # get files and extract data versions; if no files version is
     # 'missing'
     try:
-        files = get_files(orbit_number, data_directory=data_directory,
-                          segment=segment, channel=channel)
-        version_str = files[0].split('_')[-2:]
+        files = find_files(orbit=orbit_number,
+                           segment=segment,
+                           channel=channel,
+                           data_directory=data_directory)
+        version_str = files[0].basename.split('_')[-2:]
         data_version = '%s_%s' % (version_str[0], version_str[1][0:3])
     except IndexError:
         data_version = 'missing'
@@ -290,46 +335,51 @@ def get_latest_files(files):
 
     Returns
     -------
-    unique_files : np.array
+    unique_files : list
         list of string IUVS filenames, containing only the most recent version
         of each file.
 
     """
 
-    # create a list of [file_basename, index in initial list, filename]
-    #   in the basename, replace _r with _x
-    #   this allows a standard sort to put the file we want last
+    def basename_sortable(fname):
+        # Returns the file basename without any extension, but
+        # replaces _r with x so stage files appear before production
+        # files
+        basename = os.path.basename(fname).split(".")[0].replace("_r", "_x")
+        return basename
+
+    # Create a list of [file_basename_sortable,
+    #                   index in initial list,
+    #                   filename]
     #
-    #   keeping the initial index allows us to put the list back
-    #   in its initial order at the end of the process
-    filenames = [[os.path.basename(f).split(".")[0].replace("_r", "_x"), i, f]
-                 for i, f in enumerate(files)]
+    # Keeping the initial index allows us to put the list back
+    # in its initial order at the end of the process
+    basenames = map(lambda i, f: [basename_sortable(f), i, f],
+                    range(len(files)),
+                    files)
 
-    # sort the list by the file basename with the replacement above
-    # reverse is specified because of the interaction with np.unique below
-    filenames.sort(reverse=True, key=lambda x: x[0])
+    # Sort the list by the file basename with the replacement above
+    # reverse is specified because of the interaction with np.unique
+    # below
+    basenames = sorted(basenames, key=lambda x: x[0])
 
-    # get the file identifiers (file_basename up to the _vXX_yXX part)
-    filetags = [f[0][:-8] for f in filenames]
+    # Group the files by the unique file identifiers, which is the
+    # basename up to the last 8 characters (these always contain
+    # _vXX_yXX)
+    uniquegroups = itertools.groupby(basenames, key=lambda x: x[0][:-8])
 
-    # find the location of the unique file identifiers
-    # np.unique returns the first unique entry, hence the reverse flag above
-    uniquetags, uniquetagindices = np.unique(filetags, return_index=True)
+    # Select the last (most recent) file in each group. Our original
+    # sort of basenames ensured the last file in group == most recent
+    uniquenames = [list(g)[-1] for k, g in uniquegroups]
 
-    # now we can select the unique entries from our original list
-    uniquefilenames = np.array(filenames)[uniquetagindices]
+    # Sort by original position in provided files list
+    uniquenames = sorted(uniquenames, key=lambda x: x[1])
 
-    # we no longer need the basename we constructed, so get rid of it
-    uniquefilenames = uniquefilenames[:, 1:].tolist()  # tolist for sorting
-
-    # sort by original position in provided files list
-    uniquefilenames.sort(key=lambda x: int(x[0]))
-
-    # we don't need the initial index anymore,
+    # We don't need the initial index anymore,
     # so retain only the original filename provided
-    uniquefilenames = np.array(uniquefilenames)[:, 1]
+    uniquenames = list(map(lambda x: x[-1], uniquenames))
 
-    return uniquefilenames
+    return uniquenames
 
 
 def relay_file(hdul):
