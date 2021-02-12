@@ -24,7 +24,7 @@ import paramiko
 import numpy as np
 
 from maven_iuvs.miscellaneous import clear_line
-from maven_iuvs.search import get_latest_files
+from maven_iuvs.search import get_filename_glob_string, get_latest_files
 
 
 def get_user_paths_filename():
@@ -102,6 +102,31 @@ def setup_user_paths():
 
     user_paths_file.close()
     # now scripts can import the relevant directories from user_paths
+
+
+def get_default_l1b_directory():
+    """Returns default l1b_dir defined in user_paths.py, creating the
+    file if needed.
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    l1b_dir : str
+        Absolute path the user-defined IUVS l1b directory.
+    """
+    # TODO: separate l1b_setup logic from spice setup logic
+    setup_user_paths()
+
+    # get the path from the possibly newly created file
+    from maven_iuvs.user_paths import l1b_dir  # don't move this
+    if not os.path.exists(l1b_dir):
+        raise Exception("Cannot find specified L1B directory."
+                        " Is it accessible?")
+
+    return l1b_dir
 
 
 def call_rsync(remote_path,
@@ -292,9 +317,9 @@ def get_vm_file_list(server,
 
 
 def sync_data(spice=True, l1b=True,
-              pattern="*.fits*",
               minorb=100, maxorb=100000,
-              include_cruise=False):
+              include_cruise=False,
+              **filename_kwargs):
     """
     Synchronize new SPICE kernels and L1B data from the VM and remove
     any old files that have been replaced by newer versions.
@@ -307,11 +332,6 @@ def sync_data(spice=True, l1b=True,
     l1b : bool
         Whether or not to sync level 1B data. Defaults to True.
 
-    pattern : str
-        glob pattern used to search for matching files
-
-        Defaults to '*.fits*' (matches all FITS files)
-
     minorb, maxorb : int
         Minimum and maximum orbit numbers to sync from VM, in multiples of 100.
 
@@ -323,11 +343,19 @@ def sync_data(spice=True, l1b=True,
 
         Defaults to False.
 
+    filename_kwargs : **kwargs
+        One or more of level, segment, orbit, channel, date_time, or
+        pattern, used to search for IUVS FITS files by by
+        maven_iuvs.search.get_filename_glob_string().
+
     Returns
     -------
     None.
 
     """
+    # setup search pattern
+    pattern = get_filename_glob_string(**filename_kwargs)
+    print("pattern = "+pattern+"\n")
 
     #  check if user path data exists and set it if not
     setup_user_paths()
@@ -460,7 +488,8 @@ def sync_data(spice=True, l1b=True,
                     [os.remove(f) for f in local_files_to_delete]
                     break
                 if del_files == 'p':
-                    print(local_files_to_delete)
+                    for f in local_files_to_delete:
+                        print(f)
                 else:
                     print("Please answer y or n, or p to print the file list.")
 
@@ -471,6 +500,11 @@ def sync_data(spice=True, l1b=True,
             # index all local files to speed up later finding
             local_filenames = sorted(glob.glob(l1b_dir+"/*/*.fits*"))
             np.save(l1b_dir+'/filenames', sorted(local_filenames))
+
+            # overwrite the package's loaded version of the above
+            from maven_iuvs import _iuvs_filenames_index
+            global _iuvs_filenames_index  # see __init__.py
+            _iuvs_filenames_index = np.array(local_filenames)
 
     except OSError:
         raise Exception('rsync failed --- are you connected to the VPN?')

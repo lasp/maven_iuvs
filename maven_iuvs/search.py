@@ -10,39 +10,22 @@ from astropy.io import fits
 #  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
 from maven_iuvs.geometry import beta_flip
-from maven_iuvs.files import IUVSFITS
+from maven_iuvs.file_classes import IUVSFITS
 
 
-def find_files(pattern=None,
-               level='*',
-               segment='*',
-               orbit='*',
-               channel='*',
-               date_time='*',
-               data_directory=None,
+def find_files(data_directory=None,
                recursive=True,
                use_index=None,
-               count=False):
+               count=False,
+               **filename_kwargs):
     """Return IUVSFITS files for a given glob pattern.
 
     Parameters
     ----------
-    pattern : str
-        glob pattern to match in file directory. Overrides input to
-        other filename flags (level, segment, orbit, channel,
-        date_time).
-
-    level : str
-        glob string for data level, such as 'l1b'
-    segment : str
-        glob string for segment, such as 'apoapse'
-    orbit : int or str
-        integer referring to a specific orbit, or glob pattern
-        matching multiple orbits, such as 'orbit08*'
-    channel : str
-        glob string for channel, such as 'muv', 'fuv', 'ech'
-    date_time : str
-        glob string for date/time specification, such as '201506*'
+    filename_kwargs : **kwargs
+        One or more of level, segment, orbit, channel, date_time, or
+        pattern, used to search for IUVS FITS files by by
+        maven_iuvs.search.get_filename_glob_string().
 
     data_directory : str
         Absolute system path to the location containing orbit block
@@ -75,48 +58,27 @@ def find_files(pattern=None,
 
     """
 
-    if pattern is None:
-        # construct the filename pattern to search for
-        pattern = get_filename_glob_string(level,
-                                           segment,
-                                           orbit,
-                                           channel,
-                                           date_time)
+    # construct the filename pattern to search for
+    pattern = get_filename_glob_string(**filename_kwargs)
 
     if data_directory is None:
-        # use value defined in user_paths.py or create it
-        from maven_iuvs.download import setup_user_paths  # don't move
+        from maven_iuvs.download import get_default_l1b_directory
+        from maven_iuvs import _iuvs_filenames_index
         # ^^^ avoids circular import
-        setup_user_paths()
-        # get the path from the possibly newly created file
-        from maven_iuvs.user_paths import l1b_dir  # don't move this
-        if not os.path.exists(l1b_dir):
-            raise Exception("Cannot find specified L1B directory."
-                            " Is it accessible?")
-
-        data_directory = l1b_dir
+        data_directory = get_default_l1b_directory()
         if use_index is None or use_index is True:
             use_index = True
+        if len(_iuvs_filenames_index) == 0:
+            # no index was loaded, abort and go to glob
+            use_index = False
     else:
         if use_index is True:
             warnings.warn("Trying to use index when data_directory != None.")
         use_index = False
 
     if use_index:
-        # check if an index is available
-        index_filename = os.path.join(l1b_dir, 'filenames.npy')
-        if not os.path.exists(index_filename):
-            warnings.warn("Cannot find index.npy in specified data_directory, "
-                          "reverting to filesystem glob."
-                          "(Use maven_iuvs.download.sync_data to sync data "
-                          "to a default directory of your choice.)")
-            use_index = False
-
-    if use_index:
         # use the index of files saved in the l1b_data directory
-        all_iuvs_filenames = np.load(index_filename)
-        orbfiles = fnmatch.filter(all_iuvs_filenames,
-                                  "*"+pattern.replace('**', ''))
+        orbfiles = fnmatch.filter(_iuvs_filenames_index, "*"+pattern)
     else:
         # go to the disk and glob directly (slower)
         orbfiles = glob.glob(os.path.join(data_directory,
@@ -124,7 +86,6 @@ def find_files(pattern=None,
         if recursive:
             # also search subdirectories recursively
             orbfiles.extend(glob.glob(os.path.join(data_directory,
-                                                   '**',
                                                    pattern),
                                       recursive=True))
     orbfiles = sorted(orbfiles)
@@ -142,7 +103,7 @@ def find_files(pattern=None,
     return orbfiles
 
 
-def get_filename_glob_string(level, segment, orbit, channel, date_time):
+def get_filename_glob_string(**filename_kwargs):
     """Generate glob string for IUVS filenames.
 
     Parameters
@@ -159,32 +120,47 @@ def get_filename_glob_string(level, segment, orbit, channel, date_time):
     date_time : str
         glob string for date/time specification, such as '201506*'
 
+    pattern : str
+        glob pattern to match in file directory. Overrides input to
+        other filename flags (level, segment, orbit, channel,
+        date_time).
+
     Returns
     -------
     filename_glob : str
         glob pattern for filenames constructed from the inputs
     """
 
-    # if isinstance(orbit, int):
-    #     # orbit is an integer referring to a specific orbit
-    #     orbit_block = int(orbit / 100) * 100
-    #     folder = "orbit" + str(orbit_block).zfill(5)
-    #     orbit_string = "orbit" + str(orbit).zfill(5)
-    # elif isinstance(orbit, str):
-    #     # orbit is a glob pattern matching multiple orbits
-    #     folder = "**"
-    #     orbit_string = orbit
-    # else:
-    #     raise TypeError("orbit must be int or glob string.")
+    if 'pattern' in filename_kwargs:
+        return filename_kwargs['pattern']
+
+    level     = filename_kwargs.get('level',     '*')
+    segment   = filename_kwargs.get('segment',   '*')
+    orbit     = filename_kwargs.get('orbit',     '*')
+    channel   = filename_kwargs.get('channel',   '*')
+    date_time = filename_kwargs.get('date_time', '*')
 
     if isinstance(orbit, int):
         # orbit is an integer referring to a specific orbit
+        orbit_block = int(orbit / 100) * 100
+        folder = "orbit" + str(orbit_block).zfill(5)
+        folder = os.path.join(folder, "")
         orbit_string = "orbit" + str(orbit).zfill(5)
     elif isinstance(orbit, str):
         # orbit is a glob pattern matching multiple orbits
+        folder = ""
         orbit_string = orbit
     else:
         raise TypeError("orbit must be int or glob string.")
+
+    # if isinstance(orbit, int):
+    #     # orbit is an integer referring to a specific orbit
+    #     orbit_string = "orbit" + str(orbit).zfill(5)
+    # elif isinstance(orbit, str):
+    #     # orbit is a glob pattern matching multiple orbits
+    #     orbit_string = orbit
+    # else:
+    #     raise TypeError("orbit must be int or glob string.")
 
     filename_glob = ("mvn_iuv_"
                      + level + "_"
@@ -194,8 +170,8 @@ def get_filename_glob_string(level, segment, orbit, channel, date_time):
                      + date_time + "_"
                      + "*.fits*")
 
-    # filename_glob = os.path.join(folder, filename_glob)
-
+    filename_glob = folder+filename_glob
+    
     return filename_glob
 
 
