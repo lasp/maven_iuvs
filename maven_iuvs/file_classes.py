@@ -4,12 +4,10 @@
 import os
 import warnings
 import fnmatch as fnm
-from pathlib import Path
 import datetime
 import pytz
 
 # 3rd-party imports
-import numpy as np
 from astropy.io.fits.hdu.hdulist import HDUList
 
 
@@ -195,14 +193,14 @@ class IUVSFITSList(list):
         files: iterable of string or IUVSFITS
             List of IUVSFITS files
         """
-        if np.all([isinstance(f, str) for f in files]):
+        if all([isinstance(f, str) for f in files]):
             try:
                 files = [IUVSFITS(f) for f in files]
             except IOError as fitserror:
                 raise ValueError("Not all inputs are valid filenames.") \
                     from fitserror
 
-        if not np.all([isinstance(f, IUVSFITS) for f in files]):
+        if not all([isinstance(f, IUVSFITS) for f in files]):
             raise ValueError("Ensure all inputs are IUVSFITS"
                              " or valid paths to IUVS FITS files.")
 
