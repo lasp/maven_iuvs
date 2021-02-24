@@ -367,7 +367,6 @@ def sync_data(spice=True, l1b=True,
     """
     # setup search pattern
     pattern = get_filename_glob_string(**filename_kwargs)
-    print("pattern = "+pattern+"\n")
 
     #  check if user path data exists and set it if not
     setup_user_paths()
