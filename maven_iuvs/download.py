@@ -581,7 +581,7 @@ def sync_euvm_l2b(sdc_username, sdc_password):
     """
     print("syncing EUVM L2B...")
 
-    url = 'https://lasp.colorado.edu/maven/data/sci/euv/l2b/'
+    url = 'https://lasp.colorado.edu/maven/sdc/team/data/sci/euv/l2b/'
 
     euvm_l2b_dir = get_euvm_l2b_dir()
 
