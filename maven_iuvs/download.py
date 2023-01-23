@@ -6,20 +6,11 @@ import tempfile
 import datetime
 from getpass import getpass
 
-# twill's __init__.py is dumb, we need to work around it to play nice
-# with jupyter:
-import sys
-_stdout = sys.stdout
-_stderr = sys.stdout
-
 import twill
-twill.set_output(_stdout)
-twill.set_errout(_stderr)
-twill.set_loglevel(twill.loglevels['WARNING'])
-
 
 import pexpect
-import paramiko
+import fabric
+import invoke
 
 import numpy as np
 
@@ -285,13 +276,13 @@ def get_vm_file_list(server,
     """
 
     # connect to the server using paramiko
-    ssh = paramiko.SSHClient()
-    ssh.load_system_host_keys()
-    ssh.connect(server, username=username, password=password)
+    ssh = fabric.Connection(server,
+                            user=username,
+                            connect_kwargs={'password': password})
 
     # get the list of folders on the VM
-    stdin, stdout, stderr = ssh.exec_command('ls '+serverdir)
-    server_orbit_folders = np.loadtxt(stdout, dtype=str)
+    result = ssh.run('ls '+serverdir, hide=True)
+    server_orbit_folders = np.array(result.stdout.split('\n'))
 
     # determine what folders to look for files in
     sync_orbit_folders = ["orbit"+str(orbno).zfill(5)
@@ -314,13 +305,17 @@ def get_vm_file_list(server,
         print(status_tag+folder, end="\r")
 
         cmd = "ls "+serverdir+folder+"/"+pattern
-        stdin, stdout, stderr = ssh.exec_command(cmd)
-
-        if len(stderr.read()) == 0:
-            files.append(np.loadtxt(stdout, dtype=str))
+        result = ssh.run(cmd, hide=True, warn=True)
+        if result.ok:
+            folder_files = result.stdout.split('\n')
+            folder_files = np.array([f for f in folder_files if f != ''])
+        elif (not result.ok) and (result.stderr == 'ls: No match.\n'):
+            # no files found for this pattern in this folder
+            folder_files = np.array([])
         else:
-            continue
-    ssh.close()
+            raise invoke.exceptions.UnexpectedExit(f'{result.stderr = }')
+
+        files.append(folder_files)
 
     if len(files) == 0:
         return []
