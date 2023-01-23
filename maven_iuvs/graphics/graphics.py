@@ -1,4 +1,4 @@
-import os
+import os as _os
 
 import cartopy.crs as ccrs
 import matplotlib.colors as colors
@@ -352,13 +352,13 @@ def get_flatfield(n_integrations, n_spatial):
 
     # load the flatfield, interpolate if required using the 133-bin flatfield
     if n_spatial == 133:
-        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
+        detector_flat = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
     elif n_spatial == 50:
-        detector_flat = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
+        detector_flat = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
     else:
-        detector_full = np.load(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
+        detector_full = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
                                              'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
         detector_flat = np.zeros((n_spatial, 18))
         for i in range(18):

@@ -1,14 +1,12 @@
 """Routines to create an image of Mars and the MAVEN orbit at a
 specified time"""
 
-import os
-
+import os as _os
 import numpy as np
 import spiceypy as spice
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 import matplotlib.patches as mpatches
-
 
 from mayavi import mlab
 from tvtk.api import tvtk
@@ -110,7 +108,7 @@ def maven_orbit_image(time,
     #
 
     # load and map the Mars surface texture
-    image_file = os.path.join(anc_dir, 'marssurface_2.jpg')
+    image_file = _os.path.join(anc_dir, 'marssurface_2.jpg')
     img = tvtk.JPEGReader()
     img.file_name = image_file
     texture = tvtk.Texture(input_connection=img.output_port, interpolate=1)

@@ -1,4 +1,4 @@
-import os
+import os as _os
 import datetime
 import warnings
 
@@ -12,8 +12,8 @@ from maven_iuvs.search import find_files
 
 # Load list of mars year boundaries, or generate it
 try:
-    marsyearbounds_et = np.load(os.path.join(anc_dir,
-                                             'mars_year_boundaries_et.npy'))
+    marsyearbounds_et = np.load(_os.path.join(anc_dir,
+                                              'mars_year_boundaries_et.npy'))
 except FileNotFoundError:
     warnings.warn("Cannot load Mars Year boundaries file. Please generate"
                   " this file by calling maven_iuvs.spice.load_iuvs_spice()"
@@ -211,7 +211,7 @@ def generate_marsyear_boundaries_file():
     # marsyearchange_utc=[et_to_utc(t) for t in marsyearchange_et]
     # [(i+1,utc) for i,utc in enumerate(marsyearchange_utc)]
 
-    np.save(os.path.join(anc_dir, 'mars_year_boundaries_et'),
+    np.save(_os.path.join(anc_dir, 'mars_year_boundaries_et'),
             marsyearchange_et)
 
 

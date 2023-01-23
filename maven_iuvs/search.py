@@ -1,6 +1,7 @@
+import os
 import warnings
 import glob
-import os
+
 import fnmatch
 import itertools
 

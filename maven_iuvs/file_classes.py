@@ -1,7 +1,7 @@
 """Routines and objects to interact with IUVS FITS files."""
 
 # Built-in imports
-import os
+
 import warnings
 import fnmatch as fnm
 import datetime
