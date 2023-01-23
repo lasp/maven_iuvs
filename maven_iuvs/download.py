@@ -372,10 +372,10 @@ def sync_data(spice=True, l1b=True,
     setup_user_paths()
     #  load user path data from file
     from maven_iuvs.user_paths import l1b_dir, spice_dir, iuvs_vm_username
-    if not os.path.exists(spice_dir):
+    if spice and not os.path.exists(spice_dir):
         raise Exception("Cannot find specified SPICE directory."
                         " Is it accessible?")
-    if not os.path.exists(l1b_dir):
+    if l1b and not os.path.exists(l1b_dir):
         raise Exception("Cannot find specified L1B directory."
                         " Is it accessible?")
 
@@ -395,13 +395,13 @@ def sync_data(spice=True, l1b=True,
         iuvs_vm_password = getpass('input password for '+login+' ')
 
         # sync SPICE kernels
-        if spice is True:
+        if spice:
             print('Updating SPICE kernels...')
             call_rsync(vm_spice, spice_dir, iuvs_vm_password,
                        extra_flags="--delete")
 
         # sync level 1B data
-        if l1b is True:
+        if l1b:
             # get the file names of all the relevant files
             print('Fetching names of level 1B production and stage'
                   ' files from the VM...')
