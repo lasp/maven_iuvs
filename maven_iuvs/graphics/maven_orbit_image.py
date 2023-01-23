@@ -604,7 +604,7 @@ def maven_orbit_summary(time, show_maven=False):
     ax.text(0.02, 0.98,
             (time
              + "\nL"+r'$_\mathrm{s}$'+" = "
-             + str(int(np.round(Ls(spice.str2et('2019 Jul 02')))))
+             + str(int(np.round(Ls(spice.str2et(time)))))
              + r'$^\circ$'),
             transform=ax.transAxes,
             color='w',
