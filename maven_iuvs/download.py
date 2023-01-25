@@ -1,9 +1,13 @@
 import os
+import sys
 import glob
 import subprocess
 import time
 import tempfile
 import datetime
+import io
+import contextlib
+import contextvars
 from getpass import getpass
 
 import twill
@@ -16,6 +20,19 @@ import numpy as np
 
 from maven_iuvs.miscellaneous import clear_line
 from maven_iuvs.search import get_filename_glob_string, get_latest_files
+
+
+class SuppressTwillOutput():
+    """Context manager class to suppress twill output"""
+    def __init__(self):
+        self.global_stdout = sys.stdout
+
+    def __enter__(self):
+        twill.set_output(io.StringIO())  # this alters sys.stdout globally!
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        twill.set_output(self.global_stdout)  # return sys.stdout to normal
 
 
 def get_user_paths_filename():
@@ -574,39 +591,42 @@ def sync_euvm_l2b(sdc_username, sdc_password):
     none
 
     """
-    print("syncing EUVM L2B...")
+    print("syncing EUVM L2B...", end='')
 
     url = 'https://lasp.colorado.edu/maven/sdc/team/data/sci/euv/l2b/'
 
     euvm_l2b_dir = get_euvm_l2b_dir()
 
-    # go to the SDC webpage and expect to see a login form
-    twill.browser.reset()
-    twill.browser.go(url)
+    with SuppressTwillOutput():
+        # go to the SDC webpage and expect to see a login form
+        twill.browser.reset()
+        twill.browser.go(url)
 
-    # enter the login info
-    twill.commands.fv("1", 'username', sdc_username)
-    twill.commands.fv("1", 'password', sdc_password)
-    twill.browser.submit()
+        # enter the login info
+        twill.commands.fv("1", 'username', sdc_username)
+        twill.commands.fv("1", 'password', sdc_password)
+        twill.browser.submit()
 
-    # load the page now that we're authenticated
-    twill.browser.go(url)
+        # load the page now that we're authenticated
+        twill.browser.go(url)
 
-    # find the most recent save file on the page
-    files = sorted([f.url for f in twill.browser.links if '.sav' in f.url])
-    most_recent = files[-1]
+        # find the most recent save file on the page
+        files = sorted([f.url for f in twill.browser.links if '.sav' in f.url])
+        most_recent = files[-1]
 
-    # navigate to that file
-    twill.browser.go(url+most_recent)
+        # navigate to that file
+        twill.browser.go(url+most_recent)
 
-    # delete old EUVM files in the EUVM l2b directory
-    old_fnames = glob.glob(euvm_l2b_dir+'*l2b*.sav')
-    [os.remove(f) for f in old_fnames]
+        # delete old EUVM files in the EUVM l2b directory
+        old_fnames = glob.glob(euvm_l2b_dir+'*l2b*.sav')
+        [os.remove(f) for f in old_fnames]
 
-    # save the new file to disk
-    fname = euvm_l2b_dir + most_recent
-    with open(fname, "wb") as file:
-        file.write(twill.browser.dump)
+        # save the new file to disk
+        fname = euvm_l2b_dir + most_recent
+        with open(fname, "wb") as file:
+            file.write(twill.browser.dump)
+
+    print(' done.')
 
 
 def get_integrated_reports_dir():
@@ -664,81 +684,84 @@ def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
 
     """
 
-    print("syncing Integrated Reports...")
+    print("syncing Integrated Reports... ")
 
     url = ('https://lasp.colorado.edu/ops/maven/team/'
            + 'inst_ops.php?content=msa_ir&show_all')
 
     local_ir_dir = get_integrated_reports_dir()
 
-    # go to the SDC webpage and expect to see a login form
-    twill.browser.reset()
-    twill.browser.go(url)
+    with SuppressTwillOutput() as twill_suppressor:
+        # go to the SDC webpage and expect to see a login form
+        twill.browser.reset()
+        twill.browser.go(url)
 
-    # enter the login info
-    twill.commands.fv("1", 'username', sdc_username)
-    twill.commands.fv("1", 'password', sdc_password)
-    twill.browser.submit()
+        # enter the login info
+        twill.commands.fv("1", 'username', sdc_username)
+        twill.commands.fv("1", 'password', sdc_password)
+        twill.browser.submit()
 
-    # load the page now that we're authenticated
-    twill.browser.go(url)
+        # load the page now that we're authenticated
+        twill.browser.go(url)
 
-    # get the list of integrated report files on the server
-    server_links = sorted([f for f in twill.browser.links if '.txt' in f.text])
+        # get the list of integrated report files on the server
+        server_links = sorted([f for f in twill.browser.links if '.txt' in f.text])
 
-    # get the list of local integrated report files
-    local_files = [os.path.basename(f)
-                   for f in glob.glob(os.path.join(local_ir_dir, '*'))]
+        # get the list of local integrated report files
+        local_files = [os.path.basename(f)
+                       for f in glob.glob(os.path.join(local_ir_dir, '*'))]
 
-    if check_old:
-        # check all the files, not just the ones we don't have
-        to_download = server_links
-    else:
-        # figure out which ones on the server are new
-        old_time = datetime.datetime.now() - datetime.timedelta(days=180)
-        old_time = old_time.strftime("%y%m%d")
-        to_download = [f for f in server_links if ((int(f.text.split("_")[2])
-                                                    > int(old_time))
-                                                   or (f.text
-                                                       not in local_files))]
+        if check_old:
+            # check all the files, not just the ones we don't have
+            to_download = server_links
+        else:
+            # figure out which ones on the server are new
+            old_time = datetime.datetime.now() - datetime.timedelta(days=180)
+            old_time = old_time.strftime("%y%m%d")
+            to_download = [f for f in server_links if ((int(f.text.split("_")[2])
+                                                        > int(old_time))
+                                                       or (f.text
+                                                           not in local_files))]
 
-    # download the new files
-    from lxml.etree import ParserError
-    for link in to_download:
-        clear_line()
-        print(link.text, end="\r")
+        # download the new files
+        from lxml.etree import ParserError
+        for link in to_download:
+            clear_line()
+            print(link.text, end="\r",
+                  file=twill_suppressor.global_stdout)
 
-        # modify the page link to a download link
-        download_link = link.url.replace("inst_ops.php?content=file&file=",
-                                         "download-file.php?public/")
+            # modify the page link to a download link
+            download_link = link.url.replace("inst_ops.php?content=file&file=",
+                                             "download-file.php?public/")
 
-        # get the binary of the file
-        try:
-            twill.browser.go(download_link)
-            server_binary_data = twill.browser.dump
-        except ParserError:
-            # sometimes the files have zero size,
-            # which results in a ParserError
-            server_binary_data = b""
+            # get the binary of the file
+            try:
+                twill.browser.go(download_link)
+                server_binary_data = twill.browser.dump
+            except ParserError:
+                # sometimes the files have zero size,
+                # which results in a ParserError
+                server_binary_data = b""
 
-        # get the local filename
-        fname = os.path.join(local_ir_dir, link.text)
+            # get the local filename
+            fname = os.path.join(local_ir_dir, link.text)
 
-        # look at the local file contents and compare with remote
-        if os.path.exists(fname):
-            with open(fname, "rb") as file:
-                if file.read() == twill.browser.dump:
-                    # file is the same as the server, keep it
-                    continue
+            # look at the local file contents and compare with remote
+            if os.path.exists(fname):
+                with open(fname, "rb") as file:
+                    if file.read() == twill.browser.dump:
+                        # file is the same as the server, keep it
+                        continue
 
-        # if we're here either the local file doesn't exist
-        # or it's different from the server copy.
-        # Either way, download the server version
-        fname = os.path.join(local_ir_dir, link.text)
-        with open(fname, "wb") as file:
-            file.write(server_binary_data)
+            # if we're here either the local file doesn't exist
+            # or it's different from the server copy.
+            # Either way, download the server version
+            fname = os.path.join(local_ir_dir, link.text)
+            with open(fname, "wb") as file:
+                file.write(server_binary_data)
 
     clear_line()
+    print('                          ... done.')
 
 
 def sync_sdc(check_old=False):
