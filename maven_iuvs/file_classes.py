@@ -1,7 +1,8 @@
 """Routines and objects to interact with IUVS FITS files."""
 
 # Built-in imports
-import os
+
+import os as _os
 import warnings
 import fnmatch as fnm
 import datetime
@@ -25,7 +26,7 @@ class IUVSFITS(HDUList):
             Absolute path to the IUVS FITS file.
         """
         self.__filename = filename
-        self.__basename = os.path.basename(filename)
+        self.__basename = _os.path.basename(filename)
         self.__check_input_is_iuvs_data_filename()
         hdulist = HDUList.fromfile(filename, mode='readonly',
                                    memmap=True, save_backup=False,
