@@ -63,10 +63,19 @@ def find_files(data_directory=None,
     pattern = get_filename_glob_string(**filename_kwargs)
 
     if data_directory is None:
-        from maven_iuvs.download import get_default_l1b_directory
-        from maven_iuvs import _iuvs_filenames_index
+        from maven_iuvs.download import get_default_directory
+        from maven_iuvs import (_iuvs_l1a_filenames_index,
+                                _iuvs_l1b_filenames_index)
         # ^^^ avoids circular import
-        data_directory = get_default_l1b_directory()
+
+        if 'l1a' in pattern:
+            _iuvs_filenames_index = _iuvs_l1a_filenames_index
+            file_level = 'l1a'
+        else:
+            _iuvs_filenames_index = _iuvs_l1b_filenames_index
+            file_level = 'l1b'
+
+        data_directory = get_default_directory(level=file_level)
         if use_index is None or use_index is True:
             use_index = True
         if len(_iuvs_filenames_index) == 0:
@@ -87,6 +96,7 @@ def find_files(data_directory=None,
         if recursive:
             # also search subdirectories recursively
             orbfiles.extend(glob.glob(os.path.join(data_directory,
+                                                   '*',
                                                    pattern),
                                       recursive=True))
     orbfiles = sorted(orbfiles)
@@ -96,7 +106,7 @@ def find_files(data_directory=None,
         orbfiles = []
     else:
         orbfiles = get_latest_files(dropxml(orbfiles))
-        orbfiles = [IUVSFITS(f) for f in orbfiles]
+        #orbfiles = [IUVSFITS(f) for f in orbfiles]
 
     if count:
         return orbfiles, n_files
@@ -141,6 +151,8 @@ def get_filename_glob_string(**filename_kwargs):
     channel   = filename_kwargs.get('channel',   '*')
     date_time = filename_kwargs.get('date_time', '*')
 
+    # TODO: add warning/error about unprocessed kwargs
+
     if isinstance(orbit, int):
         # orbit is an integer referring to a specific orbit
         orbit_block = int(orbit / 100) * 100
@@ -167,7 +179,7 @@ def get_filename_glob_string(**filename_kwargs):
                      + level + "_"
                      + segment + "-"
                      + orbit_string + "-"
-                     + channel + "_"
+                     + channel + "*_"
                      + date_time + "_"
                      + "*.fits*")
 
@@ -360,8 +372,6 @@ def get_latest_files(files):
                     files)
 
     # Sort the list by the file basename with the replacement above
-    # reverse is specified because of the interaction with np.unique
-    # below
     basenames = sorted(basenames, key=lambda x: x[0])
 
     # Group the files by the unique file identifiers, which is the

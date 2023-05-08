@@ -24,11 +24,19 @@ try:
 except ImportError:
     pass
 
-# load the file index created by download.sync_data, if one exists
+# load the file indexes created by download.sync_data, if they exist
+try:
+    import numpy as _np
+    from .user_paths import l1a_dir
+    _l1a_index_filename = _os.path.join(l1a_dir, 'filenames.npy')
+    _iuvs_l1a_filenames_index = _np.load(_l1a_index_filename)
+except (ImportError, FileNotFoundError):
+    _iuvs_l1a_filenames_index = _np.array([])
+# l1b
 try:
     import numpy as _np
     from .user_paths import l1b_dir
-    _index_filename = _os.path.join(l1b_dir, 'filenames.npy')
-    _iuvs_filenames_index = _np.load(_index_filename)
+    _l1b_index_filename = _os.path.join(l1b_dir, 'filenames.npy')
+    _iuvs_l1b_filenames_index = _np.load(_l1b_index_filename)
 except (ImportError, FileNotFoundError):
-    _iuvs_filenames_index = _np.array([])
+    _iuvs_l1b_filenames_index = _np.array([])
