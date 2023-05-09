@@ -99,6 +99,9 @@ def setup_user_paths():
     spice_dir = input("Where would you like MAVEN/IUVS SPICE"
                       " kernels to be stored by sync_data? ")
 
+    l1a_full_mission_reprocess_dir = input("Where would you like IUVS l1a FITS files"
+                    "for the full mission reprocess to be stored by sync_data? ")
+
     # determine whether to load SPICE kernels automatically on startup
     while True:
         auto_spice_load = input("Would you like maven_iuvs to automatically"
@@ -123,6 +126,7 @@ def setup_user_paths():
                           " maven_iuvs.download.setup_file_paths\n")
     user_paths_file.write("l1b_dir = \""+l1b_dir+"\"\n")
     user_paths_file.write("l1a_dir = \""+l1a_dir+"\"\n")
+    user_paths_file.write("l1a_full_mission_reprocess_dir = \""+l1a_full_mission_reprocess_dir+"\"\n")
     user_paths_file.write("spice_dir = \""+spice_dir+"\"\n")
     user_paths_file.write("iuvs_vm_username = \""+vm_username+"\"\n")
     user_paths_file.write("auto_spice_load = "+auto_spice_load+"\n")
