@@ -1,11 +1,16 @@
 import datetime
 import numpy as np
 import textwrap
+import os 
+import astropy.fits as fits
 
-from maven_iuvs.fits_processing import get_dir_metadata, \
-    iuvs_orbno_from_fname, iuvs_filename_to_datetime, \
-    find_files_missing_geometry, find_files_with_geometry, \
-    iuvs_segment_from_fname
+from maven_iuvs.fits_processing import find_files_missing_geometry, \
+    find_files_with_geometry, get_binning_scheme,  \
+    get_n_int, has_geometry_pvec, locate_missing_frames, \
+    get_countrate_diagnostics, iuvs_orbno_from_fname, \
+    iuvs_filename_to_datetime, iuvs_segment_from_fname \
+
+from maven_iuvs.search import get_latest_files, find_files
 
 
 def ech_isdark(fidx):
@@ -71,6 +76,109 @@ def find_dark_options(input_light_idx, idx_list_to_search):
                         and ech_isdark(didx))]
     
     return dark_options
+
+
+def get_dir_metadata(the_dir, new_files_limit=None):
+    """
+    Gets metadata for given set of files
+
+    Parameters
+    ----------
+    the_dir : string
+              path to directory containing observation data
+    new_files_limit : 
+
+    Returns
+    -------
+    new_idx: 
+    """
+    idx_fname = the_dir[:-1] + '_metadata.npy'
+    print(f'loading {idx_fname}...')
+    
+    try:
+        idx = np.load(idx_fname, allow_pickle=True)
+    except FileNotFoundError:
+        print(f'{idx_fname} not found, creating new index...')
+        idx = []
+
+    # make list of most recent files from index and directory
+    idx_fnames = [filedata['name'] for filedata in idx]
+    dir_fnames = [os.path.basename(f) for f in find_files(data_directory=the_dir,
+                                                          use_index=False)]
+    most_recent_fnames = get_latest_files(np.concatenate([idx_fnames, 
+                                                         dir_fnames]))
+    # get new information from disk if needed
+    not_in_idx = np.setdiff1d(most_recent_fnames, idx_fnames)
+    not_in_idx = sorted(not_in_idx, key=iuvs_filename_to_datetime)
+    not_in_idx = not_in_idx[:new_files_limit]
+    
+    add_to_idx = []
+    if len(not_in_idx) > 0:
+        print(f'adding {len(not_in_idx)} files to index...')
+        
+        for i, f in enumerate(not_in_idx):
+            print(f'getting metadata {i+1}/{len(not_in_idx)}: {f}'+' '*20, end='\r')
+            
+            f_metadata = get_file_metadata(find_files(data_directory=the_dir,
+                                                      use_index=False,
+                                                      pattern=f)[0])
+            add_to_idx.append(f_metadata)
+        
+        print('\n... done')
+
+    # remove old files from index
+    remove_from_idx = np.setdiff1d(idx_fnames, most_recent_fnames)
+    new_idx = [i for i in idx if i['name'] not in remove_from_idx]
+
+    # add new files to index
+    new_idx = np.concatenate([new_idx, add_to_idx])
+    
+    # sort by filename
+    new_idx = sorted(new_idx, key=lambda x: iuvs_filename_to_datetime(x['name']))
+    
+    # overwrite directory on disk
+    np.save(idx_fname, new_idx)
+    
+    return new_idx
+
+
+def get_file_metadata(fname):
+    # to add:
+    # * signal at position of Ly α ?
+    # * detectable D Ly α ?
+    """
+    Gets the binning scheme for a given FITS HDU.
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    Dicionaries explaining the binning scheme:
+    if nonlinear, returns the bin table, along with the number of spatial and spectral bins.
+    if linear, returns the first spatial and spectral bin edges, the widths, and the number of bins.
+
+    """
+    
+    this_fits = fits.open(fname)
+    
+    binning = get_binning_scheme(this_fits)
+    n_int = get_n_int(this_fits)
+    shape = (n_int, binning['nspa'], binning['nspe'])
+    
+    return {'name': os.path.basename(fname),
+            'shape': shape,
+            'n_int': n_int,
+            'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
+            'binning': binning,
+            'int_time': this_fits['Primary'].header['INT_TIME'],
+            'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
+            'geom': has_geometry_pvec(this_fits),
+            'missing_frames': locate_missing_frames(this_fits, n_int),
+            'countrate_diagnostics': get_countrate_diagnostics(this_fits)
+           }
 
 
 def identify_rogue_observations(idx):
