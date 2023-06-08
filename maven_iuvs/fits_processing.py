@@ -5,6 +5,7 @@ from pathlib import Path
 
 from maven_iuvs.search import find_files, get_latest_files
 
+
 def find_files_missing_geometry(file_index, show_total=False):
     """
     Identifies observation files with geometry
@@ -14,7 +15,7 @@ def find_files_missing_geometry(file_index, show_total=False):
     file_index : index file (.npy) 
                  dictionaries containing metadata of various observation files
     show_total: binary
-                whether to print how many files of the total the files missing geometry comprise
+                whether to print what fraction of total the missing files are
     Returns
     ----------
     no_geom: list
@@ -27,6 +28,7 @@ def find_files_missing_geometry(file_index, show_total=False):
         print(f'{len(no_geom)} of {len(all_orbit_files)} have no geometry.\n')
         
     return no_geom
+
 
 def find_files_with_geometry(file_index):
     """
@@ -47,6 +49,7 @@ def find_files_with_geometry(file_index):
 
     # print(f'{len(with_geom)} have geometry.\n')
     return with_geom
+
 
 def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
     """
@@ -94,6 +97,7 @@ def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
     
     return countrate
 
+
 def get_binning_scheme(hdul):
     """
     Gets the binning scheme for a given FITS HDU.
@@ -131,6 +135,7 @@ def get_binning_scheme(hdul):
     return {'spapix0':spapix0, 'spabinwidth':spabinwidth, 'nspa':nspa,
             'spepix0':spepix0, 'spebinwidth':spebinwidth, 'nspe':nspe,}
 
+
 def get_countrate_diagnostics(hdul):
     """
     ...description...
@@ -166,6 +171,7 @@ def get_countrate_diagnostics(hdul):
             'Dlya_npix':Dlya_npix,
             'Dbkg_countrate':Dbkg_countrate,
             'Dbkg_npix':Dbkg_npix}
+
 
 def get_dir_metadata(the_dir, new_files_limit=None):
     """
@@ -230,6 +236,7 @@ def get_dir_metadata(the_dir, new_files_limit=None):
     
     return new_idx
 
+
 def get_file_metadata(fname):
     # to add:
     # * signal at position of Ly α ?
@@ -268,6 +275,7 @@ def get_file_metadata(fname):
             'countrate_diagnostics':get_countrate_diagnostics(this_fits),
            }
 
+
 def get_lya_countrates(idx_entry):
     """
     Gets Ly α countrates
@@ -285,6 +293,7 @@ def get_lya_countrates(idx_entry):
     
     return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
             'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
+
 
 def get_n_int(hdul):
     """
@@ -306,6 +315,7 @@ def get_n_int(hdul):
         n_int = 1
         
     return n_int
+
 
 def has_geometry_pvec(hdul):
     """
@@ -331,6 +341,7 @@ def has_geometry_pvec(hdul):
     
     return (nanfrac < 1.0)
 
+
 def iuvs_filename_to_datetime(fname):
     """
     Collects the date and time of an observation from the filename. 
@@ -349,6 +360,7 @@ def iuvs_filename_to_datetime(fname):
     dt = datetime.datetime.strptime(dt_str,'%Y%m%dT%H%M%S')
     return dt
 
+
 def iuvs_orbno_from_fname(fname):
     """
     Collects the orbit number from the filename.
@@ -364,6 +376,7 @@ def iuvs_orbno_from_fname(fname):
     """
     orb_string = str(fname).split('orbit')[1][:5]
     return int(orb_string)
+
 
 def iuvs_segment_from_fname(fname):
     """
@@ -382,6 +395,7 @@ def iuvs_segment_from_fname(fname):
         raise ValueError('IUVS segments only apply to on-orbit data')
     
     return fname.split('_')[3].split('-orbit')[0]
+
 
 def locate_missing_frames(hdul, n_int):
     """
@@ -413,7 +427,8 @@ def locate_missing_frames(hdul, n_int):
     
     # no frames missing, data is clean
     return None
-            
+   
+
 def pix_to_bin(hdul, pix0, pix1, spaspe, return_npix=True):
     """
     ...description...
@@ -447,6 +462,7 @@ def pix_to_bin(hdul, pix0, pix1, spaspe, return_npix=True):
         return binlo, binhi, npix
     
     return binlo, binhi
+
 
 def update_index(rootpath, new_files_limit_per_run=1000):
     """
