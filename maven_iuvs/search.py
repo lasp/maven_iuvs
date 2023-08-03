@@ -63,7 +63,7 @@ def find_files(data_directory=None,
     pattern = get_filename_glob_string(**filename_kwargs)
 
     if data_directory is None:
-        from maven_iuvs.download import get_default_directory
+        from maven_iuvs.download import get_default_data_directory
         from maven_iuvs import (_iuvs_l1a_filenames_index,
                                 _iuvs_l1b_filenames_index)
         # ^^^ avoids circular import
@@ -75,7 +75,7 @@ def find_files(data_directory=None,
             _iuvs_filenames_index = _iuvs_l1b_filenames_index
             file_level = 'l1b'
 
-        data_directory = get_default_directory(level=file_level)
+        data_directory = get_default_data_directory(level=file_level)
         if use_index is None or use_index is True:
             use_index = True
         if len(_iuvs_filenames_index) == 0:
