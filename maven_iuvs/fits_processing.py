@@ -6,98 +6,6 @@ from pathlib import Path
 from maven_iuvs.search import find_files, get_latest_files
 
 
-def find_files_missing_geometry(file_index, show_total=False):
-    """
-    Identifies observation files with geometry
-
-    Parameters
-    ----------
-    file_index : index file (.npy) 
-                 dictionaries containing metadata of various observation files
-    show_total: binary
-                whether to print what fraction of total the missing files are
-    Returns
-    ----------
-    no_geom: list
-             metadata for files with don't have geometry
-    """
-    no_geom = [f for f in file_index if 'orbit' in f['name'] and not f['geom']]
-    
-    if show_total==True:
-        all_orbit_files = [f for f in file_index if 'orbit' in f['name']]
-        print(f'{len(no_geom)} of {len(all_orbit_files)} have no geometry.\n')
-        
-    return no_geom
-
-
-def find_files_with_geometry(file_index):
-    """
-    Opposite of find_files_missing_geometry
-
-    Parameters
-    ----------
-    file_index : index file (.npy) 
-                 dictionaries containing metadata of various observation files
-    show_total: binary
-                whether to print how many files of the total the files missing geometry comprise
-    Returns
-    ----------
-    with_geom: list
-             metadata for files with don't have geometry
-    """
-    with_geom = [f for f in file_index if 'orbit' in f['name'] and f['geom']]
-
-    # print(f'{len(with_geom)} have geometry.\n')
-    return with_geom
-
-
-def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
-    """
-    ...description...
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
-
-    Returns
-    -------
-    countrate : 
-    npix : 
-
-    """
-    binning = get_binning_scheme(hdul)
-    n_int = get_n_int(hdul)
-    
-    spalo, spahi = spapixrange
-    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
-                                             spalo, spahi, 'SPA')
-    spelo, spehi = spepixrange
-    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
-                                             spelo, spehi, 'SPE')
-
-    npix = nspapix*nspepix
-
-    if binning['nspa'] == 0 or binning['nspe'] == 0:
-        # data is bad and contains no frames
-        countsperpix = np.nan
-    elif n_int == 1:
-        # single integration
-        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
-    else: # n_int > 1
-        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
-        
-    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
-    
-    if return_npix:
-        return countrate, npix
-    
-    return countrate
-
-
 def get_binning_scheme(hdul):
     """
     Gets the binning scheme for a given FITS HDU.
@@ -136,62 +44,6 @@ def get_binning_scheme(hdul):
             'spepix0':spepix0, 'spebinwidth':spebinwidth, 'nspe':nspe,}
 
 
-def get_countrate_diagnostics(hdul):
-    """
-    ...description...
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
-
-    Returns
-    -------
-    countrate : 
-    npix : 
-
-    """
-    Hlya_spapixrange = np.array([346, 535])
-    Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
-    
-    Hbkg_spapixrange = Hlya_spapixrange + 2*(535-346)
-    Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
-    
-    Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])
-    Dbkg_countrate, Dbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [505, 540])
-    
-    return {'Hlya_countrate':Hlya_countrate,
-            'Hlya_npix':Hlya_npix,
-            'Hbkg_countrate':Hbkg_countrate,
-            'Hbkg_npix':Hbkg_npix,
-            'Dlya_countrate':Dlya_countrate,
-            'Dlya_npix':Dlya_npix,
-            'Dbkg_countrate':Dbkg_countrate,
-            'Dbkg_npix':Dbkg_npix}
-
-
-def get_lya_countrates(idx_entry):
-    """
-    Gets Ly α countrates
-    
-    Parameters
-    ----------
-    idx_entry : string
-               folder containing observations, sorted into subfolders labeled by orbit
-
-    Returns
-    -------
-    None -- just updates the index files 
-    """
-    rates = idx_entry['countrate_diagnostics']
-    
-    return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
-            'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
-
-
 def get_n_int(hdul):
     """
     Gets the number of integrations from a FITS HDUList object
@@ -212,31 +64,6 @@ def get_n_int(hdul):
         n_int = 1
         
     return n_int
-
-
-def has_geometry_pvec(hdul):
-    """
-    Determines whether geodetic latitudes are available for the pixels in the pixel vector
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-
-    Returns
-    -------
-    n_int : int
-            number of integrations
-
-    """    
-    geom_quantity = hdul['PixelGeometry'].data['PIXEL_CORNER_LAT']
-    
-    n_nan = np.sum(np.isnan(geom_quantity))
-    n_quant = np.product(np.shape(geom_quantity))
-
-    nanfrac = n_nan / n_quant
-    
-    return (nanfrac < 1.0)
 
 
 def iuvs_filename_to_datetime(fname):
@@ -326,7 +153,7 @@ def locate_missing_frames(hdul, n_int):
     return None
    
 
-def pix_to_bin(hdul, pix0, pix1, spaspe, return_npix=True):
+def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
     """
     ...description...
 
@@ -336,15 +163,18 @@ def pix_to_bin(hdul, pix0, pix1, spaspe, return_npix=True):
            HDU list for a given observation
     pix0 : 
     pix1 : 
-    spaspe : 
-    return_npix : 
+    spa_or_spe : string
+                 indicates whether this function will convert spatial or 
+                 spectral pixels to bins
+    return_npix : boolean
+                  whether to return the total number of pixels calculated
 
     Returns
     -------
 
     """
-    binpixlo = hdul['Binning'].data[spaspe+'PIXLO'][0]
-    binpixhi = hdul['Binning'].data[spaspe+'PIXHI'][0]
+    binpixlo = hdul['Binning'].data[spa_or_spe+'PIXLO'][0]
+    binpixhi = hdul['Binning'].data[spa_or_spe+'PIXHI'][0]
     binpixwidth = binpixhi+1 - binpixlo
     
     nbins = len(binpixlo)
@@ -361,6 +191,33 @@ def pix_to_bin(hdul, pix0, pix1, spaspe, return_npix=True):
     return binlo, binhi
 
 
+def get_pix_range(myfits, which="spatial"):
+    """
+    Given a fits observation, gets the range of pixels
+    for either the spatial or spectral dimension.
+    
+    Parameters
+    ----------
+    myfits : IUVSFITS or HDUList
+             IUVS FITS file in question
+    which: string
+           "spatial" or "spectral"
+           
+    Returns
+    ----------
+    Array of pixel values for bin edges.
+    """
+    pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
+    pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
+
+    if not (set((pixhi[:-1]+1)-pixlo[1:]) == {0}):
+        raise ValueError("Error in bin table")
+
+    pixrange = np.concatenate([[pixlo[0]], pixhi+1])
+
+    return pixrange
+
+    
 def update_index(rootpath, new_files_limit_per_run=1000):
     """
     Updates the index file for rootpath, where the index file has the form <rootpath>_metadata.npy.
