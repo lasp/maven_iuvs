@@ -9,9 +9,10 @@ import spiceypy as spice
 from astropy.io import fits
 from skimage.transform import resize
 import pkg_resources
-
+import idl_colorbars as idl_colorbars
 from maven_iuvs.instrument import slit_width_deg
 from maven_iuvs.constants import R_Mars_km
+from maven_iuvs.miscellaneous import get_grad_colors
 
 
 def beta_flip(hdul):
@@ -51,6 +52,440 @@ def beta_flip(hdul):
 
     # return the result
     return beta_flipped
+
+
+def find_files_missing_geometry(file_index, show_total=False):
+    """
+    Identifies observation files with geometry
+
+    Parameters
+    ----------
+    file_index : index file (.npy) 
+                 dictionaries containing metadata of various observation files
+    show_total: binary
+                whether to print what fraction of total the missing files are
+    Returns
+    ----------
+    no_geom: list
+             metadata for files with don't have geometry
+    """
+    no_geom = [f for f in file_index if 'orbit' in f['name'] and not f['geom']]
+    
+    if show_total==True:
+        all_orbit_files = [f for f in file_index if 'orbit' in f['name']]
+        print(f'{len(no_geom)} of {len(all_orbit_files)} have no geometry.\n')
+        
+    return no_geom
+
+
+def find_files_with_geometry(file_index):
+    """
+    Opposite of find_files_missing_geometry
+
+    Parameters
+    ----------
+    file_index : index file (.npy) 
+                 dictionaries containing metadata of various observation files
+    show_total: binary
+                whether to print how many files of the total the files missing geometry comprise
+    Returns
+    ----------
+    with_geom: list
+             metadata for files with don't have geometry
+    """
+    with_geom = [f for f in file_index if 'orbit' in f['name'] and f['geom']]
+
+    # print(f'{len(with_geom)} have geometry.\n')
+    return with_geom
+
+
+def find_maven_apsis(segment='periapse'):
+    """
+    Calculates the ephemeris times at apoapse or periapse for all MAVEN orbits between orbital insertion and now.
+    Requires furnishing of all SPICE kernels.
+
+    Parameters
+    ----------
+    segment : str
+        The orbit point at which to calculate the ephemeris time. Choices are 'periapse' and 'apoapse'. Defaults to
+        'periapse'.
+
+    Returns
+    -------
+    orbit_numbers : array
+        Array of MAVEN orbit numbers.
+    et_array : array
+        Array of ephemeris times for chosen orbit segment.
+    """
+
+    # set starting and ending times
+    et_start = 464623267  # MAVEN orbital insertion
+    et_end = spice.datetime2et(datetime.utcnow())  # right now
+
+    # do very complicated SPICE stuff
+    target = 'Mars'
+    abcorr = 'NONE'
+    observer = 'MAVEN'
+    relate = ''
+    refval = 0.
+    if segment == 'periapse':
+        relate = 'LOCMIN'
+        refval = 3396. + 500.
+    elif segment == 'apoapse':
+        relate = 'LOCMAX'
+        refval = 3396. + 6200.
+    adjust = 0.
+    step = 60.  # 1 minute steps, since we are only looking within periapse segment for periapsis
+    et = [et_start, et_end]
+    cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
+    spice.wninsd(et[0], et[1], cnfine)
+    ninterval = round((et[1] - et[0]) / step)
+    result = spice.utils.support_types.SPICEDOUBLE_CELL(round(1.1 * (et[1] - et[0]) / 4.5))
+    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
+    count = spice.wncard(result)
+    et_array = np.zeros(count)
+    if count == 0:
+        print('Result window is empty.')
+    else:
+        for i in range(count):
+            lr = spice.wnfetd(result, i)
+            left = lr[0]
+            right = lr[1]
+            if left == right:
+                et_array[i] = left
+
+    # make array of orbit numbers
+    orbit_numbers = np.arange(1, len(et_array) + 1, 1, dtype=int)
+
+    # return orbit numbers and array of ephemeris times
+    return orbit_numbers, et_array
+
+
+def get_orbit_positions():
+    """
+    Calculates orbit segment geometry information. Includes orbit numbers, ephemeris time, sub-spacecraft latitude,
+    longitude, and altitude (in km), and solar longitude for three orbit positions: start, periapse, apoapse.
+
+    Parameters
+    ----------
+    None.
+
+    Returns
+    -------
+    orbit_data : dict
+        Calculations of the spacecraft and Mars position.
+    """
+
+    # get ephemeris times for orbit apoapse and periapse points
+    orbit_numbers, periapse_et = find_maven_apsis(segment='periapse')
+    orbit_numbers, apoapse_et = find_maven_apsis(segment='apoapse')
+    n_orbits = len(orbit_numbers)
+
+    # make arrays to hold information
+    et = np.zeros((n_orbits, 3)) * np.nan
+    subsc_lat = np.zeros((n_orbits, 3)) * np.nan
+    subsc_lon = np.zeros((n_orbits, 3)) * np.nan
+    sc_alt_km = np.zeros((n_orbits, 3)) * np.nan
+    solar_longitude = np.zeros((n_orbits, 3)) * np.nan
+    subsolar_lat = np.zeros((n_orbits, 3)) * np.nan
+    subsolar_lon = np.zeros((n_orbits, 3)) * np.nan
+
+    # loop through orbit numbers and calculate positions
+    for i in range(n_orbits):
+
+        for j in range(3):
+
+            # first do orbit start positions
+            if j == 0:
+                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
+                    periapse_et[i] - 1284)
+
+            # then periapse positions
+            elif j == 1:
+                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
+                    periapse_et[i])
+
+            # and finally apoapse positions
+            else:
+                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
+                    apoapse_et[i])
+
+            # place calculations into arrays
+            et[i, j] = tet
+            subsc_lat[i, j] = tsubsc_lat
+            subsc_lon[i, j] = tsubsc_lon
+            sc_alt_km[i, j] = tsc_alt_km
+            solar_longitude[i, j] = tls
+            subsolar_lat[i, j] = tsubsolar_lat
+            subsolar_lon[i, j] = tsubsolar_lon
+
+    # make a dictionary of the calculations
+    orbit_data = {
+        'orbit_numbers': orbit_numbers,
+        'et': et,
+        'subsc_lat': subsc_lat,
+        'subsc_lon': subsc_lon,
+        'subsc_alt_km': sc_alt_km,
+        'solar_longitude': solar_longitude,
+        'subsolar_lat': subsolar_lat,
+        'subsolar_lon': subsolar_lon,
+        'position_indices': np.array(['orbit start (periapse - 21.4 minutes)', 'periapse', 'apoapse']),
+    }
+
+    # return the calculations
+    return orbit_data
+
+
+def get_sun_vector_iau(myfits):
+    """Get the IAU direction of the Sun from the input FITS file for each
+    integration.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface
+
+    Returns
+    -------
+    sun_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, 3), containing the
+        IAU_MARS direction of the Sun at each integration time.
+    """
+    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
+    subsolar_lat = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LAT']
+    return transform_lonlat_to_iau_vec(subsolar_lon, subsolar_lat)
+
+
+def get_pixel_mrh_point_iau_mars_vector(myfits):
+    """Get the IAU direction of the Pixel minimum ray height point for the
+    input FITS file.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    mrh_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5, 3),
+        containing the IAU_MARS direction of the pixel minimum ray
+        height point for this FITS file.
+
+    """
+    lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
+    lat = myfits['PixelGeometry'].data['PIXEL_CORNER_LAT']
+    return transform_lonlat_to_iau_vec(lon, lat)
+
+
+def get_pixel_corner_sza(myfits):
+    """Get the pixel corner Solar Zenith Angle for the input fits
+    file. This supersedes the PIXEL_SOLAR_ZENITH_ANGLE element of the
+    PixelGeometry header, supplying all 5 pixel corner elements
+    instead of just the center.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_corner_sza : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner solar zenith angle.
+
+    """
+    mrh_vecs_iau = get_pixel_mrh_point_iau_mars_vector(myfits)
+    sun_vecs_iau = get_sun_vector_iau(myfits)
+    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, mrh_vecs_iau)
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*mrh_vecs_iau, axis=-1)))
+
+
+def get_pixel_corner_local_time(myfits):
+    """Get the pixel corner local time for the input fits
+    file. This supersedes the PIXEL_LOCAL_TIME element of the
+    PixelGeometry header, supplying all 5 pixel corner elements
+    instead of just the center. Local time is defined as the
+    difference between the pixel longitude and the subsolar longitude
+    in degrees, converted to a 24-hour clock.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_lt : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner local time.
+
+    """
+
+    pixel_lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
+
+    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
+    subsolar_lon = reshape_to_pixel_vec(subsolar_lon, pixel_lon)
+
+    pixel_lt = np.mod(24/360*(pixel_lon-subsolar_lon)+12, 24)
+
+    return pixel_lt
+
+
+def get_pixel_corner_emission_angle(myfits):
+    """Get the pixel corner emission angle for the input fits file. This
+    supersedes the PIXEL_EMISSION_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Emission angle is defined as the angle between surface
+    normal and vector to spacecraft, at tangent or impact point.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_emission_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner emission angle.
+
+    """
+    mrh_pt_iau_vec = get_pixel_mrh_point_iau_mars_vector(myfits)
+    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                   (0, 2, 3, 1))
+    return np.degrees(np.arccos(np.sum(mrh_pt_iau_vec*pixel_look_vec,
+                                       axis=-1)))
+
+
+def get_pixel_corner_zenith_angle(myfits):
+    """Get the pixel corner zenith angle for the input fits file. This
+    supersedes the PIXEL_ZENITH_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Zenith angle is the angle between pixel look direction and
+    spacecraft zenith (90deg plus lookdown angle)
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_zenith_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner zenith angle.
+
+    """
+    pixel_look_vec = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                  (0, 2, 3, 1))
+
+    sc_zenith_vec = myfits['SpacecraftGeometry'].data['V_SPACECRAFT']
+    sc_zenith_vec = np.array([v/np.linalg.norm(v) for v in sc_zenith_vec])
+
+    # now reshape to the size of the pixel array
+    sc_zenith_vec = reshape_to_pixel_vec(sc_zenith_vec, pixel_look_vec)
+
+    return np.degrees(np.arccos(np.sum(sc_zenith_vec*pixel_look_vec,
+                                       axis=-1)))
+
+
+def get_pixel_corner_phase_angle(myfits):
+    """Get the pixel corner phase angle for the input fits file. This
+    supersedes the PIXEL_PHASE_ANGLE element of the PixelGeometry
+    header, supplying all 5 pixel corner elements instead of just the
+    center. Phase angle is defined as the angle between spacecraft
+    and sun as seen from tangent or impact point.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    pixel_phase_angle : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5)
+        containing the pixel corner phase angle.
+
+    """
+    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                                   (0, 2, 3, 1))
+    sun_vecs_iau = get_sun_vector_iau(myfits)
+    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, pixel_look_vec)
+
+    return np.degrees(np.arccos(np.sum(sun_vecs_iau*pixel_look_vec,
+                                       axis=-1)))
+
+
+def get_pixel_vec_mso(myfits):
+    """Return the MSO Pixel Vectors from the input IUVS FITS
+    file. Requires IUVS SPICE kernels.
+
+    Parameters
+    ----------
+    myfits : IUVSFITS or HDUList
+        An IUVS FITS file object.
+
+    Returns
+    -------
+    pixel_vec_mso : numpy array
+        A numpy array of MSO pixel vectors with dimensions
+        (n_integrations, n_spatial_bins, 5, 3).
+    """
+    # get the pixel vectors, which must be rehaped to put them in the
+    # expected form (n_int, n_spa, 5, 3)
+    pixel_vecs = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
+                              (0, 2, 3, 1))
+    pixel_vecs_shape = pixel_vecs.shape
+
+    # get the rotation matrices
+    rmat_iau_to_mso = np.array([spice.pxform('IAU_MARS', 'MAVEN_MSO', t)
+                                for t in myfits['Integration'].data['ET']])
+
+    # to do the multiplication of the vectors by the rotation matrix
+    # at each time using the efficient numpy.matmul command, we need
+    # to do some somewhat technical reshaping and flattening of the
+    # input arrays.
+    rmat_reshaped = np.reshape(np.repeat(rmat_iau_to_mso[:, np.newaxis, :, :],
+                                         5*pixel_vecs.shape[1],
+                                         axis=1),
+                               (-1, 3, 3))
+    pixel_vecs_reshaped = np.reshape(pixel_vecs, (-1, 3))[:, :, np.newaxis]
+
+    # transform the vectors
+    pixel_vecs_mso = np.matmul(rmat_reshaped, pixel_vecs_reshaped)
+
+    # return to the original shape
+    pixel_vecs_mso = np.reshape(pixel_vecs_mso, pixel_vecs_shape)
+
+    return pixel_vecs_mso
+
+
+def has_geometry_pvec(hdul):
+    """
+    Determines whether geodetic latitudes are available for the pixels in the pixel vector
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    n_int : int
+            number of integrations
+
+    """    
+    geom_quantity = hdul['PixelGeometry'].data['PIXEL_CORNER_LAT']
+    
+    n_nan = np.sum(np.isnan(geom_quantity))
+    n_quant = np.product(np.shape(geom_quantity))
+
+    nanfrac = n_nan / n_quant
+    
+    return (nanfrac < 1.0)
 
 
 def haversine(subsolar_latitude, subsolar_longitude, lat_dim=1800, lon_dim=3600):
@@ -303,521 +738,103 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
     return latitude, longitude, sza, local_time, x, y, cx, cy, context_map
 
 
-def find_maven_apsis(segment='periapse'):
+def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
     """
-    Calculates the ephemeris times at apoapse or periapse for all MAVEN orbits between orbital insertion and now.
-    Requires furnishing of all SPICE kernels.
-
+    Plots the spacecraft SZA procession vs. integration.
+    
     Parameters
     ----------
-    segment : str
-        The orbit point at which to calculate the ephemeris time. Choices are 'periapse' and 'apoapse'. Defaults to
-        'periapse'.
-
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    linecolor : string
+               color to use for plot lines.
+    
     Returns
-    -------
-    orbit_numbers : array
-        Array of MAVEN orbit numbers.
-    et_array : array
-        Array of ephemeris times for chosen orbit segment.
+    ----------
+    none
     """
+    SZA_arr = fitfile["PixelGeometry"].data["PIXEL_SOLAR_ZENITH_ANGLE"]
+    SZA_arr_shape = SZA_arr.shape
+    total_ints = SZA_arr_shape[0]
+    intnum = 1
+    
+    for i in range(0, total_ints):
+        ax.plot([intnum]*SZA_arr_shape[1], SZA_arr[i], color=linecolor)
+        intnum += 1
+    
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_ylabel("SZA (°)", fontsize=20)
+    ax.set_ylim(0,180)
+    ax.set_title("Solar zenith angle", fontsize=20)
+    
 
-    # set starting and ending times
-    et_start = 464623267  # MAVEN orbital insertion
-    et_end = spice.datetime2et(datetime.utcnow())  # right now
-
-    # do very complicated SPICE stuff
-    target = 'Mars'
-    abcorr = 'NONE'
-    observer = 'MAVEN'
-    relate = ''
-    refval = 0.
-    if segment == 'periapse':
-        relate = 'LOCMIN'
-        refval = 3396. + 500.
-    elif segment == 'apoapse':
-        relate = 'LOCMAX'
-        refval = 3396. + 6200.
-    adjust = 0.
-    step = 60.  # 1 minute steps, since we are only looking within periapse segment for periapsis
-    et = [et_start, et_end]
-    cnfine = spice.utils.support_types.SPICEDOUBLE_CELL(2)
-    spice.wninsd(et[0], et[1], cnfine)
-    ninterval = round((et[1] - et[0]) / step)
-    result = spice.utils.support_types.SPICEDOUBLE_CELL(round(1.1 * (et[1] - et[0]) / 4.5))
-    spice.gfdist(target, abcorr, observer, relate, refval, adjust, step, ninterval, cnfine, result=result)
-    count = spice.wncard(result)
-    et_array = np.zeros(count)
-    if count == 0:
-        print('Result window is empty.')
-    else:
-        for i in range(count):
-            lr = spice.wnfetd(result, i)
-            left = lr[0]
-            right = lr[1]
-            if left == right:
-                et_array[i] = left
-
-    # make array of orbit numbers
-    orbit_numbers = np.arange(1, len(et_array) + 1, 1, dtype=int)
-
-    # return orbit numbers and array of ephemeris times
-    return orbit_numbers, et_array
-
-
-def spice_positions(et):
+def make_SCalt_plot(ax, fitfile, t=""):
     """
-    Calculates MAVEN spacecraft position, Mars solar longitude, and subsolar position for a given ephemeris time.
-
+    Plots the spacecraft altitude procession vs. integration.
+    
     Parameters
     ----------
-    et : float
-        Input epoch in ephemeris seconds past J2000.
-
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    t : string
+        Optional extra text for the plot title
+    
     Returns
-    -------
-    et : array
-        The input ephemeris times. Just givin'em back.
-    subsc_lat : array
-        Sub-spacecraft latitudes in degrees.
-    subsc_lon : array
-        Sub-spacecraft longitudes in degrees.
-    sc_alt_km : array
-        Sub-spacecraft altitudes in kilometers.
-    ls : array
-        Mars solar longitudes in degrees.
-    subsolar_lat : array
-        Sub-solar latitudes in degrees.
-    subsolar_lon : array
-        Sub-solar longitudes in degrees.
+    ----------
+    none
     """
-
-    # do a bunch of SPICE stuff only Justin understands...
-    target = 'Mars'
-    abcorr = 'LT+S'
-    observer = 'MAVEN'
-    spoint, trgepc, srfvec = spice.subpnt('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
-    rpoint, colatpoint, lonpoint = spice.recsph(spoint)
-    if lonpoint > np.pi:
-        lonpoint -= 2 * np.pi
-    subsc_lat = 90 - np.degrees(colatpoint)
-    subsc_lon = np.degrees(lonpoint)
-    sc_alt_km = np.sqrt(np.sum(srfvec ** 2))
-
-    # calculate subsolar position
-    sspoint, strgepc, ssrfvec = spice.subslr('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
-    srpoint, scolatpoint, slonpoint = spice.recsph(sspoint)
-    if slonpoint > np.pi:
-        slonpoint -= 2 * np.pi
-    subsolar_lat = 90 - np.degrees(scolatpoint)
-    subsolar_lon = np.degrees(slonpoint)
-
-    # calculate solar longitude
-    ls = spice.lspcn(target, et, abcorr)
-    ls = np.degrees(ls)
-
-    # return the position information
-    return et, subsc_lat, subsc_lon, sc_alt_km, ls, subsolar_lat, subsolar_lon
-
-
-def get_orbit_positions():
+    arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
+    arr_shape = arr.shape
+    
+    ax.scatter(range(0,arr_shape[0]), arr, color="cornflowerblue", s=15)
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_ylabel("Alt (km)", fontsize=20)
+    ax.set_title(f"Spacecraft altitude{t}", fontsize=20)
+    
+    
+def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76), mikes=True):
     """
-    Calculates orbit segment geometry information. Includes orbit numbers, ephemeris time, sub-spacecraft latitude,
-    longitude, and altitude (in km), and solar longitude for three orbit positions: start, periapse, apoapse.
-
+    Plots the latitude and longitude of the spacecraft tangent line to the surface vs. integration.
+    
     Parameters
     ----------
-    None.
-
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    t : string
+        Optional extra text for the plot title
+    colmap : name of a colormap or a cmap object from Mike's idl_colorbars module
+             Colormap to use for the lines to show progression in time.
+    
     Returns
-    -------
-    orbit_data : dict
-        Calculations of the spacecraft and Mars position.
-    """
-
-    # get ephemeris times for orbit apoapse and periapse points
-    orbit_numbers, periapse_et = find_maven_apsis(segment='periapse')
-    orbit_numbers, apoapse_et = find_maven_apsis(segment='apoapse')
-    n_orbits = len(orbit_numbers)
-
-    # make arrays to hold information
-    et = np.zeros((n_orbits, 3)) * np.nan
-    subsc_lat = np.zeros((n_orbits, 3)) * np.nan
-    subsc_lon = np.zeros((n_orbits, 3)) * np.nan
-    sc_alt_km = np.zeros((n_orbits, 3)) * np.nan
-    solar_longitude = np.zeros((n_orbits, 3)) * np.nan
-    subsolar_lat = np.zeros((n_orbits, 3)) * np.nan
-    subsolar_lon = np.zeros((n_orbits, 3)) * np.nan
-
-    # loop through orbit numbers and calculate positions
-    for i in range(n_orbits):
-
-        for j in range(3):
-
-            # first do orbit start positions
-            if j == 0:
-                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
-                    periapse_et[i] - 1284)
-
-            # then periapse positions
-            elif j == 1:
-                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
-                    periapse_et[i])
-
-            # and finally apoapse positions
-            else:
-                tet, tsubsc_lat, tsubsc_lon, tsc_alt_km, tls, tsubsolar_lat, tsubsolar_lon = spice_positions(
-                    apoapse_et[i])
-
-            # place calculations into arrays
-            et[i, j] = tet
-            subsc_lat[i, j] = tsubsc_lat
-            subsc_lon[i, j] = tsubsc_lon
-            sc_alt_km[i, j] = tsc_alt_km
-            solar_longitude[i, j] = tls
-            subsolar_lat[i, j] = tsubsolar_lat
-            subsolar_lon[i, j] = tsubsolar_lon
-
-    # make a dictionary of the calculations
-    orbit_data = {
-        'orbit_numbers': orbit_numbers,
-        'et': et,
-        'subsc_lat': subsc_lat,
-        'subsc_lon': subsc_lon,
-        'subsc_alt_km': sc_alt_km,
-        'solar_longitude': solar_longitude,
-        'subsolar_lat': subsolar_lat,
-        'subsolar_lon': subsolar_lon,
-        'position_indices': np.array(['orbit start (periapse - 21.4 minutes)', 'periapse', 'apoapse']),
-    }
-
-    # return the calculations
-    return orbit_data
-
-
-def rotation_matrix(axis, theta):
-    """
-    Return the rotation matrix associated with counterclockwise rotation about the given axis by theta radians.
-    To transform a vector, calculate its dot-product with the rotation matrix.
-
-    Parameters
     ----------
-    axis : 3-element list, array, or tuple
-        The rotation axis in Cartesian coordinates. Does not have to be a unit vector.
-    theta : float
-        The angle (in radians) to rotate about the rotation axis. Positive angles rotate counter-clockwise.
-
-    Returns
-    -------
-    matrix : array
-        The 3D rotation matrix with dimensions (3,3).
+    none
     """
-
-    # convert the axis to a numpy array and normalize it
-    axis = np.array(axis)
-    axis = axis / np.linalg.norm(axis)
-
-    # calculate components of the rotation matrix elements
-    a = np.cos(theta / 2)
-    b, c, d = -axis * np.sin(theta / 2)
-    aa, bb, cc, dd = a * a, b * b, c * c, d * d
-    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
-
-    # build the rotation matrix
-    matrix = np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                       [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                       [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
-
-    # return the rotation matrix
-    return matrix
-
-
-def transform_lonlat_to_iau_vec(lon, lat):
-    """Return an array of 3-vectors matching the dimension of the input
-    lon/lat arrays, containing the IAU_MARS vector defined by the
-    input lat/lon.
-
-    Parameters
-    ----------
-    lon : numpy ndarray
-        Longitudes of the points.
-    lat : numpy ndarray
-        Latitudes of the points, with the same dimensionality as the
-        Longitude array
-
-    Returns
-    -------
-    iau_vec : array
-        Array of three-vectors in IAU Mars, with a new dimension of
-        size three as the last dimension of the array.
-    """
-    lon = np.radians(np.array(lon))
-    lat = np.radians(np.array(lat))
-    iau_vec = np.array([np.cos(lat)*np.cos(lon),
-                        np.cos(lat)*np.sin(lon),
-                        np.sin(lat)])
-    return np.transpose(iau_vec,
-                        axes=np.roll(range(lon.ndim+1), -1))
-
-
-def get_sun_vector_iau(myfits):
-    """Get the IAU direction of the Sun from the input FITS file for each
-    integration.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface
-
-    Returns
-    -------
-    sun_vecs_iau : numpy ndarray
-        Array of dimension (n_integrations, 3), containing the
-        IAU_MARS direction of the Sun at each integration time.
-    """
-    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
-    subsolar_lat = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LAT']
-    return transform_lonlat_to_iau_vec(subsolar_lon, subsolar_lat)
-
-
-def get_pixel_mrh_point_iau_mars_vector(myfits):
-    """Get the IAU direction of the Pixel minimum ray height point for the
-    input FITS file.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    mrh_vecs_iau : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5, 3),
-        containing the IAU_MARS direction of the pixel minimum ray
-        height point for this FITS file.
-
-    """
-    lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
-    lat = myfits['PixelGeometry'].data['PIXEL_CORNER_LAT']
-    return transform_lonlat_to_iau_vec(lon, lat)
-
-
-def reshape_to_pixel_vec(arr, pixel_vec):
-    """Reshape the input array to have the same dimensions at pixel_vec,
-    repeating elements along the spatial bin and pixel corner axis.
-
-    Parameters
-    ----------
-    arr : array
-        Array to be broadcast to the shape of pixel_vec. Can be 1- or
-        2- dimensional.
-    pixel_vec : array
-        Array to match the shape of.
-
-    Returns
-    -------
-    reshaped : numpy ndarray
-        Input array with elements repeated along the spatial and pixel
-        corner axis.
-
-    """
-    arr = np.array(arr)
-
-    # add the new axes to be repeated.
-    arr = arr[:, np.newaxis, np.newaxis]
-
-    reshaped = np.repeat(np.repeat(arr,
-                                   pixel_vec.shape[1],
-                                   axis=1),
-                         pixel_vec.shape[2],
-                         axis=2)
-
-    return reshaped
-
-
-def get_pixel_corner_sza(myfits):
-    """Get the pixel corner Solar Zenith Angle for the input fits
-    file. This supersedes the PIXEL_SOLAR_ZENITH_ANGLE element of the
-    PixelGeometry header, supplying all 5 pixel corner elements
-    instead of just the center.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    pixel_corner_sza : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5)
-        containing the pixel corner solar zenith angle.
-
-    """
-    mrh_vecs_iau = get_pixel_mrh_point_iau_mars_vector(myfits)
-    sun_vecs_iau = get_sun_vector_iau(myfits)
-    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, mrh_vecs_iau)
-    return np.degrees(np.arccos(np.sum(sun_vecs_iau*mrh_vecs_iau, axis=-1)))
-
-
-def get_pixel_corner_local_time(myfits):
-    """Get the pixel corner local time for the input fits
-    file. This supersedes the PIXEL_LOCAL_TIME element of the
-    PixelGeometry header, supplying all 5 pixel corner elements
-    instead of just the center. Local time is defined as the
-    difference between the pixel longitude and the subsolar longitude
-    in degrees, converted to a 24-hour clock.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    pixel_lt : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5)
-        containing the pixel corner local time.
-
-    """
-
-    pixel_lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
-
-    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
-    subsolar_lon = reshape_to_pixel_vec(subsolar_lon, pixel_lon)
-
-    pixel_lt = np.mod(24/360*(pixel_lon-subsolar_lon)+12, 24)
-
-    return pixel_lt
-
-
-def get_pixel_corner_emission_angle(myfits):
-    """Get the pixel corner emission angle for the input fits file. This
-    supersedes the PIXEL_EMISSION_ANGLE element of the PixelGeometry
-    header, supplying all 5 pixel corner elements instead of just the
-    center. Emission angle is defined as the angle between surface
-    normal and vector to spacecraft, at tangent or impact point.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    pixel_emission_angle : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5)
-        containing the pixel corner emission angle.
-
-    """
-    mrh_pt_iau_vec = get_pixel_mrh_point_iau_mars_vector(myfits)
-    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
-                                   (0, 2, 3, 1))
-    return np.degrees(np.arccos(np.sum(mrh_pt_iau_vec*pixel_look_vec,
-                                       axis=-1)))
-
-
-def get_pixel_corner_zenith_angle(myfits):
-    """Get the pixel corner zenith angle for the input fits file. This
-    supersedes the PIXEL_ZENITH_ANGLE element of the PixelGeometry
-    header, supplying all 5 pixel corner elements instead of just the
-    center. Zenith angle is the angle between pixel look direction and
-    spacecraft zenith (90deg plus lookdown angle)
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    pixel_zenith_angle : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5)
-        containing the pixel corner zenith angle.
-
-    """
-    pixel_look_vec = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
-                                  (0, 2, 3, 1))
-
-    sc_zenith_vec = myfits['SpacecraftGeometry'].data['V_SPACECRAFT']
-    sc_zenith_vec = np.array([v/np.linalg.norm(v) for v in sc_zenith_vec])
-
-    # now reshape to the size of the pixel array
-    sc_zenith_vec = reshape_to_pixel_vec(sc_zenith_vec, pixel_look_vec)
-
-    return np.degrees(np.arccos(np.sum(sc_zenith_vec*pixel_look_vec,
-                                       axis=-1)))
-
-
-def get_pixel_corner_phase_angle(myfits):
-    """Get the pixel corner phase angle for the input fits file. This
-    supersedes the PIXEL_PHASE_ANGLE element of the PixelGeometry
-    header, supplying all 5 pixel corner elements instead of just the
-    center. Phase angle is defined as the angle between spacecraft
-    and sun as seen from tangent or impact point.
-
-    Parameters
-    ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
-
-    Returns
-    -------
-    pixel_phase_angle : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5)
-        containing the pixel corner phase angle.
-
-    """
-    pixel_look_vec = -np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
-                                   (0, 2, 3, 1))
-    sun_vecs_iau = get_sun_vector_iau(myfits)
-    sun_vecs_iau = reshape_to_pixel_vec(sun_vecs_iau, pixel_look_vec)
-
-    return np.degrees(np.arccos(np.sum(sun_vecs_iau*pixel_look_vec,
-                                       axis=-1)))
-
-
-def get_pixel_vec_mso(myfits):
-    """Return the MSO Pixel Vectors from the input IUVS FITS
-    file. Requires IUVS SPICE kernels.
-
-    Parameters
-    ----------
-    myfits : IUVSFITS or HDUList
-        An IUVS FITS file object.
-
-    Returns
-    -------
-    pixel_vec_mso : numpy array
-        A numpy array of MSO pixel vectors with dimensions
-        (n_integrations, n_spatial_bins, 5, 3).
-    """
-    # get the pixel vectors, which must be rehaped to put them in the
-    # expected form (n_int, n_spa, 5, 3)
-    pixel_vecs = np.transpose(myfits['PixelGeometry'].data['PIXEL_VEC'],
-                              (0, 2, 3, 1))
-    pixel_vecs_shape = pixel_vecs.shape
-
-    # get the rotation matrices
-    rmat_iau_to_mso = np.array([spice.pxform('IAU_MARS', 'MAVEN_MSO', t)
-                                for t in myfits['Integration'].data['ET']])
-
-    # to do the multiplication of the vectors by the rotation matrix
-    # at each time using the efficient numpy.matmul command, we need
-    # to do some somewhat technical reshaping and flattening of the
-    # input arrays.
-    rmat_reshaped = np.reshape(np.repeat(rmat_iau_to_mso[:, np.newaxis, :, :],
-                                         5*pixel_vecs.shape[1],
-                                         axis=1),
-                               (-1, 3, 3))
-    pixel_vecs_reshaped = np.reshape(pixel_vecs, (-1, 3))[:, :, np.newaxis]
-
-    # transform the vectors
-    pixel_vecs_mso = np.matmul(rmat_reshaped, pixel_vecs_reshaped)
-
-    # return to the original shape
-    pixel_vecs_mso = np.reshape(pixel_vecs_mso, pixel_vecs_shape)
-
-    return pixel_vecs_mso
+    lat_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LAT"]
+    lon_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LON"]
+    
+    lat_arr_shape = lat_arr.shape
+    total_ints = lat_arr_shape[0]
+    intnum = 1
+    
+    colors = get_grad_colors(total_ints, colmap, mikes=mikes)
+        
+    # Loop over integrations
+    for i in range(0, lat_arr_shape[0]):      
+        ax.plot(lon_arr[i, :, -1], lat_arr[i, :, -1], color=colors[i, :])
+        intnum += 1
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Longitude", fontsize=20)
+    ax.set_ylabel("Latitude", fontsize=20)
+
+    ax.set_title(f"Tangent point lat/lon{t}", fontsize=20)
 
 
 def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None,
@@ -941,3 +958,156 @@ def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None,
         return avgxy[:, :, 0], avgxy[:, :, 1], avgxy[:, :, 2]
 
     return avgxy[:, :, 0], avgxy[:, :, 1]
+
+def reshape_to_pixel_vec(arr, pixel_vec):
+    """Reshape the input array to have the same dimensions at pixel_vec,
+    repeating elements along the spatial bin and pixel corner axis.
+
+    Parameters
+    ----------
+    arr : array
+        Array to be broadcast to the shape of pixel_vec. Can be 1- or
+        2- dimensional.
+    pixel_vec : array
+        Array to match the shape of.
+
+    Returns
+    -------
+    reshaped : numpy ndarray
+        Input array with elements repeated along the spatial and pixel
+        corner axis.
+
+    """
+    arr = np.array(arr)
+
+    # add the new axes to be repeated.
+    arr = arr[:, np.newaxis, np.newaxis]
+
+    reshaped = np.repeat(np.repeat(arr,
+                                   pixel_vec.shape[1],
+                                   axis=1),
+                         pixel_vec.shape[2],
+                         axis=2)
+
+    return reshaped
+
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about the given axis by theta radians.
+    To transform a vector, calculate its dot-product with the rotation matrix.
+
+    Parameters
+    ----------
+    axis : 3-element list, array, or tuple
+        The rotation axis in Cartesian coordinates. Does not have to be a unit vector.
+    theta : float
+        The angle (in radians) to rotate about the rotation axis. Positive angles rotate counter-clockwise.
+
+    Returns
+    -------
+    matrix : array
+        The 3D rotation matrix with dimensions (3,3).
+    """
+
+    # convert the axis to a numpy array and normalize it
+    axis = np.array(axis)
+    axis = axis / np.linalg.norm(axis)
+
+    # calculate components of the rotation matrix elements
+    a = np.cos(theta / 2)
+    b, c, d = -axis * np.sin(theta / 2)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+
+    # build the rotation matrix
+    matrix = np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+                       [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                       [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+    # return the rotation matrix
+    return matrix
+
+
+def spice_positions(et):
+    """
+    Calculates MAVEN spacecraft position, Mars solar longitude, and subsolar position for a given ephemeris time.
+
+    Parameters
+    ----------
+    et : float
+        Input epoch in ephemeris seconds past J2000.
+
+    Returns
+    -------
+    et : array
+        The input ephemeris times. Just givin'em back.
+    subsc_lat : array
+        Sub-spacecraft latitudes in degrees.
+    subsc_lon : array
+        Sub-spacecraft longitudes in degrees.
+    sc_alt_km : array
+        Sub-spacecraft altitudes in kilometers.
+    ls : array
+        Mars solar longitudes in degrees.
+    subsolar_lat : array
+        Sub-solar latitudes in degrees.
+    subsolar_lon : array
+        Sub-solar longitudes in degrees.
+    """
+
+    # do a bunch of SPICE stuff only Justin understands...
+    target = 'Mars'
+    abcorr = 'LT+S'
+    observer = 'MAVEN'
+    spoint, trgepc, srfvec = spice.subpnt('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    rpoint, colatpoint, lonpoint = spice.recsph(spoint)
+    if lonpoint > np.pi:
+        lonpoint -= 2 * np.pi
+    subsc_lat = 90 - np.degrees(colatpoint)
+    subsc_lon = np.degrees(lonpoint)
+    sc_alt_km = np.sqrt(np.sum(srfvec ** 2))
+
+    # calculate subsolar position
+    sspoint, strgepc, ssrfvec = spice.subslr('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    srpoint, scolatpoint, slonpoint = spice.recsph(sspoint)
+    if slonpoint > np.pi:
+        slonpoint -= 2 * np.pi
+    subsolar_lat = 90 - np.degrees(scolatpoint)
+    subsolar_lon = np.degrees(slonpoint)
+
+    # calculate solar longitude
+    ls = spice.lspcn(target, et, abcorr)
+    ls = np.degrees(ls)
+
+    # return the position information
+    return et, subsc_lat, subsc_lon, sc_alt_km, ls, subsolar_lat, subsolar_lon
+
+
+def transform_lonlat_to_iau_vec(lon, lat):
+    """Return an array of 3-vectors matching the dimension of the input
+    lon/lat arrays, containing the IAU_MARS vector defined by the
+    input lat/lon.
+
+    Parameters
+    ----------
+    lon : numpy ndarray
+        Longitudes of the points.
+    lat : numpy ndarray
+        Latitudes of the points, with the same dimensionality as the
+        Longitude array
+
+    Returns
+    -------
+    iau_vec : array
+        Array of three-vectors in IAU Mars, with a new dimension of
+        size three as the last dimension of the array.
+    """
+    lon = np.radians(np.array(lon))
+    lat = np.radians(np.array(lat))
+    iau_vec = np.array([np.cos(lat)*np.cos(lon),
+                        np.cos(lat)*np.sin(lon),
+                        np.sin(lat)])
+    return np.transpose(iau_vec,
+                        axes=np.roll(range(lon.ndim+1), -1))
+
