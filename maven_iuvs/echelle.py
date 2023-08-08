@@ -2,20 +2,31 @@ import datetime
 import numpy as np
 import textwrap
 import os 
-import astropy.fits as fits
+import copy
+import matplotlib.gridspec as gs
+import matplotlib.pyplot as plt
+import matplotlib.transforms as transforms
+from astropy.io import fits
 
-from maven_iuvs.fits_processing import find_files_missing_geometry, \
-    find_files_with_geometry, get_binning_scheme,  \
-    get_n_int, has_geometry_pvec, locate_missing_frames, \
-    get_countrate_diagnostics, iuvs_orbno_from_fname, \
-    iuvs_filename_to_datetime, iuvs_segment_from_fname \
+from maven_iuvs.user_paths import l1a_dir
+from maven_iuvs.miscellaneous import find_nearest
+from maven_iuvs.graphics.line_fit_plot import detector_image
+from maven_iuvs.time import utc_to_sol
+
+from maven_iuvs.fits_processing import get_binning_scheme,  \
+    get_n_int, locate_missing_frames, iuvs_orbno_from_fname, \
+    iuvs_filename_to_datetime, iuvs_segment_from_fname, pix_to_bin, \
+    get_pix_range
+
+from maven_iuvs.geometry import find_files_missing_geometry, \
+    find_files_with_geometry, has_geometry_pvec, make_SCalt_plot, make_sza_plot, make_tangent_lat_lon_plot
 
 from maven_iuvs.search import get_latest_files, find_files
 
 
 def ech_isdark(fidx):
     """
-    Identifies whether an echelle file contains dark integrations.
+    Identifies whether an echelle file contains dark integrations by checking the gain.
 
     Parameters
     ----------
@@ -26,8 +37,7 @@ def ech_isdark(fidx):
     True or False
     """
 
-    # TODO: apply more sophisticated test to determine if really dark
-    return ('dark' in fidx['name'])
+    return fidx["mcp_gain"] <= 0.5
 
 
 def ech_islight(fidx):
@@ -43,6 +53,55 @@ def ech_islight(fidx):
     True or False
     """
     return not ech_isdark(fidx)
+
+
+def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
+    """
+    Fills a dictionary, lights_and_darks, with light and dark metadata for a given light observation file,    
+    which makes it easier to process quicklooks. Calls on find_dark_options, so any errors in dark association
+    should be fixed within that function.
+    
+    Parameters
+    ----------
+    selected_l1a : list of dictionaries
+                   selected l1a metadata entries to use
+    dark_idx : list of dictionaries
+               Metadata for all available darkfiles in the pipeline
+    verbose : boolean
+              whether to print messages when silent problems are encountered
+               
+    Returns
+    ----------
+    lights_and_darks : dictionary of lists of dictionaries
+                       Format: {"light_filename": [light_metadata, dark_metadata]}
+    """
+    
+    lights_and_darks = {}
+    lights_missing_darks = []
+    
+    for fidx in selected_l1a:
+        try:
+            dark_opts = find_dark_options(fidx, dark_idx) 
+
+            if len(dark_opts) > 1: 
+                if verbose:
+                    print((f"Oh no! Too many dark files ({len(dark_opts)}) for file {fidx['name']}! Code should be written within find_dark_options to handle this. Skipping for now."))
+                    print(f"Here are the dark opts for {fidx['name']}: ")
+                    for d in dark_opts:
+                        print(d['name'])
+                    
+                continue
+            if dark_opts:  # assuming there ARE some options,
+                lights_and_darks[fidx['name']] = (fidx, dark_opts[0])  # the entry key will be the light filename, and we will add the light index info for reference
+        except ValueError:
+            if ech_isdark(fidx):
+                pass  # don't need to worry if there's no dark file for a dark file, it is itself already.
+            else:
+                lights_missing_darks.append(fidx["name"])  # but if it's a light file missing a dark, we would like to know.
+
+            continue
+            
+    return lights_and_darks, lights_missing_darks
 
 
 def find_dark_options(input_light_idx, idx_list_to_search):
@@ -76,6 +135,90 @@ def find_dark_options(input_light_idx, idx_list_to_search):
                         and ech_isdark(didx))]
     
     return dark_options
+
+
+def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
+    """
+    ...description...
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : 
+    spapixrange : 
+    return_npix : 
+
+    Returns
+    -------
+    countrate : 
+    npix : 
+
+    """
+    binning = get_binning_scheme(hdul)
+    n_int = get_n_int(hdul)
+    
+    spalo, spahi = spapixrange  # spatial pixels 
+    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
+                                             spalo, spahi, 'SPA')
+    spelo, spehi = spepixrange
+    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
+                                             spelo, spehi, 'SPE')
+
+    npix = nspapix*nspepix
+
+    if binning['nspa'] == 0 or binning['nspe'] == 0:
+        # data is bad and contains no frames
+        countsperpix = np.nan
+    elif n_int == 1:
+        # single integration
+        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
+    else: # n_int > 1
+        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
+        
+    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
+    
+    if return_npix:
+        return countrate, npix
+    
+    return countrate
+
+
+def get_countrate_diagnostics(hdul):
+    """
+    ...description...
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : 
+    spapixrange : 
+    return_npix : 
+
+    Returns
+    -------
+    countrate : 
+    npix : 
+
+    """
+    Hlya_spapixrange = np.array([346, 535])
+    Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
+    
+    Hbkg_spapixrange = Hlya_spapixrange + 2*(535-346)
+    Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
+    
+    Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])
+    Dbkg_countrate, Dbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [505, 540])
+    
+    return {'Hlya_countrate':Hlya_countrate,
+            'Hlya_npix':Hlya_npix,
+            'Hbkg_countrate':Hbkg_countrate,
+            'Hbkg_npix':Hbkg_npix,
+            'Dlya_countrate':Dlya_countrate,
+            'Dlya_npix':Dlya_npix,
+            'Dbkg_countrate':Dbkg_countrate,
+            'Dbkg_npix':Dbkg_npix}
 
 
 def get_dir_metadata(the_dir, new_files_limit=None):
@@ -169,6 +312,7 @@ def get_file_metadata(fname):
     shape = (n_int, binning['nspa'], binning['nspe'])
     
     return {'name': os.path.basename(fname),
+            'orbit': this_fits['Observation'].data['ORBIT_NUMBER'][0],
             'shape': shape,
             'n_int': n_int,
             'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
@@ -179,6 +323,25 @@ def get_file_metadata(fname):
             'missing_frames': locate_missing_frames(this_fits, n_int),
             'countrate_diagnostics': get_countrate_diagnostics(this_fits)
            }
+
+
+def get_lya_countrates(idx_entry):
+    """
+    Gets Ly α countrates
+    
+    Parameters
+    ----------
+    idx_entry : string
+               folder containing observations, sorted into subfolders labeled by orbit
+
+    Returns
+    -------
+    None -- just updates the index files 
+    """
+    rates = idx_entry['countrate_diagnostics']
+    
+    return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
+            'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
 
 
 def identify_rogue_observations(idx):
@@ -245,6 +408,22 @@ def identify_rogue_observations(idx):
         if no_issues:
             print('  No issues.')
 
+
+def make_dark_index(ech_l1a_idx):
+    """
+    Takes the index of l1a file metadata, ech_l1a_idx, and makes a similar index that will be used 
+    to find dark files. note that the return value is NOT darks only.
+    
+    Parameters
+    ----------
+    ech_l1a_idx : list of dictionaries
+                  metadata for all light observation files.
+    """
+    dark_idx = [fidx for fidx in ech_l1a_idx if (('orbit' in fidx['name']) and ech_isdark(fidx))]
+    dark_idx = sorted(dark_idx, key=lambda i:i['datetime'])
+    
+    return dark_idx
+
 # WEEKLY REPORT CODE ==================================================
 
 
@@ -265,7 +444,7 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
     """
     # Load the index file
     idx = get_dir_metadata(root_folder)
-    
+ 
     # Get data on new files 
     weekly_report_datetime_start = datetime.datetime.utcnow() - datetime.timedelta(weeks=weeks_before_now_to_report)
 
@@ -290,8 +469,14 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
     print(f'Data available through ------> orbit {latest_orbit_with_files} ({iuvs_filename_to_datetime(weekly_report_idx[-1]["name"]).isoformat()[:10]})')
 
     geom_files = find_files_with_geometry(weekly_report_idx)
-    latest_orbit_with_geometry = iuvs_orbno_from_fname(geom_files[-1])
-    print(f'Geometry available through --> orbit {latest_orbit_with_geometry} ({iuvs_filename_to_datetime(geom_files[-1]["name"]).isoformat()[:10]})')
+    try:
+        latest_orbit_with_geometry = iuvs_orbno_from_fname(geom_files[-1])
+        print(f'Geometry available through --> orbit {latest_orbit_with_geometry} ({iuvs_filename_to_datetime(geom_files[-1]["name"]).isoformat()[:10]})')
+    except IndexError:
+        print(f'Geometry not available after orbit {iuvs_orbno_from_fname(weekly_report_idx[0])}. ')
+        geom_idx = [fidx for fidx in idx if fidx['geom'] == True]
+        print(f"Most recent file with geometry: {iuvs_orbno_from_fname(geom_idx[-1]['name'])}")
+
 
     nogeom_files = find_files_missing_geometry(weekly_report_idx)
     nogeom_orbits = np.unique([iuvs_orbno_from_fname(f['name']) for f in nogeom_files if 'orbit' in f['name']])
@@ -315,3 +500,379 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
 
     # Now list issues with each segment type
     identify_rogue_observations(weekly_report_idx)
+
+
+# QUICKLOOK CODE ======================================================
+
+
+def quicklook_figure_skeleton(N_thumbs, figsz=(32, 22), thumb_cols=11):
+    """
+    Creates the sketch of the quicklook figure, i.e. the "skeleton".
+
+    Parameters
+    ----------
+    N_thumbs : int
+               number of thumbnails to print at the bottom of the figure
+               Should be equal to number of light integrations, including
+               nan frames.
+    figsz : tuple
+            optional override for figsize argument of plt.figure().
+    thumb_cols : int
+                 number of columns to draw thumbnails into
+    """
+    fig = plt.figure(figsize=figsz)
+    COLS = 13
+    ROWS = 5
+    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.35, wspace=0.8)
+
+    TopGrid.update(bottom=0.5)
+
+    # Define some sizes
+    d_main = 4  # colspan of main detector plot
+    d_sm = 2  # colspan/rowspan of darks and geometry
+    start_sm = 5  # col to start darks and geometry
+    
+    # Set up the grid ----------------------------------------------------------------
+    # Spectrum axis
+    SpectrumAx = plt.subplot(TopGrid.new_subplotspec((0, 0), colspan=d_main, rowspan=1)) 
+    SpectrumAx.axes.get_xaxis().set_visible(True)
+
+    for s in ["top", "right"]:
+        SpectrumAx.spines[s].set_visible(False)
+    
+    # Main plot: top left of figure (for detector image)
+    MainAx = plt.subplot(TopGrid.new_subplotspec((1, 0), colspan=d_main, rowspan=d_main)) 
+    
+    # A spacing axis between detector image and geometry axes
+    VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main)) 
+    VerticalSpacer.axis("off")
+    
+    # 3 small subplots in a row to the right of main plot
+    R1Ax1 = plt.subplot(TopGrid.new_subplotspec((1, start_sm), colspan=d_sm, rowspan=d_sm))
+    R1Ax2 = plt.subplot(TopGrid.new_subplotspec((1, start_sm+d_sm), colspan=d_sm, rowspan=d_sm))
+    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((1, start_sm+2*d_sm), colspan=d_sm, rowspan=d_sm))
+
+    R1Axes = [R1Ax1, R1Ax2, R1Ax3]
+    for a in R1Axes:
+        a.axes.get_xaxis().set_visible(False)
+        a.axes.get_yaxis().set_visible(False)
+
+    # Another row of 3 small subplots
+    R2Ax1 = plt.subplot(TopGrid.new_subplotspec((1+d_sm, start_sm), colspan=d_sm, rowspan=d_sm))
+    R2Ax2 = plt.subplot(TopGrid.new_subplotspec((1+d_sm, start_sm+d_sm), colspan=d_sm, rowspan=d_sm))
+    R2Ax3 = plt.subplot(TopGrid.new_subplotspec((1+d_sm, start_sm+2*d_sm), colspan=d_sm, rowspan=d_sm))
+    R2Axes = [R2Ax1, R2Ax2, R2Ax3]
+    
+    # Thumbnail area 
+    ROWS = 4
+    BottomGrid = gs.GridSpec(ROWS, thumb_cols, figure=fig, hspace=0.15, wspace=0.15)
+    BottomGrid.update(top=0.43)
+    
+    row_count = 0
+    col_count = 0
+    ThumbAxes = []
+
+    for i in range(N_thumbs):
+        if (i % thumb_cols == 0):
+            col_count = 0 
+            if i != 0:
+                row_count += 1
+        else:
+            col_count += 1
+            
+        temp_ax = plt.subplot(BottomGrid.new_subplotspec((row_count, 0 + col_count), colspan=1, rowspan=1))
+        # turn off pesky ticks
+        temp_ax.axes.get_xaxis().set_visible(False)
+        temp_ax.axes.get_yaxis().set_visible(False)
+
+        ThumbAxes.append(temp_ax)
+    
+    return fig, [SpectrumAx, MainAx], R1Axes, R2Axes, ThumbAxes 
+
+
+def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, prange=None, no_geo=None, 
+                       show_DN_histogram=False, verbose=False):
+    """ #  use_masking=False, lowthresh=3, highthresh=3,
+    Fills in the quicklook figure for a single observation.
+    
+    Parameters
+    ----------
+    index_data_pair : List of dictionaries
+                      Of the form [light_metadata, dark_metadata], where each entry
+                      contain the metadata of a single observation. Light first, then dark.
+    light_fits : IUVSFITS or HDUlist
+                 Astropy fits object associated with the light file.
+    dark_fits : IUVSFITS or HDUlist
+                 Astropy fits object associated with the dark file.
+    arange : list
+             [min, max] in absolute pixel value to use in the final image. If None, it will be filled in.
+    prange : list
+             [min, max] pixel value in percentile use in the final image. If None, it will be filled in.
+    no_geo : list
+             a list of files that are missing geometry at the time the code is run.
+             If the file whose observations are being plotted are in this list,
+             the geometry plots will be blank and instead just list 'no geometry available'.
+    show_DN_histogram : boolean
+                        Can be turned on to show a histogram of all the pixel counts.
+                        Useful for determining where to set prange, but since prange is ideally passed in,
+                        this means you will want to run this iteratively/manually.
+    verbose : boolean
+              whether to print feedback messages
+              
+    Returns
+    ----------
+    Completed quicklook figure.
+    
+    """
+    # Find number of light integrations
+    num_light_ints = len(light_fits['Primary'].data)
+    
+    # Separate the first and second dark integrations (they have different noise patterns)
+    first_dark = dark_fits['Primary'].data[0]
+    second_dark = dark_fits['Primary'].data[1]
+    
+    # Get an average dark 
+    avg_dark = np.mean([first_dark, second_dark], axis=0)
+
+    # Dark substract the first frame ------------------------
+    dark_sub_first_light = light_fits['Primary'].data[0] - first_dark
+
+    # Create the coadded image
+    coadded_lights = np.zeros_like(light_fits['Primary'].data[0])
+
+    for L in light_fits['Primary'].data[1:]:
+        if np.isnan(np.min(L)):
+            if verbose:
+                print("Found a nan frame")
+            continue
+        coadded_lights += L - second_dark
+
+    if verbose:
+        print(f"Coadded {len(light_fits['Primary'].data)} light frames")
+
+    final_light = dark_sub_first_light + coadded_lights
+    
+    # Set the ranges. By allowing prange and arange to be a mix of 'None' and actual values,
+    # we can choose to set each bound by either percentile or absolute, and mix the two.
+    # Here, the loops reset the percentile value to the maximum extent only if the value is
+    # not specified in the function call.
+    prange_full = [0, 100]
+    for p in range(len(prange)):
+        if prange[p] is None:
+            prange[p] = prange_full[p]
+            
+    # get all the data values so we can make one common colorbar
+    all_data = np.concatenate((final_light, first_dark, second_dark, avg_dark), axis=None)  # common_dark, 
+    
+    # Then, if an absolute value has not been set, the code sets the value based on the percentile value.
+    for a in range(len(arange)):
+        if arange[a] is None:
+            arange[a] = np.nanpercentile(all_data, prange[a])
+
+    # These are vmin, vmax for all the values plotted, so we can use a common colorbar.
+    overall_vmin = arange[0]
+    overall_vmax = arange[1]
+            
+    # Bonus plot to show the DN histogram ------------------------------------
+    if show_DN_histogram:
+        pctles = [50, 75, 99, 99.9]
+        pctle_vals = np.percentile(all_data, pctles)
+        fig, ax = plt.subplots(figsize=(6, 1))
+        counts, bins = np.histogram(all_data, bins=1000)
+        ax.stairs(counts, bins)
+        trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+        for p in range(len(pctles)):
+            ax.axvline(pctle_vals[p], color="gray", linestyle="--", zorder=0)
+            ax.text(pctle_vals[p] + 0.05, 0.99, f"{pctles[p]} pctle", rotation=90, va="top", color="gray", 
+                    fontsize=10, transform=trans)
+        ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.set_xlim(left=0.01)
+        ax.set_xlabel("DN")
+        ax.set_ylabel("Freq")
+        plt.show()
+        
+    # Now start to bulid the quicklook image   -----------------------------------------------------------------------
+    QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(num_light_ints, figsz=(36, 26))
+    
+    # Plot Lyman alpha spectrum; slit is typically between pixels 346--535
+    spapixrng = get_pix_range(light_fits, which="spatial")
+    spepixrng = get_pix_range(light_fits, which="spectral")
+    
+    slit_i1 = find_nearest(spapixrng, 346)[0]  # start of slit
+    slit_i2 = find_nearest(spapixrng, 535)[0]  # end of slit
+    
+    # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
+    spec_x = [(spepixrng[i] + spepixrng[i + 1]) / 2 for i in range(len(spepixrng) - 1)]  # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
+    spectrum = np.sum(final_light[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
+    print(np.max(spectrum))
+    DetAxes[0].set_title("Spatially-added spectrum across slit")
+    DetAxes[0].plot(spec_x, spectrum)
+    DetAxes[0].set_xlim(spec_x[0], spec_x[-1])
+    
+    # Make an inset to look at deuterium
+    # inset (x0, y0, width, height)
+    inset = DetAxes[0].inset_axes([0.5, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes)
+    D_i = 70  # determined by eye.
+    D_f = 108  # determined by eye.
+    inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
+    inset.axes.get_xaxis().set_visible(False)
+    
+    # Plot the light 
+    detector_image(light_fits, image_to_plot=final_light, titletext="Coadded detector image (dark subtracted)", 
+                   fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", 
+                   prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax)
+    
+    # Find where the Lyman alpha emission should be
+    wvs = light_fits['Observation'].data['WAVELENGTH'][0][70]  # The 70 is just a random entry to just get one. its good enough. TODO: make it smart so it doesn't choke on 70
+    Hlya_i = np.argmax(spectrum)  # find index where spectrum has the most power (that'll be Lyman alpha)
+    Hlya = wvs[Hlya_i]  # this is the recorded wavelength in the FITS file which goes with the highest power in the spectrum, i.e. effective location of lyman alpha.
+    Dlya_i, Dlya = find_nearest(wvs, Hlya - 0.033)  # calculate the index of where D lyman alpha should be based on H lyman alpha. 0.033 is the difference in wavelength in nm.
+
+    # Old way to find Lyman alpha was to take the best wavelength value for it and add the Lyman alpha centroid from fits, but it tends to misplace the center:
+    # Lya_shift = int(np.mean(light_fits['Integration'].data['LYA_CENTROID']))
+
+    DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
+    inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # Same
+    DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)  # Same
+
+    # Plot the darks
+    try: 
+        detector_image(dark_fits, integration=0, titletext="First dark", fontsizes="large", fig=QLfig, ax=DarkAxes[0], scale="sqrt", labels_off=True, 
+                       show_cbar_lbl=False, force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False)
+        detector_image(dark_fits, integration=1, titletext="Second dark", fontsizes="large", fig=QLfig, ax=DarkAxes[1], scale="sqrt", labels_off=True, 
+                       show_cbar_lbl=False, force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False)
+        detector_image(dark_fits, image_to_plot=avg_dark, integration=1, titletext="Average dark", fontsizes="large", fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
+                       labels_off=True, force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False)
+    except Exception as e: 
+        raise Exception(f"Exception occurred in plotting dark frames: {str(e)}")
+    
+    # Plot the extra info 
+    if index_data_pair[0]['name'] in no_geo:
+        GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[0].transAxes)
+        GeoAxes[1].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[1].transAxes)
+        GeoAxes[2].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[2].transAxes)
+    else:
+        make_sza_plot(GeoAxes[0], light_fits)
+        make_SCalt_plot(GeoAxes[1], light_fits)
+        make_tangent_lat_lon_plot(GeoAxes[2], light_fits)
+    
+    # Plot the postage stamps 
+    for i in range(num_light_ints):
+        if np.isnan(np.min(light_fits['Primary'].data[i])):
+            ThumbAxes[i].text(0.1, 0.9, "Frame missing\ndata", va="top", fontsize=12, transform=ThumbAxes[i].transAxes)
+        else:
+            detector_image(light_fits, integration=i, titletext="", fig=QLfig, ax=ThumbAxes[i], scale="sqrt", \
+                           print_scale_type=False, show_colorbar=False, arange=arange)
+        
+    # Title text
+    utc_obj = index_data_pair[0]['datetime']
+    sol, My = utc_to_sol(utc_obj)
+    Ls = int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))
+    
+    print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}",
+                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {Ls}°", 
+                f"UTC date/time: {index_data_pair[0]['datetime'].strftime('%Y-%m-%d')}, {index_data_pair[0]['datetime'].strftime('%H:%M:%S')}",
+                f"Light file: {light_fits['Primary'].header['filename']}",
+                f"Dark file: {dark_fits['Primary'].header['filename']}"]
+                # f"Integration time: {index_data_pair[0]['int_time']} s",
+                # f"Dark integrations: {index_data_pair[1]['n_int']}"]
+                # f"Dark integration time: {index_data_pair[1]['int_time']} s"]
+    
+    # List of fontsizes to use as we print stuff on the quicklook
+    f = [36] + [26] * 8
+    # Color list to loop through
+    c = ["black"] * 3 +  ["gray"] * 6 
+    
+    # Now print stuff on the figure
+    for i in range(5):
+        plt.text(0.1, 1 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
+
+    plt.text(0.12, 0.45, f"{index_data_pair[0]['n_int']} light frames (here shown pre-dark subtraction):", fontsize=22, transform=QLfig.transFigure)
+    print()
+
+    plt.show()
+
+
+def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None, arange=None):
+    """
+    Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
+    
+    Parameters
+    ----------
+    ech_l1a_idx : list of dictionaries
+                 Each dictionary is a collection of metadata for each IUVS observation file.
+    sel: list
+         The code will sel(ect) the slice [sel[0] : sel[1]] for which to run quicklooks.
+         This slice is based on ech_l1a_idx, so the slice may not be the most intuitive lookup.
+    date : datetime object
+           If passed in, the code will downselect to only observations whose date match "date".
+    orbit : int
+            If passed in, the code will downselect to only observations whose orbit matches "orbit".
+    prange : list
+             If passed in, the associated values will be used to set the percentile pixels to which
+             the displayed image will be restricted. Passing a NaN in either position of the list
+             unsets the lower bound.
+    arange : list
+             If passed in, the associated values will be used to set the absolute pixel value to which
+             the displayed image will be restricted. Passing a NaN in either position of the list
+             unsets the lower bound.
+    
+    Returns
+    ----------
+    None (runs quicklook making function on selected files and displays figures).
+    """
+    
+    dark_idx = make_dark_index(ech_l1a_idx)
+    selected_l1a = copy.deepcopy(ech_l1a_idx)
+    
+    # Downselect the metadata
+    if sel != [0, -1]:
+        selected_l1a = selected_l1a[sel[0]:sel[1]]
+    else:
+        if orbit is not None: 
+            selected_l1a = [entry for entry in selected_l1a if entry['orbit']==orbit]
+            
+        if date is not None:
+            date_match = (selected_l1a['date'].year == date.year) & (selected_l1a['date'].month == date.month) & (selected_l1a['date'].day == date.day)
+            selected_l1a = [entry for entry in selected_l1a if date_match]
+            
+    # Checks to see if we've accidentally removed all files from the to-do list
+    if len(selected_l1a) == 0:
+        raise IndexError("Error: No matching files found. Try removing one of either date or orbit arguments. Or, you selected a range that is 0 long using the sel argument.")
+        
+    # Files without geometry - list of file names
+    no_geometry = [i['name'] for i in find_files_missing_geometry(selected_l1a)]
+           
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx)
+    
+    # Loop through the dictionary containing light and dark pairs and run the quicklook code on each set.
+    for k in lights_and_darks.keys():
+        print("----------------------------------------------------------------------------------")
+        light_idx = lights_and_darks[k][0]
+        print(f"Light file {light_idx['name']}")  # Light file is the first entry
+
+        # open the light file --------------------------------------------------------------------
+        light_path = find_files(data_directory=l1a_dir,
+                                use_index=False, pattern=light_idx['name'])[0]
+        light_fits = fits.open(light_path)
+
+        # open the dark file ---------------------------------------------------------------------
+        dark_path = find_files(data_directory=l1a_dir,
+                               use_index=False, pattern=lights_and_darks[k][1]["name"])[0]
+        dark_fits = fits.open(dark_path)
+
+        # Check that we don't have too many dark integrations
+        num_dark_ints = dark_fits['Primary'].data.shape[0]
+        if num_dark_ints > 2:
+            print(f"Too many dark integrations in file {dark_path} -- either misclassified a light file or dark has >2 integrations")
+        else:
+            make_one_quicklook(lights_and_darks[k], light_fits, dark_fits, prange=prange, arange=arange, no_geo=no_geometry)
+
+    print(f"Finished. {len(files_missing_dark)} files were missing darks:")
+
+    if len(files_missing_dark)==0:
+        print("--")
+    else:
+        for f in files_missing_dark:
+            print(f)
