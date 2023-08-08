@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 
 
@@ -51,3 +50,34 @@ def mirror_dn_to_deg(dn, inverse=False):
 
     # return the conversion
     return value
+
+
+def find_nearest(array, value):
+    """
+    Find the closest entry in array to value. 
+    """
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx, array[idx]
+
+
+def get_grad_colors(L, cmap, strt=0, stp=1, mikes=False):
+    """
+    Generates some colors based on a GRADIENT color map for use in plotting a 
+    bunch of lines all at once.
+
+    Input:
+        L: number of colors to generate.
+        cmap: color map name
+        strt and stp: By setting these to other values between 0 and 1 you can restrict 
+                      the range of colors drawn from.
+        mikes: boolean
+               should be set to True if using Mike's idl_colorbars module,
+               so that the cmap is obtained correctly.
+    Output:
+        An array of RGBA values: [[R1, G1, B1, a], [R2, G2, B2, a]...]
+    """
+    if mikes==True:
+        return cmap(np.linspace(strt,stp,L))
+    else:
+        return mpl.colormaps[cmap](np.linspace(strt,stp,L))
