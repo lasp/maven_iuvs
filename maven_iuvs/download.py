@@ -218,6 +218,10 @@ def call_rsync(remote_path,
     else:
         progress_flag = '--progress'
 
+    # Escape spaces in the local path to make rsync work 
+    if " " in local_path:
+        local_path = local_path.replace(" ", "\ ")
+
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
                               extra_flags,
@@ -232,6 +236,7 @@ def call_rsync(remote_path,
     cpl = child.compile_pattern_list([pexpect.EOF,
                                       '.* password: ',
                                       '[0-9]+%'])
+
     while True:
         i = child.expect_list(cpl, timeout=None)
         if i == 0:  # end of file
@@ -496,6 +501,7 @@ def sync_data(spice=True, level='l1b',
         # sync level 1B data
         if level is not None:
             # get the file names of all the relevant files
+            print(f"Running sync on {datetime.datetime.utcnow().strftime('%a %d %b %Y, %I:%M%p')}")
             print('Fetching names of production and stage'
                   ' files from the VM...')
             prod_filenames = get_vm_file_list(vm,
@@ -549,6 +555,9 @@ def sync_data(spice=True, level='l1b',
             # save the files to rsync to temporary files
             # this way rsync can use the files_from flag
             transfer_from_production_file = tempfile.NamedTemporaryFile()
+            # save files to sync to a local file that can be accessed for troubleshooting
+            # np.savetxt("prod_files_to_transfer_manualfile.txt", files_from_production, fmt="%s")
+            # and as tmp file
             np.savetxt(transfer_from_production_file.name,
                        files_from_production,
                        fmt="%s")
@@ -563,6 +572,9 @@ def sync_data(spice=True, level='l1b',
 
             # stage, identical to above
             transfer_from_stage_file = tempfile.NamedTemporaryFile()
+            # save files to sync to a local file that can be accessed for troubleshooting
+            # np.savetxt("stage_files_to_transfer_manualfile.txt", files_from_stage, fmt="%s")
+            # and as tmp file
             np.savetxt(transfer_from_stage_file.name,
                        files_from_stage,
                        fmt="%s")
