@@ -4,35 +4,54 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from maven_iuvs.fits_processing import get_pix_range
 
-def detector_image(myfits, integration=0,
-                   fig=None, ax=None,
-                   norm=None, cmap=109,
-                   scale="linear",
-                   arange=None, prange=None):
-    """Makes a density plot of detector counts for the input FITS file and
+
+def detector_image(myfits, image_to_plot=None, integration=0, 
+                       fig=None, ax=None, norm=None, cmap=109, titletext="", fontsizes="medium",
+                       scale="linear", print_scale_type=True, show_colorbar=True, show_cbar_lbl=True, labels_off=False, 
+                       arange=None, prange=None, force_vmin=None, force_vmax=None):
+    """Makes a density plot of detector DN for the input FITS file and
     specified integration.
 
     Parameters
     ----------
     myfits : IUVSFITS or HDUList
-        IUVS FITS file to be plotted.
+             IUVS FITS file to be plotted.
+    image_to_plot : optional data override to use when plotting.
+              Allows for sending in externally modified arrays, 
+              e.g. with dark subtraction done.
     integration : int
-       Integration number to be plotted.
+                  Integration number to be plotted.
     fig, ax : matplotlib.pyplot figure and axis instance
-        figure and axis on which to draw.
+              figure and axis on which to draw.
     norm : matplotlib norm
-        Norm to be used in density plot. Overrides scale.
+           Norm to be used in density plot. Overrides scale.
     cmap : int
-        Colormap number to use from idl_colorbars package.
+           Colormap number to use from idl_colorbars package.
+    titletext : string
+                optional title to add to the image.
+    fontsizes: string 
+               english description of fontsizes to use, allows for 
+               easy adjustment when placing the panel on various figures.
     scale : "linear", "log", or "sqrt".
-        Scale to use in drawing the plot. Overriden by norm.
+             Scale to use in drawing the plot. Overriden by norm.
+    print_scale_type : boolean
+                       Whether to print some text on the canvas stating the value of scale.
+    show_colorbar : boolean
+                    Whether to plot the colorbar. 
+    show_cbar_lbl : boolean
+                    whether to print the label for the colorbar.
+    labels_off : boolean
+                 If set to False, will print x and y axis labels for the panel.
     arange : None or 2-tuple
-        Absolute range of counts scale. If None, entire range is
-        plotted. Overrides prange.
+             Absolute range of DN scale. If None, entire range is
+             plotted. Overrides prange.
     prange : None or 2-tuplen
-        Percentile range of counts scale. If None, entire range is plotted.
-
+        Percentile range of DN scale. If None, entire range is plotted.
+    force_vmin, force_vmax : int
+                             if arange is not specified, user can force
+                             these values to serve as vmin and vmax for colorbar.
     Returns
     -------
     fig : matplotlib.pyplot figure instance
@@ -50,72 +69,91 @@ def detector_image(myfits, integration=0,
 
     cmap = idl_colorbars.getcmap(cmap)
 
-    ax.set_xlim([0, 1024])
-    ax.set_ylim([0, 1024])
+    # ax.set_xlim([0, 1024])
+    # ax.set_ylim([0, 1024])
 
-    # get the data
-    data = myfits['detector_dark_subtracted'].data[integration]
-
-    # figure out the binning
-    spapixlo = myfits['Binning'].data['SPAPIXLO'][0]
-    spapixhi = myfits['Binning'].data['SPAPIXHI'][0]
-    spepixlo = myfits['Binning'].data['SPEPIXLO'][0]
-    spepixhi = myfits['Binning'].data['SPEPIXHI'][0]
-    if not (set((spapixhi[:-1]+1)-spapixlo[1:]) == {0}
-            and set((spepixhi[:-1]+1)-spepixlo[1:]) == {0}):
-        raise ValueError("Error in bin table")
-
-    spepixrange = np.concatenate([[spepixlo[0]], spepixhi+1])
-    spapixrange = np.concatenate([[spapixlo[0]], spapixhi+1])
+    # This section allows the normal data to be overridden with custom--i.e. coadded frames.
+    # This is clunky and this function should probably allow for co-adding right here, so that
+    # it's clear what is happening, because later in this function is where we divide by number of frames.
+    if image_to_plot is not None: 
+        data = image_to_plot 
+    else: # If the image to plot isn't passed in, code will try to plot the "integration"th integration
+        try:
+            # l1b where dark has already been subtracted
+            data = myfits['detector_dark_subtracted'].data[integration]
+        except:
+            # l1a without dark subtraction
+            data = myfits['Primary'].data[integration]
+    
+    # figure out the binning: There's more than one pixel per bin, so we need to convert the binned data
+    # to data in pixels
+    spapixrange = get_pix_range(myfits, which="spatial")
+    spepixrange = get_pix_range(myfits, which="spectral")
 
     spepixwidth = spepixrange[1:]-spepixrange[:-1]
     spapixwidth = spapixrange[1:]-spapixrange[:-1]
 
     npixperbin = np.outer(spapixwidth, spepixwidth)
 
-    data = data/npixperbin
-
+    if image_to_plot is not None:
+        num_frames = len(myfits['Primary'].data)
+    else:
+        num_frames = 1
+            
+    data = data / (num_frames * npixperbin)
+    
     # figure out what norm to use
     if norm is None:
-        if prange is None:
-            prange = [0, 100]
-        if arange is None:
-            arange = [np.percentile(data, prange[0]),
-                      np.percentile(data, prange[1])]
+        # Range decisions used to be here, but now it is done outside in the primary plotting routine
+        # Scale decisions
+        vmin = force_vmin if force_vmin is not None else arange[0]
+        vmax = force_vmax if force_vmin is not None else arange[1]
+        
         if scale == "linear":
-            norm = mpl.colors.Normalize(vmin=arange[0],
-                                        vmax=arange[1])
+            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         elif scale == "sqrt":
-            norm = mpl.colors.PowerNorm(gamma=0.5,
-                                        vmin=arange[0],
-                                        vmax=arange[1])
+            norm = mpl.colors.PowerNorm(gamma=0.5, vmin=vmin, vmax=vmax)
         elif scale == "log":
-            norm = mpl.colors.LogNorm(vmin=arange[0],
-                                      vmax=arange[1])
+            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
         else:
             raise ValueError
-
-    ax.patch.set_color('#666666')
+        
+    ax.patch.set_color('#FFFF00')
     ax.patch.set_alpha(1.0)
-    pcm = ax.pcolormesh(spepixrange, spapixrange,
-                        data,
-                        norm=norm,
-                        cmap=cmap)
+    pcm = ax.pcolormesh(spepixrange, spapixrange, data, norm=norm, cmap=cmap)
+    
+    fs = {"small": {"ticks": 9, "labels": 10, "title":14, "general": 12}, 
+          "medium": {"ticks": 11, "labels": 12, "title":16, "general": 14},
+          "large": {"ticks": 15, "labels": 16, "title":20, "general": 18 }, 
+          "huge": {"ticks": 19, "labels": 20, "title":24, "general": 22}}
+    
+    if labels_off==False: 
+        ax.set_xlabel("Spectral", fontsize=fs[fontsizes]["labels"])
+        ax.set_ylabel("Spatial", fontsize=fs[fontsizes]["labels"])
+    
+    ax.set_title(titletext, fontsize=fs[fontsizes]["title"])
+    ax.tick_params(which="both", labelsize=fs[fontsizes]["ticks"])
 
     # add the colorbar axes
-    ax_pos = ax.get_position()
-    cax_width_frac = 0.07
-    cax_margin = 0.02
-    cax = fig.add_axes((ax_pos.x1+cax_margin*ax_pos.width,
-                        ax_pos.y0,
-                        cax_width_frac*ax_pos.width,
-                        ax_pos.height))
-    fig.colorbar(pcm, cax=cax)
-    if scale == "linear":
-        cax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
-
+    if show_colorbar:
+        ax_pos = ax.get_position()
+        cax_width_frac = 0.07
+        cax_margin = 0.02
+        cax = fig.add_axes((ax_pos.x1+cax_margin*ax_pos.width,
+                            ax_pos.y0,
+                            cax_width_frac*ax_pos.width,
+                            ax_pos.height))
+        cb = fig.colorbar(pcm, cax=cax)
+        if show_cbar_lbl==True:
+            cb.set_label(label="DN/sec/px", size=fs[fontsizes]["labels"])
+        cax.tick_params(which="both", labelsize=fs[fontsizes]["ticks"])
+        if scale == "linear":
+            cax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            
+        if print_scale_type==True:
+            ax.text(1.05, -0.05, f"{scale} scale", color="gray", fontsize=16, transform=ax.transAxes)
+        
     if new_ax:
-        # fig.show()
         return fig
 
 
