@@ -29,7 +29,7 @@ class IUVSFITS(HDUList):
         self.__basename = _os.path.basename(filename)
         self.__check_input_is_iuvs_data_filename()
         hdulist = HDUList.fromfile(filename, mode='readonly',
-                                   memmap=True, save_backup=False,
+                                   memmap=False, save_backup=False, # Note: Changed memmap to False because having it True precluded making quicklooks. --EMC 8/10/23
                                    cache=True, lazy_load_hdus=True)
         super().__init__(hdus=hdulist, file=hdulist._file)
 
@@ -118,6 +118,18 @@ class IUVSFITS(HDUList):
             return int(self.observation.split('orbit')[1][:5])
 
         return 'cruise'
+
+    @property
+    def Ls(self):
+        """ Get the Ls from the HDUlist.
+
+        Returns
+        -------
+        Ls: int
+            solar longitude of observation
+        """
+
+        return self['Observation'].data['SOLAR_LONGITUDE'][0]
 
     @property
     def channel(self):
