@@ -3,14 +3,16 @@ import idl_colorbars
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.transforms as transforms
 
 from maven_iuvs.fits_processing import get_pix_range
+# from maven_iuvs.echelle import slit_start, slit_end
 
 
-def detector_image(myfits, image_to_plot=None, integration=0, 
-                       fig=None, ax=None, norm=None, cmap=109, titletext="", fontsizes="medium",
-                       scale="linear", print_scale_type=True, show_colorbar=True, show_cbar_lbl=True, labels_off=False, 
-                       arange=None, prange=None, force_vmin=None, force_vmax=None):
+def detector_image(myfits, image_to_plot=None, integration=0, draw_slit_lines=False, slit_lines=[346, 535],
+                   fig=None, ax=None, norm=None, cmap=109, titletext="", fontsizes="medium",
+                   scale="linear", print_scale_type=True, show_colorbar=True, show_cbar_lbl=True, labels_off=False, 
+                   arange=None, prange=None, force_vmin=None, force_vmax=None):
     """Makes a density plot of detector DN for the input FITS file and
     specified integration.
 
@@ -23,6 +25,8 @@ def detector_image(myfits, image_to_plot=None, integration=0,
               e.g. with dark subtraction done.
     integration : int
                   Integration number to be plotted.
+    draw_slit_lines: boolean   
+                     whether to add lines to the plot showing the approximate location of the slit.
     fig, ax : matplotlib.pyplot figure and axis instance
               figure and axis on which to draw.
     norm : matplotlib norm
@@ -121,6 +125,15 @@ def detector_image(myfits, image_to_plot=None, integration=0,
     ax.patch.set_color('#FFFF00')
     ax.patch.set_alpha(1.0)
     pcm = ax.pcolormesh(spepixrange, spapixrange, data, norm=norm, cmap=cmap)
+
+    if draw_slit_lines:
+        ax.axhline(slit_lines[0], linewidth=0.5, color="gainsboro")
+        ax.axhline(slit_lines[1], linewidth=0.5, color="gainsboro")
+        trans = transforms.blended_transform_factory(ax.transAxes, ax.transData)
+        ax.text(0, slit_lines[0], slit_lines[0], color="gray", fontsize=16, transform=trans, ha="right")
+        ax.text(0, slit_lines[1], slit_lines[1], color="gray", fontsize=16, transform=trans, ha="right")
+
+    # Make labels and titles and such
     
     fs = {"small": {"ticks": 9, "labels": 10, "title":14, "general": 12}, 
           "medium": {"ticks": 11, "labels": 12, "title":16, "general": 14},

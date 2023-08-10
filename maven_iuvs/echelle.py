@@ -12,7 +12,7 @@ from maven_iuvs.user_paths import l1a_dir
 from maven_iuvs.miscellaneous import find_nearest
 from maven_iuvs.graphics.line_fit_plot import detector_image
 from maven_iuvs.time import utc_to_sol
-
+from maven_iuvs.file_classes import IUVSFITS
 from maven_iuvs.fits_processing import get_binning_scheme,  \
     get_n_int, locate_missing_frames, iuvs_orbno_from_fname, \
     iuvs_filename_to_datetime, iuvs_segment_from_fname, pix_to_bin, \
@@ -24,405 +24,12 @@ from maven_iuvs.geometry import find_files_missing_geometry, \
 from maven_iuvs.search import get_latest_files, find_files
 
 
-def ech_isdark(fidx):
-    """
-    Identifies whether an echelle file contains dark integrations by checking the gain.
+# Specific echelle variables ==========================================
 
-    Parameters
-    ----------
-    fidx : dictionary
-           a single dictionary entry of metadata for some observation
-    Returns
-    ----------
-    True or False
-    """
+# Start and end pixel numbers of the slit
+slit_start = 346
+slit_end = 535
 
-    return fidx["mcp_gain"] <= 0.5
-
-
-def ech_islight(fidx):
-    """
-    Identifies whether an echelle file has light (observation) integrations.
-
-    Parameters
-    ----------
-    fidx : dictionary
-           a single dictionary entry of metadata for some observation
-    Returns
-    ----------
-    True or False
-    """
-    return not ech_isdark(fidx)
-
-
-def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
-    """
-    Fills a dictionary, lights_and_darks, with light and dark metadata for a given light observation file,    
-    which makes it easier to process quicklooks. Calls on find_dark_options, so any errors in dark association
-    should be fixed within that function.
-    
-    Parameters
-    ----------
-    selected_l1a : list of dictionaries
-                   selected l1a metadata entries to use
-    dark_idx : list of dictionaries
-               Metadata for all available darkfiles in the pipeline
-    verbose : boolean
-              whether to print messages when silent problems are encountered
-               
-    Returns
-    ----------
-    lights_and_darks : dictionary of lists of dictionaries
-                       Format: {"light_filename": [light_metadata, dark_metadata]}
-    """
-    
-    lights_and_darks = {}
-    lights_missing_darks = []
-    
-    for fidx in selected_l1a:
-        try:
-            dark_opts = find_dark_options(fidx, dark_idx) 
-
-            if len(dark_opts) > 1: 
-                if verbose:
-                    print((f"Oh no! Too many dark files ({len(dark_opts)}) for file {fidx['name']}! Code should be written within find_dark_options to handle this. Skipping for now."))
-                    print(f"Here are the dark opts for {fidx['name']}: ")
-                    for d in dark_opts:
-                        print(d['name'])
-                    
-                continue
-            if dark_opts:  # assuming there ARE some options,
-                lights_and_darks[fidx['name']] = (fidx, dark_opts[0])  # the entry key will be the light filename, and we will add the light index info for reference
-        except ValueError:
-            if ech_isdark(fidx):
-                pass  # don't need to worry if there's no dark file for a dark file, it is itself already.
-            else:
-                lights_missing_darks.append(fidx["name"])  # but if it's a light file missing a dark, we would like to know.
-
-            continue
-            
-    return lights_and_darks, lights_missing_darks
-
-
-def find_dark_options(input_light_idx, idx_list_to_search):
-    """
-    Looks for darks matching the observation described by input_light_idx.
-
-    Parameters
-    ----------
-    input_light_idx : dictionary
-                      a dictionary entry of metadata for some observation
-    idx_list_to_search : list of dictionaries
-                         where each dictionary is the metadata for dark files
-
-    Returns
-    ----------
-    dark_options : list of dictionaries
-                   where each dictionary is the metadata for dark files that 
-                   match input_light_idx
-    """
-    if not ech_islight(input_light_idx):
-        raise ValueError('Input file index corresponds to a dark observation, cannot find matching dark.')
-    
-    half_orbit = datetime.timedelta(hours=2)
-    dark_options = [didx for didx in idx_list_to_search 
-                    if (np.abs(didx['datetime'] - input_light_idx['datetime']) < half_orbit
-                        and didx['binning'] == input_light_idx['binning']
-                        # and didx['mcp_gain'] == input_light_idx['mcp_gain']
-                        and didx['int_time'] == input_light_idx['int_time']
-                        # and iuvs_orbno_from_fname(didx['name']) == iuvs_orbno_from_fname(input_light_idx['name'])
-                        and iuvs_segment_from_fname(didx['name']) == iuvs_segment_from_fname(input_light_idx['name'])
-                        and ech_isdark(didx))]
-    
-    return dark_options
-
-
-def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
-    """
-    ...description...
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
-
-    Returns
-    -------
-    countrate : 
-    npix : 
-
-    """
-    binning = get_binning_scheme(hdul)
-    n_int = get_n_int(hdul)
-    
-    spalo, spahi = spapixrange  # spatial pixels 
-    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
-                                             spalo, spahi, 'SPA')
-    spelo, spehi = spepixrange
-    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
-                                             spelo, spehi, 'SPE')
-
-    npix = nspapix*nspepix
-
-    if binning['nspa'] == 0 or binning['nspe'] == 0:
-        # data is bad and contains no frames
-        countsperpix = np.nan
-    elif n_int == 1:
-        # single integration
-        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
-    else: # n_int > 1
-        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
-        
-    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
-    
-    if return_npix:
-        return countrate, npix
-    
-    return countrate
-
-
-def get_countrate_diagnostics(hdul):
-    """
-    ...description...
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
-
-    Returns
-    -------
-    countrate : 
-    npix : 
-
-    """
-    Hlya_spapixrange = np.array([346, 535])
-    Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
-    
-    Hbkg_spapixrange = Hlya_spapixrange + 2*(535-346)
-    Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
-    
-    Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])
-    Dbkg_countrate, Dbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [505, 540])
-    
-    return {'Hlya_countrate':Hlya_countrate,
-            'Hlya_npix':Hlya_npix,
-            'Hbkg_countrate':Hbkg_countrate,
-            'Hbkg_npix':Hbkg_npix,
-            'Dlya_countrate':Dlya_countrate,
-            'Dlya_npix':Dlya_npix,
-            'Dbkg_countrate':Dbkg_countrate,
-            'Dbkg_npix':Dbkg_npix}
-
-
-def get_dir_metadata(the_dir, new_files_limit=None):
-    """
-    Gets metadata for given set of files
-
-    Parameters
-    ----------
-    the_dir : string
-              path to directory containing observation data
-    new_files_limit : 
-
-    Returns
-    -------
-    new_idx: 
-    """
-    idx_fname = the_dir[:-1] + '_metadata.npy'
-    print(f'loading {idx_fname}...')
-    
-    try:
-        idx = np.load(idx_fname, allow_pickle=True)
-    except FileNotFoundError:
-        print(f'{idx_fname} not found, creating new index...')
-        idx = []
-
-    # make list of most recent files from index and directory
-    idx_fnames = [filedata['name'] for filedata in idx]
-    dir_fnames = [os.path.basename(f) for f in find_files(data_directory=the_dir,
-                                                          use_index=False)]
-    most_recent_fnames = get_latest_files(np.concatenate([idx_fnames, 
-                                                         dir_fnames]))
-    # get new information from disk if needed
-    not_in_idx = np.setdiff1d(most_recent_fnames, idx_fnames)
-    not_in_idx = sorted(not_in_idx, key=iuvs_filename_to_datetime)
-    not_in_idx = not_in_idx[:new_files_limit]
-    
-    add_to_idx = []
-    if len(not_in_idx) > 0:
-        print(f'adding {len(not_in_idx)} files to index...')
-        
-        for i, f in enumerate(not_in_idx):
-            print(f'getting metadata {i+1}/{len(not_in_idx)}: {f}'+' '*20, end='\r')
-            
-            f_metadata = get_file_metadata(find_files(data_directory=the_dir,
-                                                      use_index=False,
-                                                      pattern=f)[0])
-            add_to_idx.append(f_metadata)
-        
-        print('\n... done')
-
-    # remove old files from index
-    remove_from_idx = np.setdiff1d(idx_fnames, most_recent_fnames)
-    new_idx = [i for i in idx if i['name'] not in remove_from_idx]
-
-    # add new files to index
-    new_idx = np.concatenate([new_idx, add_to_idx])
-    
-    # sort by filename
-    new_idx = sorted(new_idx, key=lambda x: iuvs_filename_to_datetime(x['name']))
-    
-    # overwrite directory on disk
-    np.save(idx_fname, new_idx)
-    
-    return new_idx
-
-
-def get_file_metadata(fname):
-    # to add:
-    # * signal at position of Ly α ?
-    # * detectable D Ly α ?
-    """
-    Gets the binning scheme for a given FITS HDU.
-
-    Parameters
-    ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
-
-    Returns
-    -------
-    Dicionaries explaining the binning scheme:
-    if nonlinear, returns the bin table, along with the number of spatial and spectral bins.
-    if linear, returns the first spatial and spectral bin edges, the widths, and the number of bins.
-
-    """
-    
-    this_fits = fits.open(fname)
-    
-    binning = get_binning_scheme(this_fits)
-    n_int = get_n_int(this_fits)
-    shape = (n_int, binning['nspa'], binning['nspe'])
-    
-    return {'name': os.path.basename(fname),
-            'orbit': this_fits['Observation'].data['ORBIT_NUMBER'][0],
-            'shape': shape,
-            'n_int': n_int,
-            'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
-            'binning': binning,
-            'int_time': this_fits['Primary'].header['INT_TIME'],
-            'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
-            'geom': has_geometry_pvec(this_fits),
-            'missing_frames': locate_missing_frames(this_fits, n_int),
-            'countrate_diagnostics': get_countrate_diagnostics(this_fits)
-           }
-
-
-def get_lya_countrates(idx_entry):
-    """
-    Gets Ly α countrates
-    
-    Parameters
-    ----------
-    idx_entry : string
-               folder containing observations, sorted into subfolders labeled by orbit
-
-    Returns
-    -------
-    None -- just updates the index files 
-    """
-    rates = idx_entry['countrate_diagnostics']
-    
-    return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
-            'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
-
-
-def identify_rogue_observations(idx):
-    """
-    Report on problematic observations, with either missing lights or darks, 
-    or missing data..
-
-    Parameters
-    ----------
-    idx : .npy file
-          index of observation metadata
-
-    Returns
-    ----------
-    Prints information
-    """
-
-    # find observations from segments where there are either lights or darks 
-    # but not both
-    segments = np.unique([iuvs_segment_from_fname(fidx['name'])
-                          for fidx in idx
-                          if 'orbit' in fidx['name']])
-    
-    orbits = sorted(np.unique([iuvs_orbno_from_fname(fidx['name'])
-                               for fidx in idx
-                               if 'orbit' in fidx['name']]))
-    
-    for s in segments:
-        no_issues = True
-        segment_idx = [fidx for fidx in idx
-                       if iuvs_segment_from_fname(fidx['name']) == s]
-        
-        print(f'\n{s}: ({len(segment_idx)} l1a files)')
-        for o in orbits:
-            orbit_segment_idx = [fidx for fidx in segment_idx
-                                 if iuvs_orbno_from_fname(fidx['name']) == o]
-            light_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_islight(fidx)]
-            dark_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_isdark(fidx)]
-            
-            if len(dark_orbit_segment_flist) == 0 and len(light_orbit_segment_flist) != 0:
-                print(f'  Orbit {o} light without dark')
-                no_issues = False
-            
-            if (len(dark_orbit_segment_flist) != 0 and len(light_orbit_segment_flist) == 0):
-                print(f'  Orbit {o} dark without light')
-                no_issues = False
-        
-        obs_missing_frames = [fidx for fidx in idx 
-                              if (iuvs_segment_from_fname(fidx['name']) == s
-                                  and (fidx['missing_frames'] is not None))]
-        if len(obs_missing_frames) > 0:
-            no_issues = False
-            
-            # TODO: use integrated report to check if the cutoffs are normal 
-            # and due to segments ending early
-            print('  Frames with missing data:')
-            for fidx in obs_missing_frames:
-                if len(fidx['missing_frames']) == 1:
-                    missing_frames_string = f"{fidx['missing_frames'][0]+1}/{fidx['n_int']}"
-                else:
-                    missing_frames_string = f"{fidx['missing_frames'][0]+1}-{fidx['missing_frames'][-1]+1}/{fidx['n_int']}"
-                print(f"    {fidx['name']}: {missing_frames_string}")
-                
-        if no_issues:
-            print('  No issues.')
-
-
-def make_dark_index(ech_l1a_idx):
-    """
-    Takes the index of l1a file metadata, ech_l1a_idx, and makes a similar index that will be used 
-    to find dark files. note that the return value is NOT darks only.
-    
-    Parameters
-    ----------
-    ech_l1a_idx : list of dictionaries
-                  metadata for all light observation files.
-    """
-    dark_idx = [fidx for fidx in ech_l1a_idx if (('orbit' in fidx['name']) and ech_isdark(fidx))]
-    dark_idx = sorted(dark_idx, key=lambda i:i['datetime'])
-    
-    return dark_idx
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -502,7 +109,154 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
     identify_rogue_observations(weekly_report_idx)
 
 
+def identify_rogue_observations(idx):
+    """
+    Report on problematic observations, with either missing lights or darks, 
+    or missing data..
+
+    Parameters
+    ----------
+    idx : .npy file
+          index of observation metadata
+
+    Returns
+    ----------
+    Prints information
+    """
+
+    # find observations from segments where there are either lights or darks 
+    # but not both
+    segments = np.unique([iuvs_segment_from_fname(fidx['name'])
+                          for fidx in idx
+                          if 'orbit' in fidx['name']])
+    
+    orbits = sorted(np.unique([iuvs_orbno_from_fname(fidx['name'])
+                               for fidx in idx
+                               if 'orbit' in fidx['name']]))
+    
+    for s in segments:
+        no_issues = True
+        segment_idx = [fidx for fidx in idx
+                       if iuvs_segment_from_fname(fidx['name']) == s]
+        
+        print(f'\n{s}: ({len(segment_idx)} l1a files)')
+        for o in orbits:
+            orbit_segment_idx = [fidx for fidx in segment_idx
+                                 if iuvs_orbno_from_fname(fidx['name']) == o]
+            light_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_islight(fidx)]
+            dark_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_isdark(fidx)]
+            
+            if len(dark_orbit_segment_flist) == 0 and len(light_orbit_segment_flist) != 0:
+                print(f'  Orbit {o} light without dark')
+                no_issues = False
+            
+            if (len(dark_orbit_segment_flist) != 0 and len(light_orbit_segment_flist) == 0):
+                print(f'  Orbit {o} dark without light')
+                no_issues = False
+        
+        obs_missing_frames = [fidx for fidx in idx 
+                              if (iuvs_segment_from_fname(fidx['name']) == s
+                                  and (fidx['missing_frames'] is not None))]
+        if len(obs_missing_frames) > 0:
+            no_issues = False
+            
+            # TODO: use integrated report to check if the cutoffs are normal 
+            # and due to segments ending early
+            print('  Frames with missing data:')
+            for fidx in obs_missing_frames:
+                if len(fidx['missing_frames']) == 1:
+                    missing_frames_string = f"{fidx['missing_frames'][0]+1}/{fidx['n_int']}"
+                else:
+                    missing_frames_string = f"{fidx['missing_frames'][0]+1}-{fidx['missing_frames'][-1]+1}/{fidx['n_int']}"
+                print(f"    {fidx['name']}: {missing_frames_string}")
+                
+        if no_issues:
+            print('  No issues.')
+
+
 # QUICKLOOK CODE ======================================================
+
+def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None, arange=None):
+    """
+    Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
+    
+    Parameters
+    ----------
+    ech_l1a_idx : list of dictionaries
+                 Each dictionary is a collection of metadata for each IUVS observation file.
+    sel: list
+         The code will sel(ect) the slice [sel[0] : sel[1]] for which to run quicklooks.
+         This slice is based on ech_l1a_idx, so the slice may not be the most intuitive lookup.
+    date : datetime object
+           If passed in, the code will downselect to only observations whose date match "date".
+    orbit : int
+            If passed in, the code will downselect to only observations whose orbit matches "orbit".
+    prange : list
+             If passed in, the associated values will be used to set the percentile pixels to which
+             the displayed image will be restricted. Passing a NaN in either position of the list
+             unsets the lower bound.
+    arange : list
+             If passed in, the associated values will be used to set the absolute pixel value to which
+             the displayed image will be restricted. Passing a NaN in either position of the list
+             unsets the lower bound.
+    
+    Returns
+    ----------
+    None (runs quicklook making function on selected files and displays figures).
+    """
+    
+    dark_idx = make_dark_index(ech_l1a_idx)
+    selected_l1a = copy.deepcopy(ech_l1a_idx)
+    
+    # Downselect the metadata
+    if sel != [0, -1]:
+        selected_l1a = selected_l1a[sel[0]:sel[1]]
+    else:
+        if orbit is not None: 
+            selected_l1a = [entry for entry in selected_l1a if entry['orbit']==orbit]
+            
+        if date is not None:
+            date_match = (selected_l1a['date'].year == date.year) & (selected_l1a['date'].month == date.month) & (selected_l1a['date'].day == date.day)
+            selected_l1a = [entry for entry in selected_l1a if date_match]
+            
+    # Checks to see if we've accidentally removed all files from the to-do list
+    if len(selected_l1a) == 0:
+        raise IndexError("Error: No matching files found. Try removing one of either date or orbit arguments. Or, you selected a range that is 0 long using the sel argument.")
+        
+    # Files without geometry - list of file names
+    no_geometry = [i['name'] for i in find_files_missing_geometry(selected_l1a)]
+           
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx)
+    
+    # Loop through the dictionary containing light and dark pairs and run the quicklook code on each set.
+    for k in lights_and_darks.keys():
+        print("----------------------------------------------------------------------------------")
+        light_idx = lights_and_darks[k][0]
+        print(f"Light file {light_idx['name']}")  # Light file is the first entry
+
+        # open the light file --------------------------------------------------------------------
+        light_path = find_files(data_directory=l1a_dir,
+                                use_index=False, pattern=light_idx['name'])[0]
+        # light_fits = fits.open(light_path)
+
+        # open the dark file ---------------------------------------------------------------------
+        dark_path = find_files(data_directory=l1a_dir,
+                               use_index=False, pattern=lights_and_darks[k][1]["name"])[0]
+        # dark_fits = fits.open(dark_path)
+
+        # num_dark_ints = dark_fits['Primary'].data.shape[0]
+        # if num_dark_ints > 2:
+        #     print(f"Too many dark integrations in file {dark_path} -- either misclassified a light file or dark has >2 integrations")
+        # else:
+        make_one_quicklook(lights_and_darks[k], light_path, dark_path, prange=prange, arange=arange, no_geo=no_geometry)  #light_fits, dark_fits,
+        
+    print(f"Finished. {len(files_missing_dark)} files were missing darks:")
+
+    if len(files_missing_dark)==0:
+        print("--")
+    else:
+        for f in files_missing_dark:
+            print(f)
 
 
 def quicklook_figure_skeleton(N_thumbs, figsz=(32, 22), thumb_cols=11):
@@ -590,7 +344,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(32, 22), thumb_cols=11):
     return fig, [SpectrumAx, MainAx], R1Axes, R2Axes, ThumbAxes 
 
 
-def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, prange=None, no_geo=None, 
+def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, prange=None, no_geo=None, # light_fits, dark_fits,
                        show_DN_histogram=False, verbose=False):
     """ #  use_masking=False, lowthresh=3, highthresh=3,
     Fills in the quicklook figure for a single observation.
@@ -622,15 +376,27 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
     Returns
     ----------
     Completed quicklook figure.
-    
     """
+
+    light_fits = IUVSFITS(light_path)
+    dark_fits = IUVSFITS(dark_path)
+    
     # Find number of light integrations
-    num_light_ints = len(light_fits['Primary'].data)
-    
-    # Separate the first and second dark integrations (they have different noise patterns)
-    first_dark = dark_fits['Primary'].data[0]
-    second_dark = dark_fits['Primary'].data[1]
-    
+    n_ints = index_data_pair[0]['n_int']
+    n_ints_dark = index_data_pair[1]['n_int']
+
+    if n_ints_dark <= 1: 
+        raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
+
+    if n_ints_dark == 2:
+        # Separate the first and second dark integrations (they have different noise patterns)
+        first_dark = dark_fits['Primary'].data[0]
+        second_dark = dark_fits['Primary'].data[1]
+    else:
+        first_dark = dark_fits['Primary'].data[0]
+        # If more than 2 additional darks, get the element-wise mean to use as second dark
+        second_dark = np.mean( np.array([d for d in dark_fits['Primary'].data[1:]]), axis=0 ) 
+
     # Get an average dark 
     avg_dark = np.mean([first_dark, second_dark], axis=0)
 
@@ -693,14 +459,14 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
         plt.show()
         
     # Now start to bulid the quicklook image   -----------------------------------------------------------------------
-    QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(num_light_ints, figsz=(36, 26))
+    QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=(36, 26))
     
     # Plot Lyman alpha spectrum; slit is typically between pixels 346--535
     spapixrng = get_pix_range(light_fits, which="spatial")
     spepixrng = get_pix_range(light_fits, which="spectral")
     
-    slit_i1 = find_nearest(spapixrng, 346)[0]  # start of slit
-    slit_i2 = find_nearest(spapixrng, 535)[0]  # end of slit
+    slit_i1 = find_nearest(spapixrng, slit_start)[0]  # start of slit
+    slit_i2 = find_nearest(spapixrng, slit_end)[0]  # end of slit
     
     # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
     spec_x = [(spepixrng[i] + spepixrng[i + 1]) / 2 for i in range(len(spepixrng) - 1)]  # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
@@ -720,7 +486,7 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
     
     # Plot the light 
     detector_image(light_fits, image_to_plot=final_light, titletext="Coadded detector image (dark subtracted)", 
-                   fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", 
+                   fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", draw_slit_lines=True, 
                    prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax)
     
     # Find where the Lyman alpha emission should be
@@ -758,7 +524,7 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
         make_tangent_lat_lon_plot(GeoAxes[2], light_fits)
     
     # Plot the postage stamps 
-    for i in range(num_light_ints):
+    for i in range(n_ints):
         if np.isnan(np.min(light_fits['Primary'].data[i])):
             ThumbAxes[i].text(0.1, 0.9, "Frame missing\ndata", va="top", fontsize=12, transform=ThumbAxes[i].transAxes)
         else:
@@ -766,15 +532,15 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
                            print_scale_type=False, show_colorbar=False, arange=arange)
         
     # Title text
-    utc_obj = index_data_pair[0]['datetime']
+    utc_obj = light_fits.timestamp# index_data_pair[0]['datetime']
     sol, My = utc_to_sol(utc_obj)
-    Ls = int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))
+    # Ls = int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))
     
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}",
-                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {Ls}°", 
-                f"UTC date/time: {index_data_pair[0]['datetime'].strftime('%Y-%m-%d')}, {index_data_pair[0]['datetime'].strftime('%H:%M:%S')}",
-                f"Light file: {light_fits['Primary'].header['filename']}",
-                f"Dark file: {dark_fits['Primary'].header['filename']}"]
+                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {light_fits.Ls}°", 
+                f"UTC date/time: {light_fits.timestamp.strftime('%Y-%m-%d')}, {light_fits.timestamp.strftime('%H:%M:%S')}", # index_data_pair[0]['datetime']
+                f"Light file: {light_fits.basename}", # ['Primary'].header['filename']
+                f"Dark file: {dark_fits.basename}"]
                 # f"Integration time: {index_data_pair[0]['int_time']} s",
                 # f"Dark integrations: {index_data_pair[1]['n_int']}"]
                 # f"Dark integration time: {index_data_pair[1]['int_time']} s"]
@@ -788,91 +554,354 @@ def make_one_quicklook(index_data_pair, light_fits, dark_fits, arange=None, pran
     for i in range(5):
         plt.text(0.1, 1 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
 
-    plt.text(0.12, 0.45, f"{index_data_pair[0]['n_int']} light frames (here shown pre-dark subtraction):", fontsize=22, transform=QLfig.transFigure)
+    plt.text(0.12, 0.45, f"{n_ints} light frames (here shown pre-dark subtraction):", fontsize=22, transform=QLfig.transFigure)
     print()
+
+    light_fits.close()
+    dark_fits.close()
 
     plt.show()
 
 
-def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None, arange=None):
+# HELPER METHODS ======================================================
+
+# Relating to dark vs. light observations -----------------------------
+def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
     """
-    Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
+    Fills a dictionary, lights_and_darks, with light and dark metadata for a given light observation file,    
+    which makes it easier to process quicklooks. Calls on find_dark_options, so any errors in dark association
+    should be fixed within that function.
+    
+    Parameters
+    ----------
+    selected_l1a : list of dictionaries
+                   selected l1a metadata entries to use
+    dark_idx : list of dictionaries
+               Metadata for all available darkfiles in the pipeline
+    verbose : boolean
+              whether to print messages when silent problems are encountered
+               
+    Returns
+    ----------
+    lights_and_darks : dictionary of lists of dictionaries
+                       Format: {"light_filename": [light_metadata, dark_metadata]}
+    """
+    
+    lights_and_darks = {}
+    lights_missing_darks = []
+    
+    for fidx in selected_l1a:
+        try:
+            dark_opts = find_dark_options(fidx, dark_idx) 
+
+            if len(dark_opts) > 1: 
+                if verbose:
+                    print((f"Oh no! Too many dark files ({len(dark_opts)}) for file {fidx['name']}! Code should be written within find_dark_options to handle this. Skipping for now."))
+                    print(f"Here are the dark opts for {fidx['name']}: ")
+                    for d in dark_opts:
+                        print(d['name'])
+                    
+                continue
+            if dark_opts:  # assuming there ARE some options,
+                lights_and_darks[fidx['name']] = (fidx, dark_opts[0])  # the entry key will be the light filename, and we will add the light index info for reference
+        except ValueError:
+            if ech_isdark(fidx):
+                pass  # don't need to worry if there's no dark file for a dark file, it is itself already.
+            else:
+                lights_missing_darks.append(fidx["name"])  # but if it's a light file missing a dark, we would like to know.
+
+            continue
+            
+    return lights_and_darks, lights_missing_darks
+
+
+def find_dark_options(input_light_idx, idx_list_to_search):
+    """
+    Looks for darks matching the observation described by input_light_idx.
+
+    Parameters
+    ----------
+    input_light_idx : dictionary
+                      a dictionary entry of metadata for some observation
+    idx_list_to_search : list of dictionaries
+                         where each dictionary is the metadata for dark files
+
+    Returns
+    ----------
+    dark_options : list of dictionaries
+                   where each dictionary is the metadata for dark files that 
+                   match input_light_idx
+    """
+    if not ech_islight(input_light_idx):
+        raise ValueError('Input file index corresponds to a dark observation, cannot find matching dark.')
+    
+    half_orbit = datetime.timedelta(hours=2)
+    dark_options = [didx for didx in idx_list_to_search 
+                    if (np.abs(didx['datetime'] - input_light_idx['datetime']) < half_orbit
+                        and didx['binning'] == input_light_idx['binning']
+                        # and didx['mcp_gain'] == input_light_idx['mcp_gain']
+                        and didx['int_time'] == input_light_idx['int_time']
+                        # and iuvs_orbno_from_fname(didx['name']) == iuvs_orbno_from_fname(input_light_idx['name'])
+                        and iuvs_segment_from_fname(didx['name']) == iuvs_segment_from_fname(input_light_idx['name'])
+                        and ech_isdark(didx))]
+    
+    return dark_options
+
+
+def ech_isdark(fidx):
+    """
+    Identifies whether an echelle file contains dark integrations by checking the gain.
+
+    Parameters
+    ----------
+    fidx : dictionary
+           a single dictionary entry of metadata for some observation
+    Returns
+    ----------
+    True or False
+    """
+
+    return 'dark' in fidx['name']
+
+
+def ech_islight(fidx):
+    """
+    Identifies whether an echelle file has light (observation) integrations.
+
+    Parameters
+    ----------
+    fidx : dictionary
+           a single dictionary entry of metadata for some observation
+    Returns
+    ----------
+    True or False
+    """
+    return not ech_isdark(fidx)
+
+
+def make_dark_index(ech_l1a_idx):
+    """
+    Takes the index of l1a file metadata, ech_l1a_idx, and makes a similar index that will be used 
+    to find dark files. note that the return value is NOT darks only.
     
     Parameters
     ----------
     ech_l1a_idx : list of dictionaries
-                 Each dictionary is a collection of metadata for each IUVS observation file.
-    sel: list
-         The code will sel(ect) the slice [sel[0] : sel[1]] for which to run quicklooks.
-         This slice is based on ech_l1a_idx, so the slice may not be the most intuitive lookup.
-    date : datetime object
-           If passed in, the code will downselect to only observations whose date match "date".
-    orbit : int
-            If passed in, the code will downselect to only observations whose orbit matches "orbit".
-    prange : list
-             If passed in, the associated values will be used to set the percentile pixels to which
-             the displayed image will be restricted. Passing a NaN in either position of the list
-             unsets the lower bound.
-    arange : list
-             If passed in, the associated values will be used to set the absolute pixel value to which
-             the displayed image will be restricted. Passing a NaN in either position of the list
-             unsets the lower bound.
+                  metadata for all light observation files.
+    """
+    dark_idx = [fidx for fidx in ech_l1a_idx if (('orbit' in fidx['name']) and ech_isdark(fidx))]
+    dark_idx = sorted(dark_idx, key=lambda i:i['datetime'])
     
-    Returns
+    return dark_idx
+
+# Count rates ----------------------------------------------------------
+
+
+def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
+    """
+    ...description...
+
+    Parameters
     ----------
-    None (runs quicklook making function on selected files and displays figures).
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : 
+    spapixrange : 
+    return_npix : 
+
+    Returns
+    -------
+    countrate : 
+    npix : 
+
+    """
+    binning = get_binning_scheme(hdul)
+    n_int = get_n_int(hdul)
+    
+    spalo, spahi = spapixrange  # spatial pixels 
+    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
+                                             spalo, spahi, 'SPA')
+    spelo, spehi = spepixrange
+    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
+                                             spelo, spehi, 'SPE')
+
+    npix = nspapix*nspepix
+
+    if binning['nspa'] == 0 or binning['nspe'] == 0:
+        # data is bad and contains no frames
+        countsperpix = np.nan
+    elif n_int == 1:
+        # single integration
+        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
+    else: # n_int > 1
+        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
+        
+    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
+    
+    if return_npix:
+        return countrate, npix
+    
+    return countrate
+
+
+def get_countrate_diagnostics(hdul):
+    """
+    ...description...
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : 
+    spapixrange : 
+    return_npix : 
+
+    Returns
+    -------
+    countrate : 
+    npix : 
+
+    """
+    Hlya_spapixrange = np.array([slit_start, slit_end])
+    Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
+    
+    Hbkg_spapixrange = Hlya_spapixrange + 2*(slit_end-slit_start)
+    Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
+    
+    Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])
+    Dbkg_countrate, Dbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [505, 540])
+    
+    return {'Hlya_countrate':Hlya_countrate,
+            'Hlya_npix':Hlya_npix,
+            'Hbkg_countrate':Hbkg_countrate,
+            'Hbkg_npix':Hbkg_npix,
+            'Dlya_countrate':Dlya_countrate,
+            'Dlya_npix':Dlya_npix,
+            'Dbkg_countrate':Dbkg_countrate,
+            'Dbkg_npix':Dbkg_npix}
+
+
+def get_lya_countrates(idx_entry):
+    """
+    Gets Ly α countrates
+    
+    Parameters
+    ----------
+    idx_entry : string
+               folder containing observations, sorted into subfolders labeled by orbit
+
+    Returns
+    -------
+    None -- just updates the index files 
+    """
+    rates = idx_entry['countrate_diagnostics']
+    
+    return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
+            'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
+
+
+# Metadata -------------------------------------------------------------
+
+
+def get_dir_metadata(the_dir, new_files_limit=None):
+    """
+    Gets metadata for given set of files
+
+    Parameters
+    ----------
+    the_dir : string
+              path to directory containing observation data
+    new_files_limit : 
+
+    Returns
+    -------
+    new_idx: 
+    """
+    idx_fname = the_dir[:-1] + '_metadata.npy'
+    print(f'loading {idx_fname}...')
+    
+    try:
+        idx = np.load(idx_fname, allow_pickle=True)
+    except FileNotFoundError:
+        print(f'{idx_fname} not found, creating new index...')
+        idx = []
+
+    # make list of most recent files from index and directory
+    idx_fnames = [filedata['name'] for filedata in idx]
+    dir_fnames = [os.path.basename(f) for f in find_files(data_directory=the_dir,
+                                                          use_index=False)]
+    most_recent_fnames = get_latest_files(np.concatenate([idx_fnames, 
+                                                         dir_fnames]))
+    # get new information from disk if needed
+    not_in_idx = np.setdiff1d(most_recent_fnames, idx_fnames)
+    not_in_idx = sorted(not_in_idx, key=iuvs_filename_to_datetime)
+    not_in_idx = not_in_idx[:new_files_limit]
+    
+    add_to_idx = []
+    if len(not_in_idx) > 0:
+        print(f'adding {len(not_in_idx)} files to index...')
+        
+        for i, f in enumerate(not_in_idx):
+            print(f'getting metadata {i+1}/{len(not_in_idx)}: {f}'+' '*20, end='\r')
+            
+            f_metadata = get_file_metadata(find_files(data_directory=the_dir,
+                                                      use_index=False,
+                                                      pattern=f)[0])
+            add_to_idx.append(f_metadata)
+        
+        print('\n... done')
+
+    # remove old files from index
+    remove_from_idx = np.setdiff1d(idx_fnames, most_recent_fnames)
+    new_idx = [i for i in idx if i['name'] not in remove_from_idx]
+
+    # add new files to index
+    new_idx = np.concatenate([new_idx, add_to_idx])
+    
+    # sort by filename
+    new_idx = sorted(new_idx, key=lambda x: iuvs_filename_to_datetime(x['name']))
+    
+    # overwrite directory on disk
+    np.save(idx_fname, new_idx)
+    
+    return new_idx
+
+
+def get_file_metadata(fname):
+    # to add:
+    # * signal at position of Ly α ?
+    # * detectable D Ly α ?
+    """
+    Gets the binning scheme for a given FITS HDU.
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    Dicionaries explaining the binning scheme:
+    if nonlinear, returns the bin table, along with the number of spatial and spectral bins.
+    if linear, returns the first spatial and spectral bin edges, the widths, and the number of bins.
+
     """
     
-    dark_idx = make_dark_index(ech_l1a_idx)
-    selected_l1a = copy.deepcopy(ech_l1a_idx)
+    this_fits = IUVSFITS(fname)#fits.open(fname)
     
-    # Downselect the metadata
-    if sel != [0, -1]:
-        selected_l1a = selected_l1a[sel[0]:sel[1]]
-    else:
-        if orbit is not None: 
-            selected_l1a = [entry for entry in selected_l1a if entry['orbit']==orbit]
-            
-        if date is not None:
-            date_match = (selected_l1a['date'].year == date.year) & (selected_l1a['date'].month == date.month) & (selected_l1a['date'].day == date.day)
-            selected_l1a = [entry for entry in selected_l1a if date_match]
-            
-    # Checks to see if we've accidentally removed all files from the to-do list
-    if len(selected_l1a) == 0:
-        raise IndexError("Error: No matching files found. Try removing one of either date or orbit arguments. Or, you selected a range that is 0 long using the sel argument.")
-        
-    # Files without geometry - list of file names
-    no_geometry = [i['name'] for i in find_files_missing_geometry(selected_l1a)]
-           
-    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx)
+    binning = get_binning_scheme(this_fits)
+    n_int = get_n_int(this_fits)
+    shape = (n_int, binning['nspa'], binning['nspe'])
     
-    # Loop through the dictionary containing light and dark pairs and run the quicklook code on each set.
-    for k in lights_and_darks.keys():
-        print("----------------------------------------------------------------------------------")
-        light_idx = lights_and_darks[k][0]
-        print(f"Light file {light_idx['name']}")  # Light file is the first entry
-
-        # open the light file --------------------------------------------------------------------
-        light_path = find_files(data_directory=l1a_dir,
-                                use_index=False, pattern=light_idx['name'])[0]
-        light_fits = fits.open(light_path)
-
-        # open the dark file ---------------------------------------------------------------------
-        dark_path = find_files(data_directory=l1a_dir,
-                               use_index=False, pattern=lights_and_darks[k][1]["name"])[0]
-        dark_fits = fits.open(dark_path)
-
-        # Check that we don't have too many dark integrations
-        num_dark_ints = dark_fits['Primary'].data.shape[0]
-        if num_dark_ints > 2:
-            print(f"Too many dark integrations in file {dark_path} -- either misclassified a light file or dark has >2 integrations")
-        else:
-            make_one_quicklook(lights_and_darks[k], light_fits, dark_fits, prange=prange, arange=arange, no_geo=no_geometry)
-
-    print(f"Finished. {len(files_missing_dark)} files were missing darks:")
-
-    if len(files_missing_dark)==0:
-        print("--")
-    else:
-        for f in files_missing_dark:
-            print(f)
+    return {'name': this_fits.basename,  # os.path.basename(fname),
+            'orbit': this_fits.orbit,  # this_fits['Observation'].data['ORBIT_NUMBER'][0],
+            'shape': shape,
+            'n_int': n_int,
+            'datetime': this_fits.timestamp,  # iuvs_filename_to_datetime(os.path.basename(fname)),
+            'binning': binning,
+            'int_time': this_fits['Primary'].header['INT_TIME'],
+            'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
+            'geom': has_geometry_pvec(this_fits),
+            'missing_frames': locate_missing_frames(this_fits, n_int),
+            'countrate_diagnostics': get_countrate_diagnostics(this_fits)
+           }
