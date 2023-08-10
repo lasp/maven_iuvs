@@ -1,165 +1,80 @@
 import os
 import glob
-
 import re
-
 import numpy as np
 import spiceypy as spice
 
 
-def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
-    """
-    Take a list of kernel file paths and return only the file paths to the latest versions of each kernel.
+def load_iuvs_spice(spice_directory=None,
+                    load_all_longterm=False,
+                    clear_loaded=True, load_ck=False):
+    """Load SPICE kernels for MAVEN/IUVS use.
 
     Parameters
     ----------
-    fnamelist_in : str, arr, list
-        Input file path(s) of kernels.
-    part : int
-        Describes where in the kernel filename the date information resides.
-        Filename is split by - and _, part is the index of the date component
-    getlast : bool
-        Set to true to return the date of the last of the latest kernels. Defaults to False.
-    after : int
-        Set to a date to get only kernels later than that date. Date format YYMMDD. Defaults to None.
-
-    Returns
-    -------
-    retlist : list
-        A list of file paths of the latest kernels.
-    last : int
-        The date of the last of the latest kernels. Format YYMMDD.
-    """
-    # store the input filename list internally
-    fnamelist = fnamelist_in
-
-    # if the filename list is not actually a list but just a single string, convert it to a list
-    if type(fnamelist) == str:
-        fnamelist = [fnamelist]
-
-    # sort the list in reverse order so the most recent kernel appears first in a subset of kernels
-    fnamelist.sort(reverse=True)
-
-    # extract the filenames without their version number
-    filetag = [os.path.basename(f).split("_v")[0] for f in fnamelist]
-
-    # without version numbers, there are many repeated filenames, so find a single entry for each kernel
-    uniquetags, uniquetagindices = np.unique(filetag, return_index=True)
-
-    # make a list of the kernels with one entry per kernel
-    fnamelist = np.array(fnamelist)[uniquetagindices]
-
-    # extract the date portions of the kernel file paths
-    datepart = [re.split('[-_]', os.path.basename(fname))[part]
-                for fname in fnamelist]
-
-    # find the individual dates
-    uniquedates, uniquedateindex = np.unique(datepart, return_index=True)
-
-    # extract the finald ate
-    last = uniquedates[-1]
-
-    # if a date is chosen for after, then include only the latest kernels after the specified date
-    if after is not None:
-        retlist = [f for f, d in zip(
-            fnamelist, datepart) if int(d) >= int(after)]
-
-    # otherwise, return all the latest kernels
-    else:
-        retlist = [f for f, d in zip(fnamelist, datepart)]
-
-    # if user wants, return also the date of the last of the latest kernels
-    if getlast:
-        return retlist, last
-
-    # otherwise return just the latest kernels
-    else:
-        return retlist
-
-
-def furnsh_array(kernel_array):
-    """
-    Furnish a set of kernels defined in a list or array of their file paths.
-
-    Parameters
-    ----------
-    kernel_array : list, arr
-        A list or array of kernel file paths.
-
-    Returns
-    -------
-    None.
-    """
-
-    [spice.furnsh(k) for k in kernel_array]
-
-
-def load_sc_ck_type(kerntype, spice_directory, load_predicts=False, load_all_longterm=False):
-    """
-    Furnish CK kernels.
-
-    Parameters
-    ----------
-    kerntype : str
-        The type of CK kernel to furnish. We use 'app' and 'sc' with MAVEN/IUVS.
     spice_directory : str
-        Absolute path to your local SPICE directory.
-    load_predicts : bool
-        Whether or not to load prediction kernels. Defaults to False.
+        Absolute path to your local SPICE directory. Defaults to value
+        defined in user_paths.py if None.
     load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10.
+        Whether or not to load all of the longterm kernels. Defaults
+        to False, which loads only the last 10 (see function
+        load_sc_ck_type).
+    clear_loaded : bool
+        Whether to clear all loaded kernels before loading IUVS kernels.
+    load_ck : bool
+    	Whether to load the ck kernel.
 
     Returns
     -------
     None.
+
     """
+
+    # load SPICE directory from user_paths or define it
+    if spice_directory is None:
+        # use value defined in user_paths.py or create it
+        from maven_iuvs.download import setup_user_paths  # don't move
+        # ^^^ avoids circular import
+        setup_user_paths()
+        # get the path from the possibly newly created file
+        from maven_iuvs.user_paths import spice_dir  # don't move this
+        if not os.path.exists(spice_dir):
+            raise Exception("Cannot find specified SPICE directory."
+                            " Is it accessible?")
+
+        spice_directory = spice_dir
 
     # set kernel paths
     mvn_kpath = os.path.join(spice_directory, 'mvn')
-    ck_path = os.path.join(mvn_kpath, 'ck')
+    generic_kpath = os.path.join(spice_directory, 'generic_kernels')
 
-    # load the long kernels first
-    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_rel_*.bc'))
-    lastlong = None
-    longterm_kernels = None
-    if len(f) > 0:
-        # use the second date in the week
-        longterm_kernels, lastlong = find_latest_kernel(f, 4, getlast=True)
+    # clear any existing furnished kernels
+    if clear_loaded:
+        spice.kclear()
 
-    # now the daily kernels
-    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_red_*.bc'))
-    day = None
-    lastday = None
-    if len(f) > 0:
-        day, lastday = find_latest_kernel(f, 3, after=lastlong, getlast=True)
+    # break up path names into chunks of length 78 so SPICE can handle it.
+    path_values = breakup_path(generic_kpath, 78)
+    spice.pcpool('PATH_VALUES', path_values)
+    spice.furnsh(generic_kpath + '/generic.tm')
 
-    # finally the "normal" kernels
-    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_rec_*.bc'))
-    norm = None
-    if len(f) > 0:
-        norm = find_latest_kernel(f, 3, after=lastday)
+    # break up path names again
+    path_values = breakup_path(mvn_kpath, 78)
+    spice.pcpool('PATH_VALUES', path_values)
+    spice.furnsh(mvn_kpath + '/mvn.tm')
 
-    pred_list = None
-    if load_predicts:
-        # when we load predictions, they will go here
-        f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_pred_*.bc'))
-        if len(f) > 0:
-            pred_list = find_latest_kernel(f, 3, after=lastday)
-            # use the last day, because normal kernels are irregular
-            # use the second date, so if the prediction overlaps the last day, it gets loaded
+    # furnish spacecraft C-kernels (attitude of spacecraft/instruments)
+    if load_ck:
+        load_sc_ck(spice_directory, load_all_longterm=load_all_longterm)
 
-    # unless the /all keyword is set, only load the last 10 long-term kernels
-    if not load_all_longterm:
-        longterm_kernels = longterm_kernels[-10:]
+    # furnish SP-kernels (ephemeris data (spacecraft physical location))
+    load_sc_spk(spice_directory)
 
-    # furnish things in the following order so that they are in proper
-    # priority weekly has highest, then daily, then normal (then
-    # predictions, if any) so load [pred,]norm,day,week
-    furnsh_array(norm)
-    furnsh_array(day)
-    furnsh_array(longterm_kernels)
-    if load_predicts:
-        furnsh_array(pred_list)
+    # furnish spacecraft clock kernels
+    load_sc_sclk(spice_directory)
+
+    # furnish the mars system position kernel that gives the location
+    # of Mars relative to the solar system
+    spice.furnsh(os.path.join(generic_kpath, 'spk', 'mar097.bsp'))
 
 
 def load_sc_ck(spice_directory, load_cruise=False, load_all_longterm=False):
@@ -309,6 +224,74 @@ def load_sc_sclk(spice_directory):
     furnsh_array(f)
 
 
+def load_sc_ck_type(kerntype, spice_directory, load_predicts=False, load_all_longterm=False):
+    """
+    Furnish CK kernels.
+
+    Parameters
+    ----------
+    kerntype : str
+        The type of CK kernel to furnish. We use 'app' and 'sc' with MAVEN/IUVS.
+    spice_directory : str
+        Absolute path to your local SPICE directory.
+    load_predicts : bool
+        Whether or not to load prediction kernels. Defaults to False.
+    load_all_longterm : bool
+        Whether or not to load all of the longterm kernels. Defaults to False, which loads only the last 10.
+
+    Returns
+    -------
+    None.
+    """
+
+    # set kernel paths
+    mvn_kpath = os.path.join(spice_directory, 'mvn')
+    ck_path = os.path.join(mvn_kpath, 'ck')
+
+    # load the long kernels first
+    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_rel_*.bc'))
+    lastlong = None
+    longterm_kernels = None
+    if len(f) > 0:
+        # use the second date in the week
+        longterm_kernels, lastlong = find_latest_kernel(f, 4, getlast=True)
+
+    # now the daily kernels
+    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_red_*.bc'))
+    day = None
+    lastday = None
+    if len(f) > 0:
+        day, lastday = find_latest_kernel(f, 3, after=lastlong, getlast=True)
+
+    # finally the "normal" kernels
+    f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_rec_*.bc'))
+    norm = None
+    if len(f) > 0:
+        norm = find_latest_kernel(f, 3, after=lastday)
+
+    pred_list = None
+    if load_predicts:
+        # when we load predictions, they will go here
+        f = glob.glob(os.path.join(ck_path, 'mvn_' + kerntype + '_pred_*.bc'))
+        if len(f) > 0:
+            pred_list = find_latest_kernel(f, 3, after=lastday)
+            # use the last day, because normal kernels are irregular
+            # use the second date, so if the prediction overlaps the last day, it gets loaded
+
+    # unless the /all keyword is set, only load the last 10 long-term kernels
+    if not load_all_longterm:
+        longterm_kernels = longterm_kernels[-10:]
+
+    # furnish things in the following order so that they are in proper
+    # priority weekly has highest, then daily, then normal (then
+    # predictions, if any) so load [pred,]norm,day,week
+    furnsh_array(norm)
+    furnsh_array(day)
+    furnsh_array(longterm_kernels)
+    if load_predicts:
+        furnsh_array(pred_list)
+
+
 def breakup_path(string, splitlength):
     """
     Splits a string filename into a list of strings of at most length
@@ -339,70 +322,88 @@ def breakup_path(string, splitlength):
         return breakup
 
 
-def load_iuvs_spice(spice_directory=None,
-                    load_all_longterm=False,
-                    clear_loaded=True):
-    """Load SPICE kernels for MAVEN/IUVS use.
+def furnsh_array(kernel_array):
+    """
+    Furnish a set of kernels defined in a list or array of their file paths.
 
     Parameters
     ----------
-    spice_directory : str
-        Absolute path to your local SPICE directory. Defaults to value
-        defined in user_paths.py if None.
-    load_all_longterm : bool
-        Whether or not to load all of the longterm kernels. Defaults
-        to False, which loads only the last 10 (see function
-        load_sc_ck_type).
-    clear_loaded : bool
-        Whether to clear all loaded kernels before loading IUVS kernels.
+    kernel_array : list, arr
+        A list or array of kernel file paths.
 
     Returns
     -------
     None.
-
     """
 
-    # load SPICE directory from user_paths or define it
-    if spice_directory is None:
-        # use value defined in user_paths.py or create it
-        from maven_iuvs.download import setup_user_paths  # don't move
-        # ^^^ avoids circular import
-        setup_user_paths()
-        # get the path from the possibly newly created file
-        from maven_iuvs.user_paths import spice_dir  # don't move this
-        if not os.path.exists(spice_dir):
-            raise Exception("Cannot find specified SPICE directory."
-                            " Is it accessible?")
+    [spice.furnsh(k) for k in kernel_array]
 
-        spice_directory = spice_dir
 
-    # set kernel paths
-    mvn_kpath = os.path.join(spice_directory, 'mvn')
-    generic_kpath = os.path.join(spice_directory, 'generic_kernels')
+def find_latest_kernel(fnamelist_in, part, getlast=False, after=None):
+    """
+    Take a list of kernel file paths and return only the file paths to the latest versions of each kernel.
 
-    # clear any existing furnished kernels
-    if clear_loaded:
-        spice.kclear()
+    Parameters
+    ----------
+    fnamelist_in : str, arr, list
+        Input file path(s) of kernels.
+    part : int
+        Describes where in the kernel filename the date information resides.
+        Filename is split by - and _, part is the index of the date component
+    getlast : bool
+        Set to true to return the date of the last of the latest kernels. Defaults to False.
+    after : int
+        Set to a date to get only kernels later than that date. Date format YYMMDD. Defaults to None.
 
-    # break up path names into chunks of length 78 so SPICE can handle it.
-    path_values = breakup_path(generic_kpath, 78)
-    spice.pcpool('PATH_VALUES', path_values)
-    spice.furnsh(generic_kpath + '/generic.tm')
+    Returns
+    -------
+    retlist : list
+        A list of file paths of the latest kernels.
+    last : int
+        The date of the last of the latest kernels. Format YYMMDD.
+    """
+    # store the input filename list internally
+    fnamelist = fnamelist_in
 
-    # break up path names again
-    path_values = breakup_path(mvn_kpath, 78)
-    spice.pcpool('PATH_VALUES', path_values)
-    spice.furnsh(mvn_kpath + '/mvn.tm')
+    # if the filename list is not actually a list but just a single string, convert it to a list
+    if type(fnamelist) == str:
+        fnamelist = [fnamelist]
 
-    # furnish spacecraft C-kernels (attitude of spacecraft/instruments)
-    load_sc_ck(spice_directory, load_all_longterm=load_all_longterm)
+    # sort the list in reverse order so the most recent kernel appears first in a subset of kernels
+    fnamelist.sort(reverse=True)
 
-    # furnish SP-kernels (ephemeris data (spacecraft physical location))
-    load_sc_spk(spice_directory)
+    # extract the filenames without their version number
+    filetag = [os.path.basename(f).split("_v")[0] for f in fnamelist]
 
-    # furnish spacecraft clock kernels
-    load_sc_sclk(spice_directory)
+    # without version numbers, there are many repeated filenames, so find a single entry for each kernel
+    uniquetags, uniquetagindices = np.unique(filetag, return_index=True)
 
-    # furnish the mars system position kernel that gives the location
-    # of Mars relative to the solar system
-    spice.furnsh(os.path.join(generic_kpath, 'spk', 'mar097.bsp'))
+    # make a list of the kernels with one entry per kernel
+    fnamelist = np.array(fnamelist)[uniquetagindices]
+
+    # extract the date portions of the kernel file paths
+    datepart = [re.split('[-_]', os.path.basename(fname))[part]
+                for fname in fnamelist]
+
+    # find the individual dates
+    uniquedates, uniquedateindex = np.unique(datepart, return_index=True)
+
+    # extract the finald ate
+    last = uniquedates[-1]
+
+    # if a date is chosen for after, then include only the latest kernels after the specified date
+    if after is not None:
+        retlist = [f for f, d in zip(
+            fnamelist, datepart) if int(d) >= int(after)]
+
+    # otherwise, return all the latest kernels
+    else:
+        retlist = [f for f, d in zip(fnamelist, datepart)]
+
+    # if user wants, return also the date of the last of the latest kernels
+    if getlast:
+        return retlist, last
+
+    # otherwise return just the latest kernels
+    else:
+        return retlist

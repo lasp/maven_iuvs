@@ -15,45 +15,7 @@ from maven_iuvs.constants import R_Mars_km
 from maven_iuvs.miscellaneous import get_grad_colors
 
 
-def beta_flip(hdul):
-    """
-    Determine the spacecraft orientation and see if the APP is "beta-flipped," meaning rotated 180 degrees. 
-    This compares the instrument x-axis direction to the spacecraft velocity direction in an inertial reference frame, 
-    which are either (nearly) parallel or anti-parallel.
-
-    Parameters
-    ----------
-    hdul : HDUList
-        Opened FITS file.
-
-    Returns
-    -------
-    beta_flipped : bool, str
-        Returns bool True of False if orientation can be determined, otherwise returns the string "unknown".
-
-    """
-
-    # get the instrument's x-direction vector which is parallel to the spacecraft's motion
-    vi = hdul['spacecraftgeometry'].data['vx_instrument_inertial'][-1]
-
-    # get the spacecraft's velocity vector
-    vs = hdul['spacecraftgeometry'].data['v_spacecraft_rate_inertial'][-1]
-
-    # determine orientation between vectors (if they are aligned or anti-aligned)
-    app_sign = np.sign(np.dot(vi, vs))
-
-    # if negative then no beta flipping, if positive then yes beta flipping, otherwise state is unknown
-    if app_sign == -1:
-        beta_flipped = False
-    elif app_sign == 1:
-        beta_flipped = True
-    else:
-        beta_flipped = 'unknown'
-
-    # return the result
-    return beta_flipped
-
-
+# Identify files with or without geometry available yet ===========
 def find_files_missing_geometry(file_index, show_total=False):
     """
     Identifies observation files with geometry
@@ -97,6 +59,9 @@ def find_files_with_geometry(file_index):
 
     # print(f'{len(with_geom)} have geometry.\n')
     return with_geom
+
+
+# Orbital parameters ==============================================
 
 
 def find_maven_apsis(segment='periapse'):
@@ -236,46 +201,185 @@ def get_orbit_positions():
     return orbit_data
 
 
-def get_sun_vector_iau(myfits):
-    """Get the IAU direction of the Sun from the input FITS file for each
-    integration.
+def spice_positions(et):
+    """
+    Calculates MAVEN spacecraft position, Mars solar longitude, and subsolar position for a given ephemeris time.
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface
+    et : float
+        Input epoch in ephemeris seconds past J2000.
 
     Returns
     -------
-    sun_vecs_iau : numpy ndarray
-        Array of dimension (n_integrations, 3), containing the
-        IAU_MARS direction of the Sun at each integration time.
+    et : array
+        The input ephemeris times. Just givin'em back.
+    subsc_lat : array
+        Sub-spacecraft latitudes in degrees.
+    subsc_lon : array
+        Sub-spacecraft longitudes in degrees.
+    sc_alt_km : array
+        Sub-spacecraft altitudes in kilometers.
+    ls : array
+        Mars solar longitudes in degrees.
+    subsolar_lat : array
+        Sub-solar latitudes in degrees.
+    subsolar_lon : array
+        Sub-solar longitudes in degrees.
     """
-    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
-    subsolar_lat = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LAT']
-    return transform_lonlat_to_iau_vec(subsolar_lon, subsolar_lat)
+
+    # do a bunch of SPICE stuff only Justin understands...
+    target = 'Mars'
+    abcorr = 'LT+S'
+    observer = 'MAVEN'
+    spoint, trgepc, srfvec = spice.subpnt('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    rpoint, colatpoint, lonpoint = spice.recsph(spoint)
+    if lonpoint > np.pi:
+        lonpoint -= 2 * np.pi
+    subsc_lat = 90 - np.degrees(colatpoint)
+    subsc_lon = np.degrees(lonpoint)
+    sc_alt_km = np.sqrt(np.sum(srfvec ** 2))
+
+    # calculate subsolar position
+    sspoint, strgepc, ssrfvec = spice.subslr('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
+    srpoint, scolatpoint, slonpoint = spice.recsph(sspoint)
+    if slonpoint > np.pi:
+        slonpoint -= 2 * np.pi
+    subsolar_lat = 90 - np.degrees(scolatpoint)
+    subsolar_lon = np.degrees(slonpoint)
+
+    # calculate solar longitude
+    ls = spice.lspcn(target, et, abcorr)
+    ls = np.degrees(ls)
+
+    # return the position information
+    return et, subsc_lat, subsc_lon, sc_alt_km, ls, subsolar_lat, subsolar_lon
 
 
-def get_pixel_mrh_point_iau_mars_vector(myfits):
-    """Get the IAU direction of the Pixel minimum ray height point for the
-    input FITS file.
+# Pixel corner stuff =======================================================
+
+
+def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None, integration_cross_slit=None):
+    """
+    Average IUVS pixel corner arrays to obtain a set of corner
+    coordinates that can be input to pyplot.pcolormesh for continuous
+    display of image data in figures.
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    pixel_x, pixel_y : numpy ndarrays
+        x and y coordinates of the pixel corners. These arrays must
+        have dimensions (n_integrations, n_spatial_bins, 5), which is
+        the default dimensionality of corner coordinates as
+        represented in an IUVS FITS file.
+    pixel_z : numpy ndarray
+        Optional third dimension to include in averaging and
+        output. Defaults to None (no third dimension).
+    integration_cross_slit : bool or None
+        Whether slit movement from one integration to the next is in
+        the cross slit-direction. If None, this is inferred from the
+        input pixel_y geometry.
 
     Returns
     -------
-    mrh_vecs_iau : numpy ndarray
-        Array of dimension (n_integrations, n_spatial_bins, 5, 3),
-        containing the IAU_MARS direction of the pixel minimum ray
-        height point for this FITS file.
-
+    avg_x, avg_y, avg_z : tuple of numpy arrays
+        One average array for each input dimension. These arrays have
+        dimensions (n_integrations+1, n_spatial_bins+1), corresponding
+        to the average pixel corners. When passed to
+        pyplot.pcolormesh, these coordinates can be used to visualize
+        pixel data.
     """
-    lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
-    lat = myfits['PixelGeometry'].data['PIXEL_CORNER_LAT']
-    return transform_lonlat_to_iau_vec(lon, lat)
+
+    n1, n2 = pixel_x.shape[:2]
+
+    # axis 0 of pixel_x, pixel_y corresponds to integration number
+    # axis 1 corresponds to slit position
+    # axis 2 corresponds to pixel corner
+    #  pixel_corner quantities look like this:
+    #
+    #      ^
+    #      | along slit (towards big keyhole)
+    #   -------
+    #   |2   3|
+    #   |  4  |---> cross slit (dispersion direction?)
+    #   |0   1|      Note: whether this is in the direction of integration
+    #   -------            depends on the direction of slit motion on the sky
+
+    if integration_cross_slit is None:
+        # attempt to determine if the 0-1 direction corresponds to the
+        # direction of integration or not. Use pixel_y to do this
+        # because:
+        #   1) pixel_x is sometimes slit-relative and meaningless
+        #   2) pixel_x is sometimes longitude with a branch cut
+        # there could still be problems with pixel_y latitude crossing
+        # the pole... ignoring this for now
+        pixel_corner_direction = pixel_y[0, 0, 1] - pixel_y[0, 0, 0]
+        integration_direction  = pixel_y[1, 0, 0] - pixel_y[0, 0, 0]
+        integration_cross_slit = ((pixel_corner_direction
+                                   * integration_direction) > 0)
+
+    # bottom/top = along slit
+    # left/right = along integration
+    if integration_cross_slit:
+        pixel_bottom_left  = 0
+        pixel_bottom_right = 1
+        pixel_top_left     = 2
+        pixel_top_right    = 3
+    else:
+        pixel_bottom_left  = 1
+        pixel_bottom_right = 0
+        pixel_top_left     = 3
+        pixel_top_right    = 2
+
+    # join and transpose so we can do averaging once for x and y (and z)
+    if pixel_z is not None:
+        pixelxy = np.transpose([pixel_x,
+                                pixel_y,
+                                pixel_z],
+                               (1, 2, 3, 0))
+        n_dim = 3
+    else:
+        pixelxy = np.transpose([pixel_x,
+                                pixel_y],
+                               (1, 2, 3, 0))
+        n_dim = 2
+
+    # add up the interior grid points to get an average grid
+    avgxy = (pixelxy[:-1, :-1, pixel_top_right]
+             + pixelxy[1:, :-1, pixel_top_left]
+             + pixelxy[:-1, 1:, pixel_bottom_right]
+             + pixelxy[1:, 1:, pixel_top_left]) / 4
+
+    # now let's do the first/last integration
+    first = [(pixelxy[0, :-1, pixel_top_left]
+              + pixelxy[0, 1:, pixel_bottom_left])/2]
+    last = [(pixelxy[-1, :-1, pixel_top_right]
+             + pixelxy[-1, 1:, pixel_bottom_right])/2]
+    avgxy = np.concatenate((first, avgxy, last), axis=0)
+
+    # now the top/bottom of the slit and observation corners
+    top = np.concatenate(([pixelxy[0, 0, pixel_bottom_left]],
+                          (pixelxy[:-1, 0, pixel_bottom_right]
+                           + pixelxy[1:, 0, pixel_bottom_left]) / 2,
+                          [pixelxy[-1, 0, pixel_bottom_right]]),
+                         axis=0)
+    top = np.reshape(top, (n1+1, 1, n_dim))
+    bottom = np.concatenate(([pixelxy[0, -1, pixel_top_left]],
+                             (pixelxy[:-1, -1, pixel_top_right]
+                              + pixelxy[1:, -1, pixel_top_left]) / 2,
+                             [pixelxy[-1, -1, pixel_top_right]]),
+                            axis=0)
+    bottom = np.reshape(bottom, (n1+1, 1, n_dim))
+    avgxy = np.concatenate((top, avgxy, bottom), axis=1)
+
+    # now we have an array of dimensions [n_int+1, n_slit+1, 2-3]
+    # containing the averaged corners. This lets us plot with
+    # pcolormesh without any gaps
+
+    if pixel_z is not None:
+        return avgxy[:, :, 0], avgxy[:, :, 1], avgxy[:, :, 2]
+
+    return avgxy[:, :, 0], avgxy[:, :, 1]
 
 
 def get_pixel_corner_sza(myfits):
@@ -419,6 +523,82 @@ def get_pixel_corner_phase_angle(myfits):
                                        axis=-1)))
 
 
+def get_pixel_mrh_point_iau_mars_vector(myfits):
+    """Get the IAU direction of the Pixel minimum ray height point for the
+    input FITS file.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface.
+
+    Returns
+    -------
+    mrh_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, n_spatial_bins, 5, 3),
+        containing the IAU_MARS direction of the pixel minimum ray
+        height point for this FITS file.
+
+    """
+    lon = myfits['PixelGeometry'].data['PIXEL_CORNER_LON']
+    lat = myfits['PixelGeometry'].data['PIXEL_CORNER_LAT']
+    return transform_lonlat_to_iau_vec(lon, lat)
+
+
+def get_sun_vector_iau(myfits):
+    """Get the IAU direction of the Sun from the input FITS file for each
+    integration.
+
+    Parameters
+    ----------
+    myfits : HDUList or IUVSFITS
+        IUVS FITS interface
+
+    Returns
+    -------
+    sun_vecs_iau : numpy ndarray
+        Array of dimension (n_integrations, 3), containing the
+        IAU_MARS direction of the Sun at each integration time.
+    """
+    subsolar_lon = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LON']
+    subsolar_lat = myfits['SpacecraftGeometry'].data['SUB_SOLAR_LAT']
+    return transform_lonlat_to_iau_vec(subsolar_lon, subsolar_lat)
+
+
+def reshape_to_pixel_vec(arr, pixel_vec):
+    """
+    Reshape the input array to have the same dimensions at pixel_vec,
+    repeating elements along the spatial bin and pixel corner axis.
+
+    Parameters
+    ----------
+    arr : array
+        Array to be broadcast to the shape of pixel_vec. Can be 1- or
+        2- dimensional.
+    pixel_vec : array
+        Array to match the shape of.
+
+    Returns
+    -------
+    reshaped : numpy ndarray
+        Input array with elements repeated along the spatial and pixel
+        corner axis.
+
+    """
+    arr = np.array(arr)
+
+    # add the new axes to be repeated.
+    arr = arr[:, np.newaxis, np.newaxis]
+
+    reshaped = np.repeat(np.repeat(arr,
+                                   pixel_vec.shape[1],
+                                   axis=1),
+                         pixel_vec.shape[2],
+                         axis=2)
+
+    return reshaped
+
+
 def get_pixel_vec_mso(myfits):
     """Return the MSO Pixel Vectors from the input IUVS FITS
     file. Requires IUVS SPICE kernels.
@@ -463,6 +643,34 @@ def get_pixel_vec_mso(myfits):
     return pixel_vecs_mso
 
 
+def transform_lonlat_to_iau_vec(lon, lat):
+    """Return an array of 3-vectors matching the dimension of the input
+    lon/lat arrays, containing the IAU_MARS vector defined by the
+    input lat/lon.
+
+    Parameters
+    ----------
+    lon : numpy ndarray
+        Longitudes of the points.
+    lat : numpy ndarray
+        Latitudes of the points, with the same dimensionality as the
+        Longitude array
+
+    Returns
+    -------
+    iau_vec : array
+        Array of three-vectors in IAU Mars, with a new dimension of
+        size three as the last dimension of the array.
+    """
+    lon = np.radians(np.array(lon))
+    lat = np.radians(np.array(lat))
+    iau_vec = np.array([np.cos(lat)*np.cos(lon),
+                        np.cos(lat)*np.sin(lon),
+                        np.sin(lat)])
+    return np.transpose(iau_vec,
+                        axes=np.roll(range(lon.ndim+1), -1))
+
+
 def has_geometry_pvec(hdul):
     """
     Determines whether geodetic latitudes are available for the pixels in the pixel vector
@@ -486,6 +694,8 @@ def has_geometry_pvec(hdul):
     nanfrac = n_nan / n_quant
     
     return (nanfrac < 1.0)
+
+# Other ====================================================================
 
 
 def haversine(subsolar_latitude, subsolar_longitude, lat_dim=1800, lon_dim=3600):
@@ -738,6 +948,47 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
     return latitude, longitude, sza, local_time, x, y, cx, cy, context_map
 
 
+def beta_flip(hdul):
+    """
+    Determine the spacecraft orientation and see if the APP is "beta-flipped," meaning rotated 180 degrees. 
+    This compares the instrument x-axis direction to the spacecraft velocity direction in an inertial reference frame, 
+    which are either (nearly) parallel or anti-parallel.
+
+    Parameters
+    ----------
+    hdul : HDUList
+        Opened FITS file.
+
+    Returns
+    -------
+    beta_flipped : bool, str
+        Returns bool True of False if orientation can be determined, otherwise returns the string "unknown".
+
+    """
+
+    # get the instrument's x-direction vector which is parallel to the spacecraft's motion
+    vi = hdul['spacecraftgeometry'].data['vx_instrument_inertial'][-1]
+
+    # get the spacecraft's velocity vector
+    vs = hdul['spacecraftgeometry'].data['v_spacecraft_rate_inertial'][-1]
+
+    # determine orientation between vectors (if they are aligned or anti-aligned)
+    app_sign = np.sign(np.dot(vi, vs))
+
+    # if negative then no beta flipping, if positive then yes beta flipping, otherwise state is unknown
+    if app_sign == -1:
+        beta_flipped = False
+    elif app_sign == 1:
+        beta_flipped = True
+    else:
+        beta_flipped = 'unknown'
+
+    # return the result
+    return beta_flipped
+
+
+# Plotting routines ========================================================
+
 def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
     """
     Plots the spacecraft SZA procession vs. integration.
@@ -837,161 +1088,6 @@ def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76
     ax.set_title(f"Tangent point lat/lon{t}", fontsize=20)
 
 
-def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None,
-                    integration_cross_slit=None):
-    """Average IUVS pixel corner arrays to obtain a set of corner
-    coordinates that can be input to pyplot.pcolormesh for continuous
-    display of image data in figures.
-
-    Parameters
-    ----------
-    pixel_x, pixel_y : numpy ndarrays
-        x and y coordinates of the pixel corners. These arrays must
-        have dimensions (n_integrations, n_spatial_bins, 5), which is
-        the default dimensionality of corner coordinates as
-        represented in an IUVS FITS file.
-    pixel_z : numpy ndarray
-        Optional third dimension to include in averaging and
-        output. Defaults to None (no third dimension).
-    integration_cross_slit : bool or None
-        Whether slit movement from one integration to the next is in
-        the cross slit-direction. If None, this is inferred from the
-        input pixel_y geometry.
-
-    Returns
-    -------
-    avg_x, avg_y, avg_z : tuple of numpy arrays
-        One average array for each input dimension. These arrays have
-        dimensions (n_integrations+1, n_spatial_bins+1), corresponding
-        to the average pixel corners. When passed to
-        pyplot.pcolormesh, these coordinates can be used to visualize
-        pixel data.
-    """
-
-    n1, n2 = pixel_x.shape[:2]
-
-    # axis 0 of pixel_x, pixel_y corresponds to integration number
-    # axis 1 corresponds to slit position
-    # axis 2 corresponds to pixel corner
-    #  pixel_corner quantities look like this:
-    #
-    #      ^
-    #      | along slit (towards big keyhole)
-    #   -------
-    #   |2   3|
-    #   |  4  |---> cross slit (dispersion direction?)
-    #   |0   1|      Note: whether this is in the direction of integration
-    #   -------            depends on the direction of slit motion on the sky
-
-    if integration_cross_slit is None:
-        # attempt to determine if the 0-1 direction corresponds to the
-        # direction of integration or not. Use pixel_y to do this
-        # because:
-        #   1) pixel_x is sometimes slit-relative and meaningless
-        #   2) pixel_x is sometimes longitude with a branch cut
-        # there could still be problems with pixel_y latitude crossing
-        # the pole... ignoring this for now
-        pixel_corner_direction = pixel_y[0, 0, 1] - pixel_y[0, 0, 0]
-        integration_direction  = pixel_y[1, 0, 0] - pixel_y[0, 0, 0]
-        integration_cross_slit = ((pixel_corner_direction
-                                   * integration_direction) > 0)
-
-    # bottom/top = along slit
-    # left/right = along integration
-    if integration_cross_slit:
-        pixel_bottom_left  = 0
-        pixel_bottom_right = 1
-        pixel_top_left     = 2
-        pixel_top_right    = 3
-    else:
-        pixel_bottom_left  = 1
-        pixel_bottom_right = 0
-        pixel_top_left     = 3
-        pixel_top_right    = 2
-
-    # join and transpose so we can do averaging once for x and y (and z)
-    if pixel_z is not None:
-        pixelxy = np.transpose([pixel_x,
-                                pixel_y,
-                                pixel_z],
-                               (1, 2, 3, 0))
-        n_dim = 3
-    else:
-        pixelxy = np.transpose([pixel_x,
-                                pixel_y],
-                               (1, 2, 3, 0))
-        n_dim = 2
-
-    # add up the interior grid points to get an average grid
-    avgxy = (  pixelxy[ :-1,  :-1, pixel_top_right   ]
-             + pixelxy[1:  ,  :-1, pixel_top_left    ]
-             + pixelxy[ :-1, 1:  , pixel_bottom_right]
-             + pixelxy[1:  , 1:  , pixel_top_left    ])/4
-
-    # now let's do the first/last integration
-    first = [(  pixelxy[0,  :-1, pixel_top_left]
-              + pixelxy[0, 1:  , pixel_bottom_left])/2]
-    last = [(  pixelxy[-1,  :-1, pixel_top_right]
-             + pixelxy[-1, 1:  , pixel_bottom_right])/2]
-    avgxy = np.concatenate((first, avgxy, last), axis=0)
-
-    # now the top/bottom of the slit and observation corners
-    top = np.concatenate(([  pixelxy[0   , 0, pixel_bottom_left]],
-                          (  pixelxy[ :-1, 0, pixel_bottom_right]
-                           + pixelxy[1:  , 0, pixel_bottom_left])/2,
-                          [  pixelxy[  -1, 0, pixel_bottom_right]]),
-                         axis=0)
-    top = np.reshape(top, (n1+1, 1, n_dim))
-    bottom = np.concatenate(([  pixelxy[0   , -1, pixel_top_left]],
-                             (  pixelxy[ :-1, -1, pixel_top_right]
-                              + pixelxy[1:  , -1, pixel_top_left])/2,
-                             [  pixelxy[  -1, -1, pixel_top_right]]),
-                            axis=0)
-    bottom = np.reshape(bottom, (n1+1, 1, n_dim))
-    avgxy = np.concatenate((top, avgxy, bottom), axis=1)
-
-    # now we have an array of dimensions [n_int+1, n_slit+1, 2-3]
-    # containing the averaged corners. This lets us plot with
-    # pcolormesh without any gaps
-
-    if pixel_z is not None:
-        return avgxy[:, :, 0], avgxy[:, :, 1], avgxy[:, :, 2]
-
-    return avgxy[:, :, 0], avgxy[:, :, 1]
-
-def reshape_to_pixel_vec(arr, pixel_vec):
-    """Reshape the input array to have the same dimensions at pixel_vec,
-    repeating elements along the spatial bin and pixel corner axis.
-
-    Parameters
-    ----------
-    arr : array
-        Array to be broadcast to the shape of pixel_vec. Can be 1- or
-        2- dimensional.
-    pixel_vec : array
-        Array to match the shape of.
-
-    Returns
-    -------
-    reshaped : numpy ndarray
-        Input array with elements repeated along the spatial and pixel
-        corner axis.
-
-    """
-    arr = np.array(arr)
-
-    # add the new axes to be repeated.
-    arr = arr[:, np.newaxis, np.newaxis]
-
-    reshaped = np.repeat(np.repeat(arr,
-                                   pixel_vec.shape[1],
-                                   axis=1),
-                         pixel_vec.shape[2],
-                         axis=2)
-
-    return reshaped
-
-
 def rotation_matrix(axis, theta):
     """
     Return the rotation matrix associated with counterclockwise rotation about the given axis by theta radians.
@@ -1028,86 +1124,4 @@ def rotation_matrix(axis, theta):
     # return the rotation matrix
     return matrix
 
-
-def spice_positions(et):
-    """
-    Calculates MAVEN spacecraft position, Mars solar longitude, and subsolar position for a given ephemeris time.
-
-    Parameters
-    ----------
-    et : float
-        Input epoch in ephemeris seconds past J2000.
-
-    Returns
-    -------
-    et : array
-        The input ephemeris times. Just givin'em back.
-    subsc_lat : array
-        Sub-spacecraft latitudes in degrees.
-    subsc_lon : array
-        Sub-spacecraft longitudes in degrees.
-    sc_alt_km : array
-        Sub-spacecraft altitudes in kilometers.
-    ls : array
-        Mars solar longitudes in degrees.
-    subsolar_lat : array
-        Sub-solar latitudes in degrees.
-    subsolar_lon : array
-        Sub-solar longitudes in degrees.
-    """
-
-    # do a bunch of SPICE stuff only Justin understands...
-    target = 'Mars'
-    abcorr = 'LT+S'
-    observer = 'MAVEN'
-    spoint, trgepc, srfvec = spice.subpnt('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
-    rpoint, colatpoint, lonpoint = spice.recsph(spoint)
-    if lonpoint > np.pi:
-        lonpoint -= 2 * np.pi
-    subsc_lat = 90 - np.degrees(colatpoint)
-    subsc_lon = np.degrees(lonpoint)
-    sc_alt_km = np.sqrt(np.sum(srfvec ** 2))
-
-    # calculate subsolar position
-    sspoint, strgepc, ssrfvec = spice.subslr('Intercept: ellipsoid', target, et, 'IAU_MARS', abcorr, observer)
-    srpoint, scolatpoint, slonpoint = spice.recsph(sspoint)
-    if slonpoint > np.pi:
-        slonpoint -= 2 * np.pi
-    subsolar_lat = 90 - np.degrees(scolatpoint)
-    subsolar_lon = np.degrees(slonpoint)
-
-    # calculate solar longitude
-    ls = spice.lspcn(target, et, abcorr)
-    ls = np.degrees(ls)
-
-    # return the position information
-    return et, subsc_lat, subsc_lon, sc_alt_km, ls, subsolar_lat, subsolar_lon
-
-
-def transform_lonlat_to_iau_vec(lon, lat):
-    """Return an array of 3-vectors matching the dimension of the input
-    lon/lat arrays, containing the IAU_MARS vector defined by the
-    input lat/lon.
-
-    Parameters
-    ----------
-    lon : numpy ndarray
-        Longitudes of the points.
-    lat : numpy ndarray
-        Latitudes of the points, with the same dimensionality as the
-        Longitude array
-
-    Returns
-    -------
-    iau_vec : array
-        Array of three-vectors in IAU Mars, with a new dimension of
-        size three as the last dimension of the array.
-    """
-    lon = np.radians(np.array(lon))
-    lat = np.radians(np.array(lat))
-    iau_vec = np.array([np.cos(lat)*np.cos(lon),
-                        np.cos(lat)*np.sin(lon),
-                        np.sin(lat)])
-    return np.transpose(iau_vec,
-                        axes=np.roll(range(lon.ndim+1), -1))
 

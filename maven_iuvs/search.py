@@ -1,10 +1,9 @@
+import sys
 import os
 import warnings
 import glob
-
 import fnmatch
 import itertools
-
 import numpy as np
 from astropy.io import fits
 
@@ -19,7 +18,8 @@ def find_files(data_directory=None,
                use_index=None,
                count=False,
                **filename_kwargs):
-    """Return IUVSFITS files for a given glob pattern.
+    """
+    Return IUVSFITS files for a given glob pattern.
 
     Parameters
     ----------
@@ -106,7 +106,7 @@ def find_files(data_directory=None,
         orbfiles = []
     else:
         orbfiles = get_latest_files(dropxml(orbfiles))
-        #orbfiles = [IUVSFITS(f) for f in orbfiles]
+        # orbfiles = [IUVSFITS(f) for f in orbfiles]
 
     if count:
         return orbfiles, n_files
@@ -395,18 +395,18 @@ def get_latest_files(files):
 
 def relay_file(hdul):
     """
-        Determines whether a particular file was taken during relay mode.
+    Determines whether a particular file was taken during relay mode.
 
-        Parameters
-        ----------
-        hdul : HDUList
-            Opened FITS file.
+    Parameters
+    ----------
+    hdul : HDUList
+        Opened FITS file.
 
-        Returns
-        -------
-        relay : bool
-            True if a file was taken during a relay.
-        """
+    Returns
+    -------
+    relay : bool
+        True if a file was taken during a relay.
+    """
 
     # get mirror angles
     angles = hdul['integration'].data['mirror_deg']
@@ -439,32 +439,12 @@ def dropxml(files):
     return [f for f in files if f[-3:] != 'xml']
 
 
-def get_euvm_l2b_filename():
-    """
-    Returns the most recent EUVM L2B file available
-
-    Parameters
-    ----------
-    none
-
-    Returns
-    -------
-    euvm_l2b_fname : str
-       Filename of EUVM L2B save file.
-    """
-    from maven_iuvs.download import get_euvm_l2b_dir
-
-    euvm_l2b_dir = get_euvm_l2b_dir()
-
-    euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+"*l2b*.sav"))[-1]
-
-    return euvm_l2b_fname
-
-
+# TODO: This doesn't really seem like it belongs here.
 def get_solar_lyman_alpha(myfits):
-    """Compute the EUVM-measured solar Lyman alpha value to use for the
+    """
+    Compute the EUVM-measured solar Lyman alpha value to use for the
     input IUVS FITS file. Uses orbit-averaged EUVM l2b file synced
-    from MAVEN SDC with maven_iuvs.download.sync_euvm_l2b . Requires
+    from MAVEN SDC with maven_iuvs.download.sync_euvm_l2b. Requires
     SPICE to convert IUVS ET to datetime.
 
     Parameters
@@ -492,7 +472,7 @@ def get_solar_lyman_alpha(myfits):
         myfits = fits.open(myfits)
 
     # load the EUVM data
-    euvm = readsav(get_euvm_l2b_filename())
+    euvm = readsav(get_euvm_l2b_filename())#blah 
     euvm_datetime = [datetime.datetime.fromtimestamp(t)
                      for t in euvm['mvn_euv_l2_orbit'].item()[0]]
 
@@ -548,3 +528,26 @@ def get_solar_lyman_alpha(myfits):
         lya_interp = np.nan
 
     return lya_interp
+
+
+def get_euvm_l2b_filename():
+    """
+    Returns the most recent EUVM L2B file available
+
+    Parameters
+    ----------
+    none
+
+    Returns
+    -------
+    euvm_l2b_fname : str
+       Filename of EUVM L2B save file.
+    """
+    from maven_iuvs.download import get_euvm_l2b_dir
+
+    euvm_l2b_dir = get_euvm_l2b_dir()
+
+    euvm_l2b_fname = sorted(glob.glob(euvm_l2b_dir+"*l2b*.sav"))[-1]
+
+    return euvm_l2b_fname
+
