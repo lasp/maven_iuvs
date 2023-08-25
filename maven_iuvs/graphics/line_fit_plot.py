@@ -282,7 +282,7 @@ class LineFitPlot:
         file_info_text = 'FUV integration report\n'
         file_info_text += myfits['Primary'].header['FILENAME']+'\n'
         file_info_text += ('MCP_VOLT: '
-                           + str(myfits['Observation'].data['MCP_VOLT'][0]))
+                           + str(myfits['Primary'].header['MCP_VOLT'])) # Changed 'Observation' to 'Primary' due to errors, 8/10/23 EMC
         self.thumbnail_axes.text(file_text_start, 1, file_info_text,
                                  ha='left', va='top',
                                  transform=self.thumbnail_axes.transAxes,
