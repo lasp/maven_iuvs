@@ -98,8 +98,17 @@ def fit_line(myfits, wavelength,
 
         for ispa in range(n_spa):
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
-            DN = myfits['detector_dark_subtracted'].data[iint, ispa]
-            DN_unc = myfits['Random_dn_unc'].data[iint, ispa]
+
+            try:
+                DN = myfits['detector_dark_subtracted'].data[iint, ispa] # l1b
+            except:
+                DN = myfits['Primary'].data[iint, ispa] # l1a
+
+            try: 
+                DN_unc = myfits['Random_dn_unc'].data[iint, ispa] # l1b
+            except:
+                DN_unc = np.zeros_like(DN) # l1a -- this is wrong obviously
+
             if correct_muv:
                 muv = muv_contamination_templates[ispa]
             else:
@@ -115,7 +124,7 @@ def fit_line(myfits, wavelength,
             lineDNmax = np.max([lineDNmax, np.max(fitDN)])
 
             # guess what the fit parameters should be
-            backguess = (np.median(fitDN[0:3])+np.median(fitDN[-3:-1]))/2
+            backguess = (np.median(fitDN[0:3]) + np.median(fitDN[-3:-1]))/2
             slopeguess = ((np.median(fitDN[-3:-1]) - np.median(fitDN[0:3]))
                           /
                           (fitwaves[-1]-fitwaves[0]))
@@ -217,6 +226,41 @@ def fit_line(myfits, wavelength,
     return linevalues, lineunc
 
 
+def get_lsf_interp(myfits):
+    """
+    Get the array of IUVS line spread interpolating functions
+    appropriate to the input IUVS FITS file. Used for line fitting.
+
+    Parameters
+    ----------
+    myfits : IUVSFITS or HDUList
+        FITS file interface to an IUVS FITS file.
+
+    Returns
+    -------
+    lsf_interp : list of scipy.interp1d functions
+        Interpolating functions for the IUVS LSF for each spatial element.
+
+    """
+    lsf = get_lsf(myfits)
+
+    lsf_interp = [None]*len(lsf)
+    for i, l in enumerate(lsf):
+        # shift the LSF x coordinates to roughly match the instrument
+        # wavelength scale in nm (this is not exact because it is a
+        # fit parameter later on)
+        waves = 7.5 * np.linspace(-1, 1, len(l))
+
+        interp = interp1d(x=waves,
+                          y=l,
+                          bounds_error=False,
+                          fill_value=0.)
+
+        lsf_interp[i] = interp
+
+    return lsf_interp
+
+
 def get_lsf(myfits):
     """
     Get IUVS line spread function array appropriate to the input IUVS
@@ -275,41 +319,6 @@ def get_lsf_from_bins(spatial_binning):
         lsf[idx, :] = this_lsf
 
     return lsf
-
-    
-def get_lsf_interp(myfits):
-    """
-    Get the array of IUVS line spread interpolating functions
-    appropriate to the input IUVS FITS file. Used for line fitting.
-
-    Parameters
-    ----------
-    myfits : IUVSFITS or HDUList
-        FITS file interface to an IUVS FITS file.
-
-    Returns
-    -------
-    lsf_interp : list of scipy.interp1d functions
-        Interpolating functions for the IUVS LSF for each spatial element.
-
-    """
-    lsf = get_lsf(myfits)
-
-    lsf_interp = [None]*len(lsf)
-    for i, l in enumerate(lsf):
-        # shift the LSF x coordinates to roughly match the instrument
-        # wavelength scale in nm (this is not exact because it is a
-        # fit parameter later on)
-        waves = 7.5 * np.linspace(-1, 1, len(l))
-
-        interp = interp1d(x=waves,
-                          y=l,
-                          bounds_error=False,
-                          fill_value=0.)
-
-        lsf_interp[i] = interp
-
-    return lsf_interp
 
 
 def get_muv_contamination_templates(myfits_fuv):
