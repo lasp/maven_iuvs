@@ -176,7 +176,7 @@ def identify_rogue_observations(idx):
 
 # QUICKLOOK CODE ======================================================
 
-def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None, arange=None):
+def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, andlater=False, prange=None, arange=None):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
     
@@ -191,6 +191,8 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None,
            If passed in, the code will downselect to only observations whose date match "date".
     orbit : int
             If passed in, the code will downselect to only observations whose orbit matches "orbit".
+    andlater: boolean
+              if True, will include any files that occur later in time than the selected orbit or date.
     prange : list
              If passed in, the associated values will be used to set the percentile pixels to which
              the displayed image will be restricted. Passing a NaN in either position of the list
@@ -209,15 +211,7 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, prange=None,
     selected_l1a = copy.deepcopy(ech_l1a_idx)
     
     # Downselect the metadata
-    if sel != [0, -1]:
-        selected_l1a = selected_l1a[sel[0]:sel[1]]
-    else:
-        if orbit is not None: 
-            selected_l1a = [entry for entry in selected_l1a if entry['orbit']==orbit]
-            
-        if date is not None:
-            date_match = (selected_l1a['date'].year == date.year) & (selected_l1a['date'].month == date.month) & (selected_l1a['date'].day == date.day)
-            selected_l1a = [entry for entry in selected_l1a if date_match]
+    selected_l1a = downselect_data(ech_l1a_idx, sel=sel, date=date, orbit=orbit, andlater=andlater)
             
     # Checks to see if we've accidentally removed all files from the to-do list
     if len(selected_l1a) == 0:
@@ -383,40 +377,20 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     
     # Find number of light integrations
     n_ints = index_data_pair[0]['n_int']
-    n_ints_dark = index_data_pair[1]['n_int']
+    # n_ints_dark = index_data_pair[1]['n_int']
 
-    if n_ints_dark <= 1: 
-        raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
-
-    if n_ints_dark == 2:
-        # Separate the first and second dark integrations (they have different noise patterns)
-        first_dark = dark_fits['Primary'].data[0]
-        second_dark = dark_fits['Primary'].data[1]
-    else:
-        first_dark = dark_fits['Primary'].data[0]
-        # If more than 2 additional darks, get the element-wise mean to use as second dark
-        second_dark = np.mean( np.array([d for d in dark_fits['Primary'].data[1:]]), axis=0 ) 
-
+    # Grab darks for the quicklook
+    first_dark, second_dark = get_dark_frames(dark_fits)
     # Get an average dark 
     avg_dark = np.mean([first_dark, second_dark], axis=0)
 
-    # Dark substract the first frame ------------------------
-    dark_sub_first_light = light_fits['Primary'].data[0] - first_dark
+    dark_subtracted = subtract_darks(light_fits, dark_fits)
 
     # Create the coadded image
-    coadded_lights = np.zeros_like(light_fits['Primary'].data[0])
-
-    for L in light_fits['Primary'].data[1:]:
-        if np.isnan(np.min(L)):
-            if verbose:
-                print("Found a nan frame")
-            continue
-        coadded_lights += L - second_dark
+    coadded_lights = coadd_lights(dark_subtracted)
 
     if verbose:
-        print(f"Coadded {len(light_fits['Primary'].data)} light frames")
-
-    final_light = dark_sub_first_light + coadded_lights
+        print(f"Coadded {n_ints} light frames")
     
     # Set the ranges. By allowing prange and arange to be a mix of 'None' and actual values,
     # we can choose to set each bound by either percentile or absolute, and mix the two.
@@ -428,7 +402,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
             prange[p] = prange_full[p]
             
     # get all the data values so we can make one common colorbar
-    all_data = np.concatenate((final_light, first_dark, second_dark, avg_dark), axis=None)  # common_dark, 
+    all_data = np.concatenate((coadded_lights, first_dark, second_dark, avg_dark), axis=None)  # common_dark, 
     
     # Then, if an absolute value has not been set, the code sets the value based on the percentile value.
     for a in range(len(arange)):
@@ -470,9 +444,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     
     # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
     spec_x = [(spepixrng[i] + spepixrng[i + 1]) / 2 for i in range(len(spepixrng) - 1)]  # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
-    spectrum = np.sum(final_light[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
-    print(np.max(spectrum))
-    DetAxes[0].set_title("Spatially-added spectrum across slit")
+    spectrum = np.sum(coadded_lights[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
+    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=16)
+    DetAxes[0].set_ylabel("Avg. DN/sec/px", fontsize=16)
     DetAxes[0].plot(spec_x, spectrum)
     DetAxes[0].set_xlim(spec_x[0], spec_x[-1])
     
@@ -483,12 +457,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     D_f = 108  # determined by eye.
     inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
     inset.axes.get_xaxis().set_visible(False)
-    
-    # Plot the light 
-    detector_image(light_fits, image_to_plot=final_light, titletext="Coadded detector image (dark subtracted)", 
-                   fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", draw_slit_lines=True, 
-                   prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax)
-    
+        
     # Find where the Lyman alpha emission should be
     wvs = light_fits['Observation'].data['WAVELENGTH'][0][70]  # The 70 is just a random entry to just get one. its good enough. TODO: make it smart so it doesn't choke on 70
     Hlya_i = np.argmax(spectrum)  # find index where spectrum has the most power (that'll be Lyman alpha)
@@ -501,6 +470,11 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
     inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # Same
     DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)  # Same
+
+    # Plot the light 
+    detector_image(light_fits, image_to_plot=coadded_lights, titletext="Coadded detector image (dark subtracted)", 
+                   fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", draw_slit_lines=True, 
+                   prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax)
 
     # Plot the darks
     try: 
@@ -537,24 +511,28 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     # Ls = int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))
     
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}",
-                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {light_fits.Ls}°", 
-                f"UTC date/time: {light_fits.timestamp.strftime('%Y-%m-%d')}, {light_fits.timestamp.strftime('%H:%M:%S')}", # index_data_pair[0]['datetime']
-                f"Light file: {light_fits.basename}", # ['Primary'].header['filename']
+                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits.Ls, ndigits=0))}°", 
+                f"UTC date/time: {light_fits.timestamp.strftime('%Y-%m-%d')}, {light_fits.timestamp.strftime('%H:%M:%S')}", 
+                f"Integrations: {index_data_pair[0]['n_int']} light, {index_data_pair[1]['n_int']} dark",
+                f"Integration time: Light: {index_data_pair[0]['int_time']} s; Dark: {index_data_pair[1]['int_time']} s",
+                # f"Dark integrations: {index_data_pair[1]['n_int']}",
+                # f"Dark integration time: {index_data_pair[1]['int_time']} s",
+                f"Light file: {light_fits.basename}", 
                 f"Dark file: {dark_fits.basename}"]
-                # f"Integration time: {index_data_pair[0]['int_time']} s",
-                # f"Dark integrations: {index_data_pair[1]['n_int']}"]
-                # f"Dark integration time: {index_data_pair[1]['int_time']} s"]
     
     # List of fontsizes to use as we print stuff on the quicklook
     f = [36] + [26] * 8
     # Color list to loop through
-    c = ["black"] * 3 +  ["gray"] * 6 
+    c = ["black"] * 3 + ["gray"] * 6 
     
     # Now print stuff on the figure
     for i in range(5):
         plt.text(0.1, 1 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
 
-    plt.text(0.12, 0.45, f"{n_ints} light frames (here shown pre-dark subtraction):", fontsize=22, transform=QLfig.transFigure)
+    for i in range(5, len(print_me)):
+        plt.text(0.85, 1 - 0.02 * (i-5), print_me[i], fontsize=f[i], color=c[i], ha="right", transform=QLfig.transFigure)
+
+    plt.text(0.12, 0.45, f"{n_ints} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=QLfig.transFigure)
     print()
 
     light_fits.close()
@@ -565,7 +543,119 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
 
 # HELPER METHODS ======================================================
 
+
+def downselect_data(light_index, sel=[0, -1], orbit=None, date=None, andlater=None):
+        """
+        Given the light_index of files, this will select only those files which 
+        match either sel (raw index in the list), orbit number, or date. 
+        Currently needs to be updated to enable "and" selection, not sequential arbitrary order
+
+        Parameters
+        ----------
+        light_index : list
+                      list of dictionarties of file metadata returned by get_file_metadata
+        sel : list
+              2-length list specifying start and stop indices to select from light_index
+        orbit : int
+                orbit number to select
+        date : datetime object
+               any files matching the date and time will be returned
+        andlater : boolean
+                   whether to also include all files that occur later in time than orbit or date.
+        Returns
+        ----------
+        selected_l1a
+        """
+        selected_lights = copy.deepcopy(light_index)
+        if sel != [0, -1]:
+            selected_lights = selected_lights[sel[0]:sel[1]]
+        else:
+            if orbit is not None: 
+                if andlater==True:
+                    selected_lights = [entry for entry in selected_lights if entry['orbit']>=orbit]
+                else:
+                    selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
+                
+            if date is not None:
+                if andlater==True:
+                    date_match = selected_lights['date'].date() >= date.date()
+                    # date_match = (selected_lights['date'].year == date.year) & (selected_lights['date'].month == date.month) & (selected_lights['date'].day == date.day)
+                else:
+                    date_match = selected_lights['date'].date() == date.date()
+                                 #(selected_lights['date'].year >= date.year) & (selected_lights['date'].month >= date.month) & (selected_lights['date'].day >= date.day)
+                
+                selected_lights = [entry for entry in selected_lights if date_match]
+
+        return selected_lights
+
 # Relating to dark vs. light observations -----------------------------
+
+def coadd_lights(dark_sub):
+    """
+    Given a 3D array of dark-subtracted frames, this coadds them all.
+    No division is performed yet. 
+
+    Parameters
+    ----------
+    dark_sub : 3D Numpy array
+               Array of form [integrations, spatial, spectral]
+               containing detector light frames which have already been dark_subtracted.
+    """
+    coadded_lights = np.zeros_like(dark_sub[0, :, :])
+    for frame in range(dark_sub.shape[0]):
+        if np.isnan(np.min(dark_sub[frame])):
+            # if verbose:
+            #     print("Found a nan frame")
+            continue
+        coadded_lights += dark_sub[frame]
+
+    return coadded_lights
+
+
+def subtract_darks(light_fits, dark_fits):
+    """
+    Given matching light and dark fits, subtracts off the darks from lights.
+    """
+    first_dark, second_dark = get_dark_frames(dark_fits)
+
+    dark_subtracted = np.zeros_like(light_fits['Primary'].data)
+
+    dark_subtracted[0, :, :] = light_fits['Primary'].data[0] - first_dark
+
+    for i in range(1, light_fits['Primary'].data.shape[0]):
+        dark_subtracted[i, :, :] = light_fits['Primary'].data[i] - second_dark
+    
+    return dark_subtracted
+
+
+def get_dark_frames(dark_fits):
+    """
+    Given a fits file containing dark integrations, this will identify and return
+    the first and second dark frames. If more than 2 dark integrations exist,
+    the 2nd through nth dark frame will be averaged to create the second dark.
+
+    Parameters
+    ----------
+    dark_fits : IUVSfits or fits file
+                fits file containing dark integraitons.
+    """
+    n_ints_dark = get_n_int(dark_fits)
+
+    if n_ints_dark <= 1: 
+        raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
+
+    if n_ints_dark == 2:
+        # Separate the first and second dark integrations (they have different noise patterns)
+        first_dark = dark_fits['Primary'].data[0]
+        second_dark = dark_fits['Primary'].data[1]
+    else:
+        first_dark = dark_fits['Primary'].data[0]
+        # If more than 2 additional darks, get the element-wise mean to use as second dark
+        second_dark = np.mean(np.array([d for d in dark_fits['Primary'].data[1:]]), axis=0) 
+
+    return first_dark, second_dark
+
+
 def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
     """
     Fills a dictionary, lights_and_darks, with light and dark metadata for a given light observation file,    
@@ -897,7 +987,7 @@ def get_file_metadata(fname):
             'orbit': this_fits.orbit,  # this_fits['Observation'].data['ORBIT_NUMBER'][0],
             'shape': shape,
             'n_int': n_int,
-            'datetime': this_fits.timestamp,  # iuvs_filename_to_datetime(os.path.basename(fname)),
+            'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
             'binning': binning,
             'int_time': this_fits['Primary'].header['INT_TIME'],
             'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
