@@ -478,6 +478,15 @@ def sync_data(spice=True, level='l1b',
         else:
             raise ValueError('local_dir must be l1a or l1b')
 
+    # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
+    if " " in local_dir:
+        local_dir = local_dir.replace(" ", "\ ")
+
+    # Check to be sure that the vm is in the known_hosts file.
+    is_vm_found = subprocess.run(["ssh-keygen", "-H", "-F", vm], capture_output=True)
+    if (is_vm_found.returncode == 1) or ("found" not in is_vm_found.stdout.decode('utf-8')):
+        raise Exception(f"{vm} is not in the list of known_hosts. Please manually connect via ssh; upon first connection, it will be added automatically to ~./.ssh/known_hosts.")
+
     # try to sync the files, if it fails, user probably isn't on the VPN
     try:
         if iuvs_vm_password is None:
