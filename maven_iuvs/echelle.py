@@ -176,7 +176,7 @@ def identify_rogue_observations(idx):
 
 # QUICKLOOK CODE ======================================================
 
-def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, andlater=False, prange=None, arange=None):
+def run_quicklooks(ech_l1a_idx, sel=[0, -1], savefolder=None, show_D_inset=True, show_D_guideline=True, date=None, orbit=None, andlater=False, segment=None, prange=None, arange=None, verbose=False):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
     
@@ -211,8 +211,8 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, andlater=Fal
     selected_l1a = copy.deepcopy(ech_l1a_idx)
     
     # Downselect the metadata
-    selected_l1a = downselect_data(ech_l1a_idx, sel=sel, date=date, orbit=orbit, andlater=andlater)
-            
+    selected_l1a = downselect_data(ech_l1a_idx, sel=sel, date=date, orbit=orbit, segment=segment, andlater=andlater)
+
     # Checks to see if we've accidentally removed all files from the to-do list
     if len(selected_l1a) == 0:
         raise IndexError("Error: No matching files found. Try removing one of either date or orbit arguments. Or, you selected a range that is 0 long using the sel argument.")
@@ -220,7 +220,7 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, andlater=Fal
     # Files without geometry - list of file names
     no_geometry = [i['name'] for i in find_files_missing_geometry(selected_l1a)]
            
-    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx)
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx, verbose=verbose)
     
     # Loop through the dictionary containing light and dark pairs and run the quicklook code on each set.
     for k in lights_and_darks.keys():
@@ -242,7 +242,7 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], date=None, orbit=None, andlater=Fal
         # if num_dark_ints > 2:
         #     print(f"Too many dark integrations in file {dark_path} -- either misclassified a light file or dark has >2 integrations")
         # else:
-        make_one_quicklook(lights_and_darks[k], light_path, dark_path, prange=prange, arange=arange, no_geo=no_geometry)  #light_fits, dark_fits,
+        make_one_quicklook(lights_and_darks[k], light_path, dark_path, savefolder=savefolder, show_D_inset=show_D_inset, show_D_guideline=show_D_guideline, prange=prange, arange=arange, no_geo=no_geometry)  #light_fits, dark_fits,
         
     print(f"Finished. {len(files_missing_dark)} files were missing darks:")
 
@@ -338,7 +338,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(32, 22), thumb_cols=11):
     return fig, [SpectrumAx, MainAx], R1Axes, R2Axes, ThumbAxes 
 
 
-def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, prange=None, no_geo=None, # light_fits, dark_fits,
+def make_one_quicklook(index_data_pair, light_path, dark_path, savefolder=None, show_D_inset=True, show_D_guideline=True, arange=None, prange=None, no_geo=None, # light_fits, dark_fits,
                        show_DN_histogram=False, verbose=False):
     """ #  use_masking=False, lowthresh=3, highthresh=3,
     Fills in the quicklook figure for a single observation.
@@ -377,7 +377,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     
     # Find number of light integrations
     n_ints = index_data_pair[0]['n_int']
-    # n_ints_dark = index_data_pair[1]['n_int']
+    n_ints_dark = index_data_pair[1]['n_int']
 
     # Grab darks for the quicklook
     first_dark, second_dark = get_dark_frames(dark_fits)
@@ -449,14 +449,6 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     DetAxes[0].set_ylabel("Avg. DN/sec/px", fontsize=16)
     DetAxes[0].plot(spec_x, spectrum)
     DetAxes[0].set_xlim(spec_x[0], spec_x[-1])
-    
-    # Make an inset to look at deuterium
-    # inset (x0, y0, width, height)
-    inset = DetAxes[0].inset_axes([0.5, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes)
-    D_i = 70  # determined by eye.
-    D_f = 108  # determined by eye.
-    inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
-    inset.axes.get_xaxis().set_visible(False)
         
     # Find where the Lyman alpha emission should be
     wvs = light_fits['Observation'].data['WAVELENGTH'][0][70]  # The 70 is just a random entry to just get one. its good enough. TODO: make it smart so it doesn't choke on 70
@@ -467,10 +459,20 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     # Old way to find Lyman alpha was to take the best wavelength value for it and add the Lyman alpha centroid from fits, but it tends to misplace the center:
     # Lya_shift = int(np.mean(light_fits['Integration'].data['LYA_CENTROID']))
 
-    DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
-    inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # Same
-    DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)  # Same
-
+    DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)
+    if show_D_guideline:
+        DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
+    
+    if show_D_inset:
+        # Make an inset to look at deuterium
+        # inset (x0, y0, width, height)
+        inset = DetAxes[0].inset_axes([0.5, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes)
+        D_i = 70  # determined by eye.
+        D_f = 108  # determined by eye.
+        inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
+        inset.axes.get_xaxis().set_visible(False)
+        inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # Same
+    
     # Plot the light 
     detector_image(light_fits, image_to_plot=coadded_lights, titletext="Coadded detector image (dark subtracted)", 
                    fontsizes="huge", fig=QLfig, ax=DetAxes[1], scale="sqrt", draw_slit_lines=True, 
@@ -489,9 +491,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     
     # Plot the extra info 
     if index_data_pair[0]['name'] in no_geo:
-        GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[0].transAxes)
-        GeoAxes[1].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[1].transAxes)
-        GeoAxes[2].text(0.1, 0.9, "No geometry available", fontsize=18, transform=GeoAxes[2].transAxes)
+        GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=26, transform=GeoAxes[0].transAxes)
+
+        for a in GeoAxes:
+            a.tick_params(axis="both", which="both", labelbottom=False, labelleft=False, left=False, bottom=False)
+            for side in ["left", "right", "top", "bottom"]:
+                a.spines[side].set_visible(False)
     else:
         make_sza_plot(GeoAxes[0], light_fits)
         make_SCalt_plot(GeoAxes[1], light_fits)
@@ -508,28 +513,33 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     # Title text
     utc_obj = light_fits.timestamp# index_data_pair[0]['datetime']
     sol, My = utc_to_sol(utc_obj)
-    # Ls = int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))
-    
+
+    t1 = "Integrations"
+    t2 = "Light: "
+    t3 = "Dark: "
+    t4 = "Integration time"
+
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}",
                 f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits.Ls, ndigits=0))}°", 
                 f"UTC date/time: {light_fits.timestamp.strftime('%Y-%m-%d')}, {light_fits.timestamp.strftime('%H:%M:%S')}", 
-                f"Integrations: {index_data_pair[0]['n_int']} light, {index_data_pair[1]['n_int']} dark",
-                f"Integration time: Light: {index_data_pair[0]['int_time']} s; Dark: {index_data_pair[1]['int_time']} s",
-                # f"Dark integrations: {index_data_pair[1]['n_int']}",
-                # f"Dark integration time: {index_data_pair[1]['int_time']} s",
+                f"{t1:<24}Light: {n_ints:<14}Dark: {n_ints_dark}",
+                f"{t4:<22}Light: {index_data_pair[0]['int_time']} s{'':<6}Dark: {index_data_pair[1]['int_time']} s",
+                f"Total light integrations: {(index_data_pair[0]['int_time'] * index_data_pair[0]['n_int'])} s",
+                #
                 f"Light file: {light_fits.basename}", 
                 f"Dark file: {dark_fits.basename}"]
     
     # List of fontsizes to use as we print stuff on the quicklook
-    f = [36] + [26] * 8
+    total_lines_to_print = len(print_me) + 1
+    f = [36] + [26] * total_lines_to_print
     # Color list to loop through
-    c = ["black"] * 3 + ["gray"] * 6 
+    c = ["black"] * 3 + ["gray"] * (total_lines_to_print - 3)
     
     # Now print stuff on the figure
-    for i in range(5):
+    for i in range(6):
         plt.text(0.1, 1 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
 
-    for i in range(5, len(print_me)):
+    for i in range(6, len(print_me)):
         plt.text(0.85, 1 - 0.02 * (i-5), print_me[i], fontsize=f[i], color=c[i], ha="right", transform=QLfig.transFigure)
 
     plt.text(0.12, 0.45, f"{n_ints} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=QLfig.transFigure)
@@ -538,13 +548,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, arange=None, pran
     light_fits.close()
     dark_fits.close()
 
+    if savefolder is not None:
+        plt.savefig(savefolder + f"{light_fits.basename[:-8]}.jpg", dpi=300, bbox_inches="tight")
+
     plt.show()
 
 
 # HELPER METHODS ======================================================
 
 
-def downselect_data(light_index, sel=[0, -1], orbit=None, date=None, andlater=None):
+def downselect_data(light_index, sel=[0, -1], orbit=None, date=None, andlater=None, segment=None):
         """
         Given the light_index of files, this will select only those files which 
         match either sel (raw index in the list), orbit number, or date. 
@@ -579,12 +592,13 @@ def downselect_data(light_index, sel=[0, -1], orbit=None, date=None, andlater=No
             if date is not None:
                 if andlater==True:
                     date_match = selected_lights['date'].date() >= date.date()
-                    # date_match = (selected_lights['date'].year == date.year) & (selected_lights['date'].month == date.month) & (selected_lights['date'].day == date.day)
                 else:
                     date_match = selected_lights['date'].date() == date.date()
-                                 #(selected_lights['date'].year >= date.year) & (selected_lights['date'].month >= date.month) & (selected_lights['date'].day >= date.day)
-                
+  
                 selected_lights = [entry for entry in selected_lights if date_match]
+
+            if segment is not None:
+                selected_lights = [entry for entry in selected_lights if iuvs_segment_from_fname(entry['name'])==segment]
 
         return selected_lights
 
@@ -683,19 +697,13 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
     for fidx in selected_l1a:
         try:
             dark_opts = find_dark_options(fidx, dark_idx) 
-
-            if len(dark_opts) > 1: 
-                if verbose:
-                    print((f"Oh no! Too many dark files ({len(dark_opts)}) for file {fidx['name']}! Code should be written within find_dark_options to handle this. Skipping for now."))
-                    print(f"Here are the dark opts for {fidx['name']}: ")
-                    for d in dark_opts:
-                        print(d['name'])
-                    
-                continue
-            if dark_opts:  # assuming there ARE some options,
-                lights_and_darks[fidx['name']] = (fidx, dark_opts[0])  # the entry key will be the light filename, and we will add the light index info for reference
+            chosen_dark = choose_dark(fidx, dark_opts)
+            lights_and_darks[fidx['name']] = (fidx, chosen_dark)
         except ValueError:
             if ech_isdark(fidx):
+                if verbose:
+                    print(f"{fidx['name']} is dark, continuing")
+                    print()
                 pass  # don't need to worry if there's no dark file for a dark file, it is itself already.
             else:
                 lights_missing_darks.append(fidx["name"])  # but if it's a light file missing a dark, we would like to know.
@@ -703,6 +711,32 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
             continue
             
     return lights_and_darks, lights_missing_darks
+
+
+def choose_dark(fidx, dark_options):
+    """
+    Choose which dark to use from a list of dark options. If only one is available, that will be used. 
+    If more, then a choice will occur.
+
+    Parameters
+    ----------
+    fidx : dictionary
+           file metadata for the light observation that could utilize the darks in dark_options.
+    dark_options : list
+                   file metadata for all files that could serve as a dark.
+
+
+    Returns
+    ----------
+    chosen_dark : dictionary
+                 file metadata of dark to use.
+    """
+    if len(dark_options) == 0:
+        return None
+    elif len(dark_options) == 1:
+        return dark_options[0]
+    else: 
+        return dark_options[0] # TO DO: Make this more intelligent
 
 
 def find_dark_options(input_light_idx, idx_list_to_search):
