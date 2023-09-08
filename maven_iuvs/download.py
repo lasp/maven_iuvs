@@ -218,6 +218,10 @@ def call_rsync(remote_path,
     else:
         progress_flag = '--progress'
 
+    # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
+    if " " in local_dir:
+        local_dir = local_dir.replace(" ", "\ ")
+        
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
                               extra_flags,
@@ -477,10 +481,6 @@ def sync_data(spice=True, level='l1b',
             stage_vm = None
         else:
             raise ValueError('local_dir must be l1a or l1b')
-
-    # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
-    if " " in local_dir:
-        local_dir = local_dir.replace(" ", "\ ")
 
     # Check to be sure that the vm is in the known_hosts file.
     is_vm_found = subprocess.run(["ssh-keygen", "-H", "-F", vm], capture_output=True)
