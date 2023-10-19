@@ -116,8 +116,8 @@ def identify_rogue_observations(idx):
 
     Parameters
     ----------
-    idx : .npy file
-          index of observation metadata
+    idx : List of dictionaries
+          Contains index entries of observation metadata
 
     Returns
     ----------
