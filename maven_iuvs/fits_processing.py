@@ -2,6 +2,7 @@ import os as _os
 import datetime
 import numpy as np
 from pathlib import Path
+import re 
 
 from maven_iuvs.search import find_files, get_latest_files
 
@@ -85,6 +86,24 @@ def iuvs_filename_to_datetime(fname):
     return dt
 
 
+def orbit_folder(orbit):
+    """
+    Generates the orbit subfolder string that contains observations for "orbit". 
+    Pads with leading zeros to 5 places.
+
+    Parameters
+    ----------
+    orbit : int
+            Orbit number
+
+    Returns
+    -------
+    orbit_set : string
+                Orbit folder in string format, e.g. "orbit17500"
+    """
+    orbit_set = orbit - (orbit % 100)
+    return f"orbit{orbit_set:05}"
+
 def iuvs_orbno_from_fname(fname):
     """
     Collects the orbit number from the filename.
@@ -104,11 +123,11 @@ def iuvs_orbno_from_fname(fname):
 
 def iuvs_segment_from_fname(fname):
     """
-    Collects the orbit segment type from the filename.
+    Collects the orbit segment type from the file path or name.
     Parameters
     ----------
     fname : string
-            IUVS observation filename
+            IUVS observation filename (may include full path)
 
     Returns
     -------
@@ -118,7 +137,8 @@ def iuvs_segment_from_fname(fname):
     if 'orbit' not in fname:
         raise ValueError('IUVS segments only apply to on-orbit data')
     
-    return fname.split('_')[3].split('-orbit')[0]
+    seg_pattern = "(?<=iuv_l1[a-c]_)[a-z]+"
+    return re.search(seg_pattern, fname)[0]
 
 
 def locate_missing_frames(hdul, n_int):
