@@ -556,51 +556,78 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, savefolder=None, 
 
 # HELPER METHODS ======================================================
 
+def downselect_data(light_index, orbit=None, date=None, segment=None):
+    """
+    Given the light_index of files, this will select only those files which 
+    match the orbit number, segment, or date. 
 
-def downselect_data(light_index, sel=[0, -1], orbit=None, date=None, andlater=None, segment=None):
-        """
-        Given the light_index of files, this will select only those files which 
-        match either sel (raw index in the list), orbit number, or date. 
-        Currently needs to be updated to enable "and" selection, not sequential arbitrary order
+    Parameters
+    ----------
+    light_index : list
+                  list of dictionarties of file metadata returned by get_file_metadata
+    orbit : int or list
+            orbit number to select; if a list of length 2 is passed, orbits within the range 
+            will be selected.
+    date : datetime object, or list of datetime objects
+           If a single datetime object of type datetime.datetime() or datetime.date() is entered, observations matching exactly are returned.
+           If a list is entered, observations between the two date/times are returned.
+           Whenever the time is not included, the code will liberally assume to start at midnight on the first day of the range 
+           and end at 23:59:59 on the last day of the range.
+    segment: an orbit segment to look for. "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay" etc
 
-        Parameters
-        ----------
-        light_index : list
-                      list of dictionarties of file metadata returned by get_file_metadata
-        sel : list
-              2-length list specifying start and stop indices to select from light_index
-        orbit : int
-                orbit number to select
-        date : datetime object
-               any files matching the date and time will be returned
-        andlater : boolean
-                   whether to also include all files that occur later in time than orbit or date.
-        Returns
-        ----------
-        selected_l1a
-        """
-        selected_lights = copy.deepcopy(light_index)
-        if sel != [0, -1]:
-            selected_lights = selected_lights[sel[0]:sel[1]]
+    Returns
+    ----------
+    selected_lights
+    """
+    selected_lights = copy.deepcopy(light_index)
+
+    # First filter by segment; a given segment can occur on many dates and many orbits
+    if segment is not None:
+        selected_lights = [entry for entry in selected_lights if iuvs_segment_from_fname(entry['name'])==segment]
+
+    # Then filter by orbit, since orbits sometimes cross over day boundaries
+    if orbit is not None: 
+        if type(orbit) is int:
+            if andlater==True:
+                selected_lights = [entry for entry in selected_lights if entry['orbit']>=orbit]
+            else:
+                selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
+        elif type(orbit) is list:
+            selected_lights = [entry for entry in selected_lights if orbit[0] <= entry['orbit'] <= orbit[1]]
+        
+    # Lastly, filter by date/time
+    if date is not None:
+
+        # To get observations for a range of dates:
+        if type(date) is list:
+            if type(date[0]) == datetime.date: # If no time information was entered, be liberal and assume start of first day and end of last
+                date[0] = datetime.datetime(date[0].year, date[0].month, date[0].day, 0, 0, 0)
+
+            if type(date[1]) == datetime.date:
+                date[1] = datetime.datetime(date[1].year, date[1].month, date[1].day, 23, 59, 59)
+            elif date[1] == -1: # Use this to just go until the present time/date.
+                date[1] = datetime.datetime.utcnow()
+            
+            print(f"Returning observations between {date[0]} and {date[1]}")
+
+            selected_lights = [entry for entry in selected_lights if date[0] <= entry['datetime'] <= date[1]]
+
+        # To get observations at a specific day or specific day/time:
+        elif type(date) is not list:  
+
+            if type(date) == datetime.date: # If no time information was entered, be liberal and assume start of first day and end of last
+                date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0)
+                date1 = datetime.datetime(date.year, date.month, date.day, 23, 59, 59)
+
+                selected_lights = [entry for entry in selected_lights if date0 <= entry['datetime'] <= date1]
+
+            else: # if a full datetime.datetime object is entered, look for that exact entry.
+                selected_lights = [entry for entry in selected_lights if entry['datetime'] == date]
+
         else:
-            if orbit is not None: 
-                if andlater==True:
-                    selected_lights = [entry for entry in selected_lights if entry['orbit']>=orbit]
-                else:
-                    selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
-                
-            if date is not None:
-                if andlater==True:
-                    date_match = selected_lights['date'].date() >= date.date()
-                else:
-                    date_match = selected_lights['date'].date() == date.date()
-  
-                selected_lights = [entry for entry in selected_lights if date_match]
+            raise TypeError(f"Date entered is of type {type(date)}")
 
-            if segment is not None:
-                selected_lights = [entry for entry in selected_lights if iuvs_segment_from_fname(entry['name'])==segment]
-
-        return selected_lights
+    return selected_lights
 
 # Relating to dark vs. light observations -----------------------------
 
