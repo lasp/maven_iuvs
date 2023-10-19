@@ -464,9 +464,9 @@ def call_rsync(remote_path,
     else:
         progress_flag = '--progress'
 
-    # Escape spaces in the local path to make rsync work 
-    if " " in local_path:
-        local_path = local_path.replace(" ", "\ ")
+    # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
+    if " " in local_dir:
+        local_dir = local_dir.replace(" ", "\ ")
 
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
@@ -655,7 +655,6 @@ def setup_user_paths():
 
     Notes
     -------
-
     This is an interactive routine called once, generally the first
     time the user calls sync_data.
 
