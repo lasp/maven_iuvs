@@ -176,7 +176,7 @@ def identify_rogue_observations(idx):
 
 # QUICKLOOK CODE ======================================================
 
-def run_quicklooks(ech_l1a_idx, sel=[0, -1], savefolder=None, show_D_inset=True, show_D_guideline=True, date=None, orbit=None, andlater=False, segment=None, prange=None, arange=None, verbose=False):
+def run_quicklooks(ech_l1a_idx, show=True, savefolder=None, figsz=(36,26), show_D_inset=True, show_D_guideline=True, date=None, orbit=None, segment=None, prange=None, arange=None, verbose=False):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
     
@@ -191,8 +191,6 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], savefolder=None, show_D_inset=True,
            If passed in, the code will downselect to only observations whose date match "date".
     orbit : int
             If passed in, the code will downselect to only observations whose orbit matches "orbit".
-    andlater: boolean
-              if True, will include any files that occur later in time than the selected orbit or date.
     prange : list
              If passed in, the associated values will be used to set the percentile pixels to which
              the displayed image will be restricted. Passing a NaN in either position of the list
@@ -211,7 +209,7 @@ def run_quicklooks(ech_l1a_idx, sel=[0, -1], savefolder=None, show_D_inset=True,
     selected_l1a = copy.deepcopy(ech_l1a_idx)
     
     # Downselect the metadata
-    selected_l1a = downselect_data(ech_l1a_idx, sel=sel, date=date, orbit=orbit, segment=segment, andlater=andlater)
+    selected_l1a = downselect_data(ech_l1a_idx, date=date, orbit=orbit, segment=segment)
 
     # Checks to see if we've accidentally removed all files from the to-do list
     if len(selected_l1a) == 0:
@@ -567,10 +565,10 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
                   list of dictionarties of file metadata returned by get_file_metadata
     orbit : int or list
             orbit number to select; if a list of length 2 is passed, orbits within the range 
-            will be selected.
+            will be selected. A -1 may be passed in the second position to indicate to run to the end.
     date : datetime object, or list of datetime objects
            If a single datetime object of type datetime.datetime() or datetime.date() is entered, observations matching exactly are returned.
-           If a list is entered, observations between the two date/times are returned.
+           If a list is entered, observations between the two date/times are returned. A -1 may be passed in the second position to indicate to run to the end.
            Whenever the time is not included, the code will liberally assume to start at midnight on the first day of the range 
            and end at 23:59:59 on the last day of the range.
     segment: an orbit segment to look for. "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay" etc
@@ -588,11 +586,11 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
     # Then filter by orbit, since orbits sometimes cross over day boundaries
     if orbit is not None: 
         if type(orbit) is int:
-            if andlater==True:
-                selected_lights = [entry for entry in selected_lights if entry['orbit']>=orbit]
-            else:
-                selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
+            selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
         elif type(orbit) is list:
+            if orbit[1] == -1: 
+                orbit[1] = 99999 # MAVEN will die before this orbit number is reached
+            
             selected_lights = [entry for entry in selected_lights if orbit[0] <= entry['orbit'] <= orbit[1]]
         
     # Lastly, filter by date/time
