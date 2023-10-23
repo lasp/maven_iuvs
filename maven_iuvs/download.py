@@ -465,8 +465,8 @@ def call_rsync(remote_path,
         progress_flag = '--progress'
 
     # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
-    if " " in local_dir:
-        local_dir = local_dir.replace(" ", "\ ")
+    if " " in local_path:
+        local_path = local_path.replace(" ", "\ ")
 
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
