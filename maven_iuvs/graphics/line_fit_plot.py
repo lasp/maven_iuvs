@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.transforms as transforms
 
 from maven_iuvs.fits_processing import get_pix_range
+from maven_iuvs.constants import nan_color
+
 # from maven_iuvs.echelle import slit_start, slit_end
 
 
@@ -122,7 +124,7 @@ def detector_image(myfits, image_to_plot=None, integration=0, draw_slit_lines=Fa
         else:
             raise ValueError
         
-    ax.patch.set_color('#FFFF00')
+    ax.patch.set_color(nan_color)
     ax.patch.set_alpha(1.0)
     pcm = ax.pcolormesh(spepixrange, spapixrange, data, norm=norm, cmap=cmap)
 
