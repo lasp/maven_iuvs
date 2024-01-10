@@ -9,6 +9,7 @@ import matplotlib.transforms as transforms
 from astropy.io import fits
 import math 
 from tqdm.auto import tqdm
+from pathlib import Path
 
 from maven_iuvs.user_paths import l1a_dir
 from maven_iuvs.miscellaneous import find_nearest
@@ -180,7 +181,7 @@ def identify_rogue_observations(idx):
 # QUICKLOOK CODE ======================================================
 
 def run_quicklooks(ech_l1a_idx, show=True, savefolder=None, figsz=(36,26), show_D_inset=True, show_D_guideline=True, date=None, orbit=None, segment=None,
-                   prange=None, arange=None, verbose=False):
+                   prange=None, arange=None, verbose=False, start_k=0, img_dpi=300, overwrite=False):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either sel, date, or orbit.
     
@@ -224,14 +225,18 @@ def run_quicklooks(ech_l1a_idx, show=True, savefolder=None, figsz=(36,26), show_
            
     lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx, verbose=verbose)
 
-    badfiles = 0
-    badfile_list = []
-    
+    # Arrays to keep track of which files were processed, which were already done, and which had problems
+    processed = []
+    badfiles = []
+    already_done = []
+    unique_exceptions = []
+
     # Loop through the dictionary containing light and dark pairs and run the quicklook code on each set.
-    for k in tqdm(lights_and_darks.keys()):
-        # print("----------------------------------------------------------------------------------")
+    ldkeys = list(lights_and_darks) 
+    # print(f"Starting on index {start_k}")
+    for ki in tqdm(range(start_k, len(ldkeys))):
+        k = ldkeys[ki]
         light_idx = lights_and_darks[k][0]
-        print(f"Processing light file {light_idx['name']}", end="\r")  # Light file is the first entry
 
         # open the light file --------------------------------------------------------------------
         light_path = find_files(data_directory=l1a_dir,
@@ -241,21 +246,71 @@ def run_quicklooks(ech_l1a_idx, show=True, savefolder=None, figsz=(36,26), show_
         dark_path = find_files(data_directory=l1a_dir,
                                use_index=False, pattern=lights_and_darks[k][1]["name"])[0]
 
-        goodfile = make_one_quicklook(lights_and_darks[k], light_path, dark_path, show=show, savefolder=savefolder, 
-                                      show_D_inset=show_D_inset, show_D_guideline=show_D_guideline, 
-                                      prange=prange, arange=arange, no_geo=no_geometry, figsz=figsz, verbose=verbose) 
+        try:
+            goodfile = make_one_quicklook(lights_and_darks[k], light_path, dark_path, show=show, savefolder=savefolder, 
+                                          show_D_inset=show_D_inset, show_D_guideline=show_D_guideline, 
+                                          prange=prange, arange=arange, no_geo=no_geometry, figsz=figsz, verbose=verbose, img_dpi=img_dpi, overwrite=overwrite) 
+        except Exception as e: 
+            goodfile = False
+            if verbose == True:
+                raise(e)
+            unique_exceptions.append(f"{light_idx['name']} - Exception: {e}")
 
-        if not goodfile:
-            badfiles += 1
-            badfile_list.append(light_idx['name'])
+        finally:
+            if goodfile == "File exists":
+                already_done.append(light_idx['name'])
+            elif not goodfile:
+                badfiles.append(light_idx['name'])
+            elif goodfile:
+                processed.append(light_idx['name'])
 
-    print()
-    print(f"Finished. Ran orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}.")
-    print(f"{len(files_missing_dark)} files were missing darks: {[f for f in files_missing_dark]}.")
-    print(f"{badfiles} file(s) had no valid data: {[f for f in badfile_list]}")
+        ki += 1
+
+    logfile_name = f"log{selected_l1a[0]['orbit']}-{selected_l1a[-1]['orbit']}_processed_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    with open(f"{savefolder}{logfile_name}", "w") as logfile:
+        logfile.write(f"Finished. Ran orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n\n")
+        
+        # Log files that already existed 
+        if len(already_done) > 0:
+            logfile.write(f"{len(already_done)} files were already done, not re-generated:\n")
+            for f in already_done:
+                logfile.write(f"\t{f}\n")
+            logfile.write("\n") # newline
+
+        # Log files that were successfully processed for the first time
+        if len(processed) > 0:
+            logfile.write(f"Successfully processed {len(processed)} files:\n")
+            for f in processed:
+                logfile.write(f"\t{f}\n")
+            logfile.write("\n") # newline
+
+        # Log files without appropriate darks
+        if len(files_missing_dark)>0:
+            logfile.write(f"{len(files_missing_dark)} files were missing darks:\n")
+            for f in files_missing_dark:
+                logfile.write(f"\t{f}\n")
+            logfile.write("\n") # newline
+
+        # Log files with bad data
+        if len(badfiles) > 0:
+            logfile.write(f"{len(badfiles)} file(s) had no valid data:\n")
+            for f in badfiles:
+                logfile.write(f"\t{f}\n")
+            logfile.write("\n") # newline
+       
+        # Log files that threw a weird error
+        if unique_exceptions:
+            logfile.write(f"\n{len(unique_exceptions)} files had unhandled unique exceptions that need to be addressed: \n")
+            for e in unique_exceptions:
+                logfile.write(f"\t{e}\n")
+            logfile.write("\n") # newline
+
+        logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark)}\n")
+
+        print(f"\nLog written for orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n")
 
 
-def quicklook_figure_skeleton(N_thumbs, figsz=(36, 26), thumb_cols=10, aspect=1):
+def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1):
     """
     Creates the sketch of the quicklook figure, i.e. the "skeleton".
 
@@ -275,7 +330,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(36, 26), thumb_cols=10, aspect=1)
     THUMBNAIL_ROWS = math.ceil(N_thumbs / thumb_cols)
 
     # Calculate a new fig height based on thumbnail rows
-    figsz = (40, 24 + 2*THUMBNAIL_ROWS)
+    figsz = (figsz[0], figsz[1] + 2*THUMBNAIL_ROWS)
 
     fig = plt.figure(figsize=figsz)
     COLS = 16
@@ -351,7 +406,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(36, 26), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefolder=None, figsz=(36,26), show_D_inset=True, show_D_guideline=True, 
-                       arange=None, prange=None, special_prange=[0, 65], no_geo=None, show_DN_histogram=False, verbose=False):
+                       arange=None, prange=None, special_prange=[0, 65], no_geo=None, show_DN_histogram=False, verbose=False, img_dpi=300, overwrite=False):
     """ #  use_masking=False, lowthresh=3, highthresh=3,
     Fills in the quicklook figure for a single observation.
     
@@ -395,11 +450,24 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefo
     Completed quicklook figure.
     """
 
+    # Create the folder if it isn't there
+    if savefolder is not None:
+        if not os.path.isdir(savefolder):
+            os.makedirs(savefolder)
+
     # Used for adjusting parameters in certain segments (e.g. outspace)
     segment = iuvs_segment_from_fname(light_path)
 
+    # Load fits files
     light_fits = IUVSFITS(light_path)
     dark_fits = IUVSFITS(dark_path)
+    
+    # Set up filename and check to see if file is already done
+    ql_filepath = savefolder + f"{light_fits.basename[:-8]}.png"
+
+    if not overwrite:
+        if Path(ql_filepath).is_file():
+            return "File exists"
     
     # Find number of light integrations
     n_ints = index_data_pair[0]['n_int']
@@ -434,6 +502,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefo
     # Up prange for IPH observations
     if segment == "outspace":
         prange = special_prange
+
+    if segment == "comm":
+        prange = [0, 40]
             
     # get all the data values so we can make one common colorbar
     all_data = np.concatenate((coadded_lights, first_dark, second_dark, avg_dark), axis=None) 
@@ -510,24 +581,37 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefo
 
     DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)
 
-    # Determine whether D inset should automatically be turned off (e.g. for outspace observations)
-    if segment == "outspace":
+    # Determine whether D inset should automatically be turned off (e.g. for space observations)
+    if segment in ["outspace", "inspace", "comm"]:
         show_D_guideline = False 
         show_D_inset = False 
 
     if show_D_guideline:
         DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
     
-    if show_D_inset:
-        # Make an inset to look at deuterium
-        # inset (x0, y0, width, height)
-        inset = DetAxes[0].inset_axes([0.5, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes)
-        D_i = 70  # determined by eye.
-        D_f = 108  # determined by eye.
+    # Make an inset to zoom in on the D Lyman alpha line
+    if show_D_inset: 
+        # Determine where to start drawing inset based on location of Lyman alpha so we don't draw over it
+        rel_loc_Lya = Hlya_i / len(wvs)
+        if rel_loc_Lya < 0.5:
+            x0 = 0.5
+        elif rel_loc_Lya == 0.5:
+            x0 = 0.7
+        elif rel_loc_Lya > 0.5:
+            x0 = 0.05
+
+        # Draw inset
+        inset = DetAxes[0].inset_axes([x0, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes) # inset (x0, y0, width, height)
+        D_i = Dlya_i - 19 
+        D_f = Dlya_i + 19
         inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
-        inset.axes.get_xaxis().set_visible(False)
-        inset.tick_params(axis="x", bottom=False, top=False, labelbottom=False)
-        inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # Same
+        inset.axes.get_xaxis().set_visible(True)
+        inset.tick_params(axis="x", bottom=True, top=False, labelbottom=True)
+        inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0) 
+
+        # If we had to move the inset to the left, move the ticks to the right
+        inset.yaxis.set_label_position("right")
+        inset.yaxis.tick_right()
     
     # Plot the light 
     detector_image(light_fits, image_to_plot=coadded_lights, titletext="Coadded detector image (dark subtracted)", 
@@ -584,6 +668,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefo
         # else:
         detector_image(light_fits, integration=i, titletext="", fig=QLfig, ax=ThumbAxes[i], scale="sqrt", \
                        print_scale_type=False, show_colorbar=False, arange=arange)
+
+    ThumbAxes[0].text(0, 1.3, f"{frms} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
         
     # Title text
     utc_obj = light_fits.timestamp
@@ -610,20 +696,20 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, show=True, savefo
     # Color list to loop through
     c = ["black"] * 3 + ["gray"] * (total_lines_to_print - 3)
     
-    # Now print stuff on the figure
+    # Now print title texts on the figure
     for i in range(6):
         plt.text(0.1, 1.02 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
 
     for i in range(6, len(print_me)):
         plt.text(0.85, 1 - 0.02 * (i-5), print_me[i], fontsize=f[i], color=c[i], ha="right", transform=QLfig.transFigure)
 
-    plt.text(0.12, 0.43, f"{frms} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=QLfig.transFigure)
-
     light_fits.close()
     dark_fits.close()
 
     if savefolder is not None:
-        plt.savefig(savefolder + f"{light_fits.basename[:-8]}.jpg", dpi=300, bbox_inches="tight")
+        if not os.path.isdir(savefolder):
+            os.makedirs(savefolder)
+        plt.savefig(ql_filepath, dpi=img_dpi, bbox_inches="tight")
         plt.close(QLfig)
 
     if show==True:
@@ -662,17 +748,21 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
     # First filter by segment; a given segment can occur on many dates and many orbits
     if segment is not None:
         selected_lights = [entry for entry in selected_lights if iuvs_segment_from_fname(entry['name'])==segment]
+        print("")
 
     # Then filter by orbit, since orbits sometimes cross over day boundaries
     if orbit is not None: 
+        # If specifying orbits, first get rid of cruise data
+        selected_lights = [entry for entry in selected_lights if entry['orbit'] != "cruise"]
+
         if type(orbit) is int:
             selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
         elif type(orbit) is list:
             if orbit[1] == -1: 
                 orbit[1] = 99999 # MAVEN will die before this orbit number is reached
-            
+
             selected_lights = [entry for entry in selected_lights if orbit[0] <= entry['orbit'] <= orbit[1]]
-        
+
     # Lastly, filter by date/time
     if date is not None:
 
@@ -741,10 +831,11 @@ def subtract_darks(light_fits, dark_fits, verbose=False):
     dark_subtracted = np.zeros_like(light_data)
     
     # Get rid of extra frames where light data are bad (broken or nan)
-    # bad_frames = 0
+
     medians = []
-    nan_light_inds = []
-    bad_light_inds = [] # Light frames which have some problem - nan or oversaturated
+    good_frame_inds = [] # Frames which appear to have valid data
+    nan_light_inds = [] # frames with NaN
+    bad_light_inds = [] # Light frames which have some problem, i.e. oversaturation, but are not NaN
     bad_dark_inds = [] # Possible to have a bad dark but a fine light, have to keep track of them separately
 
     for i in range(0, light_data.shape[0]):
@@ -757,20 +848,20 @@ def subtract_darks(light_fits, dark_fits, verbose=False):
         # reject frames where the median value is absurd - this indicates a broken frame
         median_this_frame = np.median(light_data[i])
 
-        # We need to specially treat the possible case where a broken frame could be the first one.
+        # We need to specially treat the possible case where the first frame could be broken. 
         # Unlikely but possible. Currently done by comparing median with values known to be too high
         # for typical detector image. TODO: Make this better and not rely on hard-coded value.
         # Most medians are in the 100s due to the typical sky background values being similar.
         if (not medians) & (median_this_frame >= 5000):
-            # bad_frames += 1
             bad_light_inds.append(i)
 
-        # For all other light frames, we can compare to the stored median values.
+        # For all other light frames, we can compare to the stored median values of known good frames.
         if (len(medians)>0) and (median_this_frame / np.median(medians) > 100): 
-            # bad_frames += 1
             bad_light_inds.append(i)
             continue
 
+        # At this point in the loop, the frame should have good data.
+        good_frame_inds.append(i)
         medians.append(np.median(median_this_frame))
 
     # Control for possibility of one dark frame or both containing NaN
@@ -778,10 +869,11 @@ def subtract_darks(light_fits, dark_fits, verbose=False):
         bad_dark_inds.append(0)
 
     if np.isnan(second_dark).any():
-        bad_dark_inds.append([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])
+        bad_dark_inds.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])
 
-    # collect all the indices of frames with some problem and remove an equivalent number of frames from the final matrix
-    all_bad_inds = sorted([*nan_light_inds, *bad_light_inds, *bad_dark_inds])
+    # collect all the indices of frames with some problem and remove an equivalent number of frames from the final matrix.
+    # Make sure it's a set (unique values only)
+    all_bad_inds = sorted(list(set([*nan_light_inds, *bad_light_inds, *bad_dark_inds])))
     dark_subtracted = np.delete(dark_subtracted, all_bad_inds, axis=0)
 
     d = 0 # Counter for the dark_subtracted array, since we may have modified its shape.

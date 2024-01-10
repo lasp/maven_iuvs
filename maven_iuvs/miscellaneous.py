@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import matplotlib as mpl
 
 
 def clear_line(n=100):

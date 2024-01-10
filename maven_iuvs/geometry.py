@@ -1012,13 +1012,13 @@ def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
     intnum = 1
     
     for i in range(0, total_ints):
-        ax.plot([intnum]*SZA_arr_shape[1], SZA_arr[i], color=linecolor)
+        ax.plot([intnum]*SZA_arr_shape[1], SZA_arr[i], color=linecolor, linewidth=2)
         intnum += 1
     
     ax.tick_params(axis="both", labelsize=16)
     ax.set_xlabel("Integration no.", fontsize=20)
     ax.set_ylabel("SZA (°)", fontsize=20)
-    ax.set_ylim(0,180)
+    # ax.set_ylim(0,180)
     ax.set_title("Solar zenith angle", fontsize=20)
     
 
@@ -1042,7 +1042,7 @@ def make_SCalt_plot(ax, fitfile, t=""):
     arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
     arr_shape = arr.shape
     
-    ax.scatter(range(0,arr_shape[0]), arr, color="cornflowerblue", s=15)
+    ax.scatter(range(0,arr_shape[0]), arr, color="cornflowerblue", s=25)
     ax.tick_params(axis="both", labelsize=16)
     ax.set_xlabel("Integration no.", fontsize=20)
     ax.set_ylabel("Alt (km)", fontsize=20)
@@ -1079,7 +1079,7 @@ def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76
         
     # Loop over integrations
     for i in range(0, lat_arr_shape[0]):      
-        ax.plot(lon_arr[i, :, -1], lat_arr[i, :, -1], color=colors[i, :])
+        ax.plot(lon_arr[i, :, -1], lat_arr[i, :, -1], color=colors[i, :], linewidth=2)
         intnum += 1
     ax.tick_params(axis="both", labelsize=16)
     ax.set_xlabel("Longitude", fontsize=20)

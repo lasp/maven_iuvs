@@ -135,7 +135,8 @@ def iuvs_segment_from_fname(fname):
 
     """
     if 'orbit' not in fname:
-        raise ValueError('IUVS segments only apply to on-orbit data')
+        # raise ValueError('IUVS segments only apply to on-orbit data')
+        return "none"
     
     seg_pattern = "(?<=iuv_l1[a-c]_)[a-z]+"
     return re.search(seg_pattern, fname)[0]
