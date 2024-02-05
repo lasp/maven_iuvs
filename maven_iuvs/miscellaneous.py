@@ -1,6 +1,6 @@
-import time
 import numpy as np
-import matplotlib as mpl
+import datetime
+import re 
 
 
 def clear_line(n=100):
@@ -62,23 +62,139 @@ def find_nearest(array, value):
     return idx, array[idx]
 
 
-def get_grad_colors(L, cmap, strt=0, stp=1, mikes=False):
+def get_n_int(hdul):
     """
-    Generates some colors based on a GRADIENT color map for use in plotting a 
-    bunch of lines all at once.
+    Gets the number of integrations from a FITS HDUList object
 
-    Input:
-        L: number of colors to generate.
-        cmap: color map name
-        strt and stp: By setting these to other values between 0 and 1 you can restrict 
-                      the range of colors drawn from.
-        mikes: boolean
-               should be set to True if using Mike's idl_colorbars module,
-               so that the cmap is obtained correctly.
-    Output:
-        An array of RGBA values: [[R1, G1, B1, a], [R2, G2, B2, a]...]
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    n_int : int
+            number of integrations
     """
-    if mikes==True:
-        return cmap(np.linspace(strt,stp,L))
+    try:
+        n_int = hdul['Primary'].header['NAXIS3']
+    except KeyError:
+        n_int = 1
+        
+    return n_int
+
+
+def iuvs_filename_to_datetime(fname):
+    """
+    Collects the date and time of an observation from the filename. 
+
+    Parameters
+    ----------
+    fname : string
+            IUVS observation filename
+
+    Returns
+    -------
+    dt : string
+         date and time of filename in string format
+    """
+    dt_str = fname.split('_')[-3]
+    dt = datetime.datetime.strptime(dt_str,'%Y%m%dT%H%M%S')
+    return dt
+
+
+def orbit_folder(orbit):
+    """
+    Generates the orbit subfolder string that contains observations for "orbit". 
+    Pads with leading zeros to 5 places.
+
+    Parameters
+    ----------
+    orbit : int
+            Orbit number
+
+    Returns
+    -------
+    orbit_set : string
+                Orbit folder in string format, e.g. "orbit17500"
+    """
+    orbit_set = orbit - (orbit % 100)
+    return f"orbit{orbit_set:05}"
+
+
+def iuvs_orbno_from_fname(fname):
+    """
+    Collects the orbit number from the filename.
+    Parameters
+    ----------
+    fname : string
+            IUVS observation filename
+
+    Returns
+    -------
+    orb_string : int
+                 orbit number
+    """
+    orb_string = str(fname).split('orbit')[1][:5]
+    return int(orb_string)
+
+
+def iuvs_segment_from_fname(fname):
+    """
+    Collects the orbit segment type from the file path or name.
+    Parameters
+    ----------
+    fname : string
+            IUVS observation filename (may include full path)
+
+    Returns
+    -------
+    orbit segment as a string 
+
+    """
+    if 'orbit' not in fname:
+        # raise ValueError('IUVS segments only apply to on-orbit data')
+        return "none"
+    
+    seg_pattern = "(?<=iuv_l1[a-c]_)[a-z]+"
+    return re.search(seg_pattern, fname)[0]
+
+
+def locate_missing_frames(hdul, n_int):
+    """
+    Finds missing frames within the FITS HDUList object
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    n_int : int
+            number of integrations
+
+    """
+    primary_isnan = np.isnan(hdul['PRIMARY'].data)
+    
+    if n_int == 1:
+        # only one integration in file
+        missing_frame = np.any(primary_isnan)
+        if missing_frame:
+            return np.array([0])
     else:
-        return mpl.colormaps[cmap](np.linspace(strt,stp,L))
+        # locate integrations containing NaN values
+        missing_frame_indices = np.where(np.any(primary_isnan,axis=(1,2)))[0]
+        if len(missing_frame_indices) > 0:
+            return missing_frame_indices
+    
+    # no frames missing, data is clean
+    return None
+   
+
+
+def iuvs_data_product_level_from_fname(fname):
+    """Find the string representing the data product level, e.g. 'l1a'."""
+
+    seg_pattern = "(?<=iuv_)l[0-3][a-c]*"
+    return re.search(seg_pattern, fname)[0]

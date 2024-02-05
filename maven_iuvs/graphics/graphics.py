@@ -94,6 +94,28 @@ def JGR_format(dpi=300, display_widths=False, return_blue=False):
         return JGR_blue
 
 
+def get_grad_colors(L, cmap, strt=0, stp=1, mikes=False):
+    """
+    Generates some colors based on a GRADIENT color map for use in plotting a 
+    bunch of lines all at once.
+
+    Input:
+        L: number of colors to generate.
+        cmap: color map name
+        strt and stp: By setting these to other values between 0 and 1 you can restrict 
+                      the range of colors drawn from.
+        mikes: boolean
+               should be set to True if using Mike's idl_colorbars module,
+               so that the cmap is obtained correctly.
+    Output:
+        An array of RGBA values: [[R1, G1, B1, a], [R2, G2, B2, a]...]
+    """
+    if mikes == True:
+        return cmap(np.linspace(strt,stp,L))
+    else:
+        return mpl.colormaps[cmap](np.linspace(strt,stp,L))
+
+
 def colorbar(mappable, axis, ticks=None, ticklabels=None, boundaries=None, minor=True, unit='kR'):
     """
     Produces a better colorbar than default, making sure that the height of the colorbar matches the height

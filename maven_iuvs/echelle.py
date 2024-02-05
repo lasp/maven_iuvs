@@ -1290,3 +1290,34 @@ def get_file_metadata(fname):
             'missing_frames': locate_missing_frames(this_fits, n_int),
             'countrate_diagnostics': get_countrate_diagnostics(this_fits)
            }
+
+
+def update_index(rootpath, new_files_limit_per_run=1000):
+    """
+    Updates the index file for rootpath, where the index file has the form <rootpath>_metadata.npy.
+    
+    Parameters
+    ----------
+    rootpath : string
+               folder containing observations, sorted into subfolders labeled by orbit
+
+    Returns
+    -------
+    None
+    """
+
+    list_fnames = find_files(data_directory=rootpath, use_index=False)
+    file_paths = [Path(f) for f in list_fnames]
+
+    print(f'total files to index: {len(file_paths)}')
+    idx = get_dir_metadata(rootpath, new_files_limit=0)
+    print(f'current index total: {len(idx)}')
+    new_files_to_add = len(file_paths)-len(idx)
+    print(f'total files to add: {new_files_to_add}')
+    
+    for i in range(new_files_to_add//new_files_limit_per_run + 1):
+        idx = get_dir_metadata(rootpath, new_files_limit=new_files_limit_per_run)
+        # clear_output()
+        print(f'total files indexed: {len(idx)}')
+
+    return None 

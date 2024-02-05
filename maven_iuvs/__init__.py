@@ -16,7 +16,7 @@ from . import instrument
 from . import constants
 from . import integration
 from . import file_classes
-from . import fits_processing
+from . import binning
 from . import echelle
 
 
