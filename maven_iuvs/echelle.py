@@ -1321,3 +1321,49 @@ def update_index(rootpath, new_files_limit_per_run=1000):
         print(f'total files indexed: {len(idx)}')
 
     return None 
+
+
+def find_files_missing_geometry(file_index, show_total=False):
+    """
+    Identifies observation files without geometry
+
+    Parameters
+    ----------
+    file_index : index file (.npy) 
+                 dictionaries containing metadata of various observation files
+    show_total: binary
+                whether to print what fraction of total the missing files are
+    Returns
+    ----------
+    no_geom: list
+             metadata for files with don't have geometry
+    """
+    no_geom = [f for f in file_index if 'orbit' in f['name'] and not f['geom']]
+    
+    if show_total==True:
+        all_orbit_files = [f for f in file_index if 'orbit' in f['name']]
+        print(f'{len(no_geom)} of {len(all_orbit_files)} have no geometry.\n')
+        
+    return no_geom
+
+
+def find_files_with_geometry(file_index):
+    """
+    Opposite of find_files_missing_geometry
+
+    Parameters
+    ----------
+    file_index : index file (.npy) 
+                 dictionaries containing metadata of various observation files
+    show_total: binary
+                whether to print how many files of the total the files missing geometry comprise
+    Returns
+    ----------
+    with_geom: list
+             metadata for files with don't have geometry
+    """
+    with_geom = [f for f in file_index if 'orbit' in f['name'] and f['geom']]
+
+    # print(f'{len(with_geom)} have geometry.\n')
+    return with_geom
+

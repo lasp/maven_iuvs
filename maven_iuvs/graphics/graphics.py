@@ -12,12 +12,13 @@ from shapely.geometry import box, Polygon
 from shapely.geometry.polygon import LinearRing
 from tempfile import NamedTemporaryFile
 import pkg_resources
-
+import matplotlib as mpl
 from maven_iuvs.instrument import calculate_calibration_curve
 from maven_iuvs.geometry import beta_flip, haversine, rotation_matrix
 from maven_iuvs.statistics import multiple_linear_regression, integrate_intensity
 from maven_iuvs.instrument import slit_width_deg
 from maven_iuvs.constants import R_Mars_km
+import idl_colorbars as idl_colorbars
 
 # color dictionary
 color_dict = {'red': '#D62728', 'orange': '#FF7F0E', 'yellow': '#FDB813',
@@ -1326,3 +1327,102 @@ def reset_symlog_labels(fig, axes):
         # set tick padding above the label
         for tick in ax.get_xaxis().get_major_ticks():
             tick.set_pad(11)
+
+
+def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
+    """
+    Plots the spacecraft SZA procession vs. integration.
+    
+    Parameters
+    ----------
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    linecolor : string
+               color to use for plot lines.
+    
+    Returns
+    ----------
+    none
+    """
+    SZA_arr = fitfile["PixelGeometry"].data["PIXEL_SOLAR_ZENITH_ANGLE"]
+    SZA_arr_shape = SZA_arr.shape
+    total_ints = SZA_arr_shape[0]
+    intnum = 1
+    
+    for i in range(0, total_ints):
+        ax.plot([intnum]*SZA_arr_shape[1], SZA_arr[i], color=linecolor, linewidth=2)
+        intnum += 1
+    
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_ylabel("SZA (°)", fontsize=20)
+    # ax.set_ylim(0,180)
+    ax.set_title("Solar zenith angle", fontsize=20)
+    
+
+def make_SCalt_plot(ax, fitfile, t=""):
+    """
+    Plots the spacecraft altitude procession vs. integration.
+    
+    Parameters
+    ----------
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    t : string
+        Optional extra text for the plot title
+    
+    Returns
+    ----------
+    none
+    """
+    arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
+    arr_shape = arr.shape
+    
+    ax.scatter(range(0, arr_shape[0]), arr, color="cornflowerblue", s=25)
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_ylabel("Alt (km)", fontsize=20)
+    ax.set_title(f"Spacecraft altitude{t}", fontsize=20)
+    
+    
+def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76), mikes=True):
+    """
+    Plots the latitude and longitude of the spacecraft tangent line to the surface vs. integration.
+    
+    Parameters
+    ----------
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
+    fitfile : IUVSFITS or HDUList
+             IUVS FITS file to use
+    t : string
+        Optional extra text for the plot title
+    colmap : name of a colormap or a cmap object from Mike's idl_colorbars module
+             Colormap to use for the lines to show progression in time.
+    
+    Returns
+    ----------
+    none
+    """
+    lat_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LAT"]
+    lon_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LON"]
+    
+    lat_arr_shape = lat_arr.shape
+    total_ints = lat_arr_shape[0]
+    intnum = 1
+    
+    colors = get_grad_colors(total_ints, colmap, mikes=mikes)
+        
+    # Loop over integrations
+    for i in range(0, lat_arr_shape[0]):      
+        ax.plot(lon_arr[i, :, -1], lat_arr[i, :, -1], color=colors[i, :], linewidth=2)
+        intnum += 1
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_xlabel("Longitude", fontsize=20)
+    ax.set_ylabel("Latitude", fontsize=20)
+
+    ax.set_title(f"Tangent point lat/lon{t}", fontsize=20)
