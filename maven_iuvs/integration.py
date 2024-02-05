@@ -209,10 +209,11 @@ def fit_line(myfits, wavelength,
         If plot = True, the figure object of the plot of line fits.
     """
 
-    # TODO: replace with IUVSFITS throughout
     import astropy.io.fits as fits
     if not isinstance(myfits, fits.hdu.hdulist.HDUList):
         myfits = fits.open(myfits)
+
+    datalevel = iuvs_data_product_level_from_fname(myfits['Primary'].header['filename'])
 
     if correct_muv:
         warnings.warn('correct_muv not implemented,'
@@ -256,20 +257,19 @@ def fit_line(myfits, wavelength,
         for ispa in range(n_spa):
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
 
-            try:
-                DN = myfits['detector_dark_subtracted'].data[iint, ispa] # l1b
-            except:
-                DN = myfits['Primary'].data[iint, ispa] # l1a
-
-            try: 
-                DN_unc = myfits['Random_dn_unc'].data[iint, ispa] # l1b
-            except:
-                DN_unc = np.zeros_like(DN) # l1a -- this is wrong obviously
-
+            if datalevel=="l1b":
+                DN = myfits['detector_dark_subtracted'].data[iint, ispa]
+                DN_unc = myfits['Random_dn_unc'].data[iint, ispa] 
+            elif datalevel=="l1a":
+                DN = myfits['Primary'].data[iint, ispa] 
+                DN_unc = np.empty_like(DN) 
+                DN_unc[:] = np.nan
+                
             if correct_muv:
                 muv = muv_contamination_templates[ispa]
             else:
-                muv = np.zeros_like(DN)
+                muv = np.empty_like(DN)
+                muv[:] = np.nan
 
             # subset the data to be fitted to the vicinity of the spectral line
             d_lambda = 2.5
