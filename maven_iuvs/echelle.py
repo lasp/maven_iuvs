@@ -165,7 +165,7 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
     Parameters
     ----------
     light_index : list
-                  list of dictionarties of file metadata returned by get_file_metadata
+                  list of dictionaries of file metadata returned by get_file_metadata
     orbit : int or list
             orbit number to select; if a list of length 2 is passed, orbits within the range 
             will be selected. A -1 may be passed in the second position to indicate to run to the end.
@@ -178,7 +178,8 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
 
     Returns
     ----------
-    selected_lights
+    selected_lights : list
+                      Similar to light_index, list of dictionaries of file metadata.
     """
     selected_lights = copy.deepcopy(light_index)
 
@@ -436,9 +437,9 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
     Parameters
     ----------
     selected_l1a : list of dictionaries
-                   selected l1a metadata entries to use
+                   Selected dictionaries containing metadata for l1a light files
     dark_idx : list of dictionaries
-               Metadata for all available darkfiles in the pipeline
+               Dictionaries containing metadata for all available dark files in the pipeline
     verbose : boolean
               whether to print messages when silent problems are encountered
                
@@ -483,7 +484,6 @@ def choose_dark(fidx, dark_options):
     dark_options : list
                    file metadata for all files that could serve as a dark.
 
-
     Returns
     ----------
     chosen_dark : dictionary
@@ -494,7 +494,7 @@ def choose_dark(fidx, dark_options):
     elif len(dark_options) == 1:
         return dark_options[0]
     else: 
-        return dark_options[0] # TO DO: Make this more intelligent
+        return dark_options[0] # TODO: Make this more intelligent
 
 
 def find_dark_options(input_light_idx, idx_list_to_search):
@@ -542,7 +542,7 @@ def ech_isdark(fidx):
     ----------
     True or False
     """
-
+    # TODO: Develop a stricter test of whether a file is a dark, possibly based on line fitting attempts.
     return 'dark' in fidx['name']
 
 
@@ -564,12 +564,17 @@ def ech_islight(fidx):
 def make_dark_index(ech_l1a_idx):
     """
     Takes the index of l1a file metadata, ech_l1a_idx, and makes a similar index that will be used 
-    to find dark files. note that the return value is NOT darks only.
+    to find dark files.
     
     Parameters
     ----------
     ech_l1a_idx : list of dictionaries
                   metadata for all light observation files.
+
+    Returns
+    ----------
+    dark_idx : list of dictionaries
+               metadata for all the dark observation files
     """
     dark_idx = [fidx for fidx in ech_l1a_idx if (('orbit' in fidx['name']) and ech_isdark(fidx))]
     dark_idx = sorted(dark_idx, key=lambda i:i['datetime'])
@@ -581,26 +586,33 @@ def make_dark_index(ech_l1a_idx):
 
 def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
     """
-    ...description...
+    Determines the DN count rate (DN/pixel/s) over the given spatial x spectral ranges
+    for the data contained in hdul.
 
     Parameters
     ----------
     hdul : astropy FITS HDUList object
            HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
+    spapixrange : array
+                  Pixels which define the slit start and end.
+    spepixrange : array
+                  Pixels which define the spectral window over which
+                  we can expect to find the emisssion.
+    return_npix : Whether to return the total number of pixels in the 
+                  spatial x spectral window defined, 
+                  i.e. product of nspapix * nspepix.
 
     Returns
     -------
-    countrate : 
-    npix : 
+    countrate : DN per pixel per second
+    npix : number of pixels contained in the spatial x spectral window.
 
     """
     binning = get_binning_scheme(hdul)
     n_int = get_n_int(hdul)
     
-    spalo, spahi = spapixrange  # spatial pixels 
+    # Retrieve indices at which to index the binned data 
+    spalo, spahi = spapixrange
     spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
                                              spalo, spahi, 'SPA')
     spelo, spehi = spepixrange
@@ -628,26 +640,30 @@ def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
 
 def get_countrate_diagnostics(hdul):
     """
-    ...description...
+    Produces the count rate in DN/pix/s in the H and D emissions, as 
+    well as in the background near the emissions.
 
     Parameters
     ----------
     hdul : astropy FITS HDUList object
            HDU list for a given observation
-    spapixrange : 
-    spapixrange : 
-    return_npix : 
 
     Returns
     -------
-    countrate : 
-    npix : 
+    dictionary
+           containing the count rates and number of pixels included 
+           in areas on the detector covering:
+           (1) H Ly alpha emission;
+           (2) H Ly alpha background;
+           (3) D Ly alpha emission;
+           (4) D Ly alpha background.
+
 
     """
-    Hlya_spapixrange = np.array([slit_start, slit_end])
+    Hlya_spapixrange = np.array([ech_slit_start, ech_slit_end])
     Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
     
-    Hbkg_spapixrange = Hlya_spapixrange + 2*(slit_end-slit_start)
+    Hbkg_spapixrange = Hlya_spapixrange + 2*(ech_slit_end-ech_slit_start)
     Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
     
     Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])
@@ -665,21 +681,23 @@ def get_countrate_diagnostics(hdul):
 
 def get_lya_countrates(idx_entry):
     """
-    Gets Ly α countrates
+    Computes the mean countrates for H and D emissions and nearby background.
     
     Parameters
     ----------
-    idx_entry : string
-               folder containing observations, sorted into subfolders labeled by orbit
-
+    idx_entry : dictionary
+                Contains metadata for a given file
+                
     Returns
     -------
-    None -- just updates the index files 
+    dictionary
+              Contains the mean count rates (disregarding nans) of H and D Lyman alpha emissions,
+              as well as the nearby backgrounds
     """
     rates = idx_entry['countrate_diagnostics']
     
-    return {'Hlya':np.nanmean(rates['Hlya_countrate']), 'Hbkg':np.nanmean(rates['Hbkg_countrate']),
-            'Dlya':np.nanmean(rates['Dlya_countrate']), 'Dbkg':np.nanmean(rates['Dbkg_countrate'])}
+    return {'Hlya': np.nanmean(rates['Hlya_countrate']), 'Hbkg': np.nanmean(rates['Hbkg_countrate']),
+            'Dlya': np.nanmean(rates['Dlya_countrate']), 'Dbkg': np.nanmean(rates['Dbkg_countrate'])}
 
 
 # Metadata -------------------------------------------------------------
@@ -687,17 +705,21 @@ def get_lya_countrates(idx_entry):
 
 def get_dir_metadata(the_dir, new_files_limit=None):
     """
-    Gets metadata for given set of files
+    Collect the metadata for all files within the_dir. May contain
+    subdirectories.
 
     Parameters
     ----------
     the_dir : string
-              path to directory containing observation data
-    new_files_limit : 
+              path to directory containing observation data files
+    new_files_limit : int
+                      Optional restriction on number of new files to add
+                      at one time.
 
     Returns
     -------
-    new_idx: 
+    new_idx : list of dictionaries
+              Each dictionary contains metadata for one file.
     """
     idx_fname = the_dir[:-1] + '_metadata.npy'
     print(f'loading {idx_fname}...')
@@ -754,22 +776,20 @@ def get_file_metadata(fname):
     # * signal at position of Ly α ?
     # * detectable D Ly α ?
     """
-    Gets the binning scheme for a given FITS HDU.
+    Collects useful metadata for a given data file and stores it in a dictionary
+    for easy access.
 
     Parameters
     ----------
-    hdul : astropy FITS HDUList object
-           HDU list for a given observation
+    fname : string
+            full path to an IUVS observation data file
 
     Returns
     -------
-    Dicionaries explaining the binning scheme:
-    if nonlinear, returns the bin table, along with the number of spatial and spectral bins.
-    if linear, returns the first spatial and spectral bin edges, the widths, and the number of bins.
-
+    dictionary
     """
     
-    this_fits = IUVSFITS(fname)#fits.open(fname)
+    this_fits = IUVSFITS(fname)
     
     binning = get_binning_scheme(this_fits)
     n_int = get_n_int(this_fits)
