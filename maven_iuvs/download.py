@@ -483,6 +483,12 @@ def sync_data(spice=True, level='l1b',
         else:
             raise ValueError('local_dir must be l1a or l1b')
 
+     # Check to be sure that the vm is in the known_hosts file.
+    is_vm_found = subprocess.run(["ssh-keygen", "-H", "-F", vm], capture_output=True)
+    if (is_vm_found.returncode == 1) or ("found" not in is_vm_found.stdout.decode('utf-8')):
+        raise Exception(f"{vm} is not in the list of known_hosts. Please manually connect"
+                         " via ssh; upon first connection, it will be added automatically to ~./.ssh/known_hosts.")
+
     # try to sync the files, if it fails, user probably isn't on the VPN
     try:
         if iuvs_vm_password is None:
@@ -555,9 +561,6 @@ def sync_data(spice=True, level='l1b',
             # save the files to rsync to temporary files
             # this way rsync can use the files_from flag
             transfer_from_production_file = tempfile.NamedTemporaryFile()
-            # save files to sync to a local file that can be accessed for troubleshooting
-            # np.savetxt("prod_files_to_transfer_manualfile.txt", files_from_production, fmt="%s")
-            # and as tmp file
             np.savetxt(transfer_from_production_file.name,
                        files_from_production,
                        fmt="%s")
@@ -572,9 +575,6 @@ def sync_data(spice=True, level='l1b',
 
             # stage, identical to above
             transfer_from_stage_file = tempfile.NamedTemporaryFile()
-            # save files to sync to a local file that can be accessed for troubleshooting
-            # np.savetxt("stage_files_to_transfer_manualfile.txt", files_from_stage, fmt="%s")
-            # and as tmp file
             np.savetxt(transfer_from_stage_file.name,
                        files_from_stage,
                        fmt="%s")
