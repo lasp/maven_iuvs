@@ -247,7 +247,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, figsz=(36, 26), show_D_inset=True, show_D_guideline=True, 
-                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False):
+                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="medium"):
     """ 
     Fills in the quicklook figure for a single observation.
     
@@ -291,6 +291,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
               DPI for saved image, keep at 96 for a reasonable image size.
     overwrite : boolean
                 whether files that already exist will be redrawn and overwritten
+    fs : "small", "medium", "large" or "huge"
+         Sets multiple font sizes for the quicklooks at once using a qualitative descriptor
               
     Returns
     ----------
@@ -400,10 +402,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         aspect_ratio = spatial_extent / spectral_extent
 
     # Define some font sizes for the QL 
-    fs = {"small": {"ticks": 9, "labels": 10, "title":14, "general": 12}, 
-          "medium": {"ticks": 11, "labels": 12, "title":16, "general": 14},
-          "large": {"ticks": 15, "labels": 16, "title":20, "general": 18 }, 
-          "huge": {"ticks": 19, "labels": 20, "title":24, "general": 22}}
+    fontsizes = {"small": {"ticks": 9, "labels": 10, "title":14, "general": 12}, 
+                 "medium": {"ticks": 11, "labels": 12, "title":16, "general": 14},
+                 "large": {"ticks": 15, "labels": 16, "title":20, "general": 18 }, 
+                 "huge": {"ticks": 19, "labels": 20, "title":24, "general": 22}}
 
     # Now start to bulid the quicklook image   -----------------------------------------------------------------------
     QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=figsz, aspect=aspect_ratio)
@@ -473,7 +475,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     detector_image_echelle(light_fits, coadded_lights, light_spapixrng, light_spepixrng, 
                            fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
                            prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax, 
-                           cbar_lbl_size=fs["huge"]["labels"], cbar_tick_size=fs["huge"]["ticks"])
+                           cbar_lbl_size=fontsizes[fs]["labels"], cbar_tick_size=fontsizes[fs]["ticks"])
 
     # Styling for main detector image axis
     DetAxes[1].axhline(ech_slit_start, linewidth=0.5, color="gainsboro")
@@ -481,10 +483,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     trans = transforms.blended_transform_factory(DetAxes[1].transAxes, DetAxes[1].transData)
     DetAxes[1].text(0, ech_slit_start, ech_slit_start, color="gray", fontsize=16, transform=trans, ha="right")
     DetAxes[1].text(0, ech_slit_end, ech_slit_end, color="gray", fontsize=16, transform=trans, ha="right")
-    DetAxes[1].set_xlabel("Spectral", fontsize=fs["huge"]["labels"])
-    DetAxes[1].set_ylabel("Spatial", fontsize=fs["huge"]["labels"])
-    DetAxes[1].set_title("Coadded detector image (dark subtracted)", fontsize=fs["huge"]["title"])
-    DetAxes[1].tick_params(which="both", labelsize=fs["huge"]["ticks"])
+    DetAxes[1].set_xlabel("Spectral", fontsize=fontsizes[fs]["labels"])
+    DetAxes[1].set_ylabel("Spatial", fontsize=fontsizes[fs]["labels"])
+    DetAxes[1].set_title("Coadded detector image (dark subtracted)", fontsize=fontsizes[fs]["title"])
+    DetAxes[1].tick_params(which="both", labelsize=fontsizes[fs]["ticks"])
 
     # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
     # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
@@ -499,16 +501,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
                            force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[0].set_title("First dark", fontsize=fs["large"]["title"])
+    DarkAxes[0].set_title("First dark", fontsize=fontsizes[fs]["title"])
 
     detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
                            force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[1].set_title("Second dark", fontsize=fs["large"]["title"])
+    DarkAxes[1].set_title("Second dark", fontsize=fontsizes[fs]["title"])
 
     # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
     detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
                            force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[2].set_title("Average dark", fontsize=fs["large"]["title"])
+    DarkAxes[2].set_title("Average dark", fontsize=fontsizes[fs]["title"])
 
     # If dark had a nan, show it but print a message.
     if np.isnan(first_dark).any():
