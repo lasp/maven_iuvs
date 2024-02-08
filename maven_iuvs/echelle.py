@@ -275,10 +275,6 @@ def coadd_lights(light_fits, dark_fits):
 
     # dark subtraction
     dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, first_dark, second_dark)
-    
-    # check that we still have valid data
-    if dark_subtracted.shape[0] == 0: # Some files may have no acceptable frames
-        raise Exception(f"Missing critical observation data: no valid lights")
 
     # Finally do the co-adding
     total_frames = dark_subtracted.shape[0] - len(bad_light_inds)  # Valid frames only
@@ -377,6 +373,9 @@ def subtract_darks(light_fits, first_dark, second_dark):
     dark_subtracted[i_good, :, :] = light_data[i_good, :, :] - second_dark
     dark_subtracted[i_bad, :, :] = np.nan
 
+    # Throw an error if there are no acceptable frames
+    if np.isnan(dark_subtracted).all(): 
+        raise Exception(f"Missing critical observation data: no valid lights")
 
     return dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds
 
