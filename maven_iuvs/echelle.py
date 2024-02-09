@@ -266,15 +266,8 @@ def coadd_lights(light_fits, dark_fits):
                    quicklooks.
     """
 
-    # Retrieve dark frames for subtraction
-    first_dark, second_dark = get_dark_frames(dark_fits)
-
-    # check darks are valid
-    if np.isnan(first_dark).any() & np.isnan(second_dark).any():
-        raise Exception(f"Missing critical observation data: no valid darks")
-
     # dark subtraction
-    dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, first_dark, second_dark)
+    dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, dark_fits)
 
     # Finally do the co-adding
     total_frames = dark_subtracted.shape[0] - len(bad_light_inds)  # Valid frames only
@@ -284,7 +277,7 @@ def coadd_lights(light_fits, dark_fits):
     return coadded_lights / total_frames, [nan_light_inds, bad_light_inds, nan_dark_inds], total_frames
 
 
-def subtract_darks(light_fits, first_dark, second_dark):
+def subtract_darks(light_fits, dark_fits):
     """
     Given matching light and dark fits, subtracts off the darks from lights
     while also taking into account bad frames, whether due to presence of nan
@@ -312,6 +305,13 @@ def subtract_darks(light_fits, first_dark, second_dark):
     """
 
     light_data = light_fits['Primary'].data
+
+    # Retrieve dark frames
+    first_dark, second_dark = get_dark_frames(dark_fits)
+
+    # check darks are valid
+    if np.isnan(first_dark).any() & np.isnan(second_dark).any():
+        raise Exception(f"Missing critical observation data: no valid darks")
 
     # Make the array to store dark-subtracted data
     dark_subtracted = np.zeros_like(light_data)
