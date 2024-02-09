@@ -1,9 +1,9 @@
 import datetime
 import numpy as np
+from astropy.io import fits
 import textwrap
 import os 
 import copy
-from maven_iuvs.file_classes import IUVSFITS
 from maven_iuvs.binning import get_binning_scheme, pix_to_bin
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname
@@ -245,9 +245,9 @@ def coadd_lights(light_fits, dark_fits):
 
     Parameters
     ----------
-    light_fits : IUVSFits object or HDUlist
+    light_fits : astropy.io.fits instance
                  fits object representing the light observations.
-    dark_fits : IUVSFits object or HDUlist
+    dark_fits : astropy.io.fits instance
                  fits object representing the associated darks.
 
     Returns
@@ -391,7 +391,7 @@ def get_dark_frames(dark_fits, average=False):
 
     Parameters
     ----------
-    dark_fits : IUVSfits instance
+    dark_fits : astropy.io.fits instance
                 fits file containing dark integrations
     average : boolean
               if True, will return the average of the dark frames. Used for plots.
@@ -739,14 +739,14 @@ def get_file_metadata(fname):
     dictionary
     """
     
-    this_fits = IUVSFITS(fname)
+    this_fits = fits.open(fname) 
     
     binning = get_binning_scheme(this_fits)
     n_int = get_n_int(this_fits)
     shape = (n_int, binning['nspa'], binning['nspe'])
     
-    return {'name': this_fits.basename,  # os.path.basename(fname),
-            'orbit': this_fits.orbit,  # this_fits['Observation'].data['ORBIT_NUMBER'][0],
+    return {'name': os.path.basename(fname),
+            'orbit': this_fits['Observation'].data['ORBIT_NUMBER'][0],
             'shape': shape,
             'n_int': n_int,
             'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),

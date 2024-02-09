@@ -90,7 +90,7 @@ def get_pix_range(myfits, which="spatial"):
     
     Parameters
     ----------
-    myfits : IUVSFITS or astropy FITS HDUList object
+    myfits : astropy.io.fits instance
              IUVS FITS file in question
     which: string
            "spatial" or "spectral"

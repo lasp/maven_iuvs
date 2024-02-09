@@ -560,8 +560,7 @@ def get_sun_vector_iau(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -580,8 +579,7 @@ def get_pixel_mrh_point_iau_mars_vector(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -637,8 +635,7 @@ def get_pixel_corner_sza(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -663,8 +660,7 @@ def get_pixel_corner_local_time(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -693,8 +689,7 @@ def get_pixel_corner_emission_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -719,8 +714,7 @@ def get_pixel_corner_zenith_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -751,7 +745,7 @@ def get_pixel_corner_phase_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
+    myfits : astropy.io.fits instance
         IUVS FITS interface.
 
     Returns
@@ -776,8 +770,7 @@ def get_pixel_vec_mso(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
-        An IUVS FITS file object.
+    myfits : astropy.io.fits instance
 
     Returns
     -------

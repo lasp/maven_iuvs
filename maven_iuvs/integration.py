@@ -2,7 +2,7 @@ import os
 import warnings
 import numpy as np
 from scipy.interpolate import interp1d
-
+from astropy.io import fits
 from maven_iuvs import anc_dir
 from maven_iuvs.instrument import calculate_calibration_curve
 from maven_iuvs.graphics import LineFitPlot
@@ -50,7 +50,7 @@ def get_lsf(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -71,7 +71,7 @@ def get_lsf_interp(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -100,18 +100,18 @@ def get_lsf_interp(myfits):
 
 
 def get_muv_contamination_templates(myfits_fuv):
-    """Returns MUV contamination templates for an input FUV IUVSFITS
+    """Returns MUV contamination templates for an input FUV fits
     file. This is a stub to be filled out by Sonal at some point in
     the future.
 
     Parameters
     ----------
-    myfits_fuv : IUVSFITS or HDUList
+    myfits_fuv : astropy.io.fits instance
         FITS file interface to an IUVS FUV FITS file.
 
     Returns
     -------
-    myfits_muv : IUVSFITS
+    myfits_muv : astropy.io.fits instance
         MUV companion to the input FUV file
     muv_contamination_templates : numpy ndarray of floats
         n_spa x n_spe array of MUV contamination templates for each
@@ -119,12 +119,10 @@ def get_muv_contamination_templates(myfits_fuv):
 
     """
     # find the filename of the matching muv file
-    # TODO: replace with IUVSFITS when available
     fuv_filename = myfits_fuv.filename()
     fuv_dir = os.path.dirname(fuv_filename)
     muv_filename = os.path.basename(fuv_filename).replace('fuv', 'muv')
     muv_filename = os.path.join(fuv_dir, muv_filename)
-    import astropy.io.fits as fits
     myfits_muv = fits.open(muv_filename)
 
     # get the MUV contamination templates
@@ -142,7 +140,7 @@ def get_lya_flatfield(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -176,7 +174,7 @@ def fit_line(myfits, wavelength,
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
     wavelength : float
         Wavelength of the line to be fit. (e.g. 121.56 for Lyman
@@ -209,7 +207,6 @@ def fit_line(myfits, wavelength,
         If plot = True, the figure object of the plot of line fits.
     """
 
-    import astropy.io.fits as fits
     if not isinstance(myfits, fits.hdu.hdulist.HDUList):
         myfits = fits.open(myfits)
 

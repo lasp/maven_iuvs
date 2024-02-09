@@ -1335,7 +1335,7 @@ def make_sza_plot(fitfile, ax=None, linecolor="cornflowerblue"):
     
     Parameters
     ----------
-    fitfile : IUVSFITS or HDUList
+    fitfile : astropy.io.fits instance
              IUVS FITS file to use
     ax : AxesObject
          Externally-created axis on which to draw the plot.
@@ -1418,7 +1418,7 @@ def make_tangent_lat_lon_plot(fitfile, ax=None, t="", colmap=idl_colorbars.getcm
     ----------
     ax : AxesObject
          Externally-created axis on which to draw the plot.
-    fitfile : IUVSFITS or HDUList
+    fitfile : astropy.io.fits instance
              IUVS FITS file to use
     t : string
         Optional extra text for the plot title

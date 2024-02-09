@@ -1,5 +1,6 @@
 import datetime
 import numpy as np
+from astropy.io import fits
 import os 
 import copy
 import matplotlib.gridspec as gs
@@ -13,11 +14,10 @@ from maven_iuvs.binning import get_pix_range
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames
-from maven_iuvs.file_classes import IUVSFITS
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
-    iuvs_segment_from_fname, get_n_int
+    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime
 from maven_iuvs.search import find_files 
 from maven_iuvs.time import utc_to_sol
 from maven_iuvs.user_paths import l1a_dir
@@ -311,11 +311,11 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     segment = iuvs_segment_from_fname(light_path)
 
     # Load fits files
-    light_fits = IUVSFITS(light_path)
-    dark_fits = IUVSFITS(dark_path)
+    light_fits = fits.open(light_path)
+    dark_fits = fits.open(dark_path)
     
     # Set up filename and check to see if file is already done
-    ql_filepath = savefolder + f"{light_fits.basename[:-8]}.png"
+    ql_filepath = savefolder + f"{light_fits['Primary'].header['filename'][:-5]}.png"
 
     if not overwrite:
         if Path(ql_filepath).is_file():
@@ -551,21 +551,21 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     ThumbAxes[0].text(0, 1.3, f"{n_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Explanatory text printing ----------------------------------------------------------------------------------
-    utc_obj = light_fits.timestamp
+    utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
     sol, My = utc_to_sol(utc_obj)
 
     t1 = "Integrations"
     t2 = "Integration time"
 
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}:  {segment}",
-                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits.Ls, ndigits=0))}°", 
-                f"UTC date/time: {light_fits.timestamp.strftime('%Y-%m-%d')}, {light_fits.timestamp.strftime('%H:%M:%S')}", 
+                f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))}°", 
+                f"UTC date/time: {utc_obj.strftime('%Y-%m-%d')}, {utc_obj.strftime('%H:%M:%S')}", 
                 f"{t1:<24}Light: {n_frames:<14}Dark: {n_ints_dark}",
                 f"{t2:<22}Light: {index_data_pair[0]['int_time']} s{'':<6}Dark: {index_data_pair[1]['int_time']} s",
                 f"Total light integrations: {(index_data_pair[0]['int_time'] * n_frames)} s",
                 #
-                f"Light file: {light_fits.basename}", 
-                f"Dark file: {dark_fits.basename}"]
+                f"Light file: {light_fits['Primary'].header['filename']}", 
+                f"Dark file: {dark_fits['Primary'].header['filename']}"]
     
     # List of fontsizes to use as we print stuff on the quicklook
     total_lines_to_print = len(print_me) + 1

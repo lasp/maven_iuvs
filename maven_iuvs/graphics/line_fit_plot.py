@@ -49,7 +49,7 @@ def detector_image(myfits, integration=0, **kwargs):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
              IUVS FITS file to be plotted.
     integration : int
                   Integration number to be plotted.
@@ -215,7 +215,7 @@ class LineFitPlot:
 
         Parameters
         ----------
-        myfits : IUVSFITS or HDUList
+        myfits : astropy.io.fits instance
             Input FITS file to plot.
         n_int : int
             Number of integrations in myfits.
@@ -360,7 +360,7 @@ class LineFitPlot:
 
         Parameters
         ----------
-        myfits : IUVSFITS or HDUList
+        myfits : astropy.io.fits instance
             Input FITS file to plot.
         iint : int
             Integration number to plot
