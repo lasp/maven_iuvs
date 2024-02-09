@@ -307,7 +307,9 @@ def subtract_darks(light_fits, dark_fits):
     light_data = light_fits['Primary'].data
 
     # Retrieve dark frames
-    first_dark, second_dark = get_dark_frames(dark_fits)
+    darks = get_dark_frames(dark_fits)
+    first_dark = darks[0, :, :]
+    second_dark = darks[1, :, :]
 
     # check darks are valid
     if np.isnan(first_dark).any() & np.isnan(second_dark).any():
@@ -405,26 +407,29 @@ def get_dark_frames(dark_fits, average=False):
     """
     n_ints_dark = get_n_int(dark_fits)
 
+    # Make a grand array to store the darks
+    darks = np.empty((n_ints_dark, *dark_fits['Primary'].data[0].shape))
+
     if n_ints_dark <= 1: 
         raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
 
     # The first and second dark integrations have different noise patterns
     if n_ints_dark == 2:
-        first_dark = dark_fits['Primary'].data[0]
-        second_dark = dark_fits['Primary'].data[1]
+        darks[0, :, :] = dark_fits['Primary'].data[0]
+        darks[1, :, :] = dark_fits['Primary'].data[1]
     else:
-        first_dark = dark_fits['Primary'].data[0]
+        darks[0, :, :] = dark_fits['Primary'].data[0]
         # If more than 2 additional darks, get the element-wise mean to use as second dark. Ignore nans.
-        second_dark = np.nanmean(np.array([d for d in dark_fits['Primary'].data[1:]]), axis=0) 
+        darks[1, :, :] = np.nanmean(dark_fits['Primary'].data[1:, :, :], axis=0)
 
     # Check that we don't have both frames full of NaN
-    if np.isnan(first_dark).any() & np.isnan(second_dark).any():
+    if np.isnan(darks[0, :, :]).any() & np.isnan(darks[1, :, :]).any():
         raise Exception("Both darks are bad")
 
     if average is True:
-        return np.nanmean([first_dark, second_dark], axis=0)
+        return np.nanmean(darks, axis=0)
     else:
-        return first_dark, second_dark
+        return darks
 
 
 def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):

@@ -334,7 +334,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     nan_light_inds, bad_light_inds, bad_dark_inds = bad_inds  # unpack indices of problematic frames
 
     # Retrieve the dark frames here also for plotting purposes 
-    first_dark, second_dark = first_dark, second_dark = get_dark_frames(dark_fits)
+    darks = get_dark_frames(dark_fits)
+    first_dark = darks[0, :, :]
+    second_dark = darks[1, :, :]
 
     # Get an average dark - it's okay if ONE dark is nan.
     avg_dark = get_dark_frames(dark_fits, average=True)
