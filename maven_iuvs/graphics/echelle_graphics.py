@@ -10,7 +10,7 @@ import idl_colorbars as idl_colorbars
 from tqdm.auto import tqdm
 from pathlib import Path
 from maven_iuvs.binning import get_pix_range
-from maven_iuvs.instrument import ech_slit_start, ech_slit_end
+from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames
 from maven_iuvs.file_classes import IUVSFITS
@@ -412,8 +412,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     
     # Plot Lyman alpha spectrum --------------------------------------------------------------------------------------
     # Find slit location; slit is typically between pixels 346--535
-    slit_i1 = find_nearest(light_spapixrng, ech_slit_start)[0]  # start of slit
-    slit_i2 = find_nearest(light_spapixrng, ech_slit_end)[0]  # end of slit
+    slit_i1 = find_nearest(light_spapixrng, ech_Lya_slit_start)[0]  # start of slit
+    slit_i2 = find_nearest(light_spapixrng, ech_Lya_slit_end)[0]  # end of slit
 
     # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
     spec_x = [(light_spepixrng[i] + light_spepixrng[i + 1]) / 2 for i in range(len(light_spepixrng) - 1)]  
@@ -478,11 +478,11 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                            cbar_lbl_size=fontsizes[fs]["labels"], cbar_tick_size=fontsizes[fs]["ticks"])
 
     # Styling for main detector image axis
-    DetAxes[1].axhline(ech_slit_start, linewidth=0.5, color="gainsboro")
-    DetAxes[1].axhline(ech_slit_end, linewidth=0.5, color="gainsboro")
+    DetAxes[1].axhline(ech_Lya_slit_start, linewidth=0.5, color="gainsboro")
+    DetAxes[1].axhline(ech_Lya_slit_end, linewidth=0.5, color="gainsboro")
     trans = transforms.blended_transform_factory(DetAxes[1].transAxes, DetAxes[1].transData)
-    DetAxes[1].text(0, ech_slit_start, ech_slit_start, color="gray", fontsize=16, transform=trans, ha="right")
-    DetAxes[1].text(0, ech_slit_end, ech_slit_end, color="gray", fontsize=16, transform=trans, ha="right")
+    DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=16, transform=trans, ha="right")
+    DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=16, transform=trans, ha="right")
     DetAxes[1].set_xlabel("Spectral", fontsize=fontsizes[fs]["labels"])
     DetAxes[1].set_ylabel("Spatial", fontsize=fontsizes[fs]["labels"])
     DetAxes[1].set_title("Coadded detector image (dark subtracted)", fontsize=fontsizes[fs]["title"])

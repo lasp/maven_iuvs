@@ -10,7 +10,7 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 
-from maven_iuvs.instrument import ech_slit_start, ech_slit_end
+from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -659,10 +659,10 @@ def get_countrate_diagnostics(hdul):
 
 
     """
-    Hlya_spapixrange = np.array([ech_slit_start, ech_slit_end])
+    Hlya_spapixrange = np.array([ech_Lya_slit_start, ech_Lya_slit_end])
     Hlya_countrate, Hlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [450, 505])
     
-    Hbkg_spapixrange = Hlya_spapixrange + 2*(ech_slit_end-ech_slit_start)
+    Hbkg_spapixrange = Hlya_spapixrange + 2*(ech_Lya_slit_end-ech_Lya_slit_start)
     Hbkg_countrate, Hbkg_npix = get_avg_pixel_count_rate(hdul, Hbkg_spapixrange, [450, 505])
     
     Dlya_countrate, Dlya_npix = get_avg_pixel_count_rate(hdul, Hlya_spapixrange, [415, 450])

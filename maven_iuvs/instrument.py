@@ -47,9 +47,9 @@ slit_pix_max = 916  # ending pixel position of slit out of 1023 (0 indexing)
 slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
 detector."""
 
-ech_slit_start = 346  # Starting pixel of slit in echelle mode
+ech_Lya_slit_start = 346  # Starting pixel of slit in echelle mode for H/D Ly alpha
 
-ech_slit_end = 535  # Ending pixel of slit in echelle mode
+ech_Lya_slit_end = 535  # Ending pixel of slit in echelle mode for H/D Ly alpha
 
 def calculate_calibration_curve(hdul,
                                 wavelengths=None,
