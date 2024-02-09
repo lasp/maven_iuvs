@@ -84,7 +84,7 @@ def plot_detector(data_to_plot, spapixrange, spepixrange,
                   fig=None, ax=None, plot_full_extent=True,
                   scale="linear", print_scale_type=False, 
                   norm=None, cmap=109, show_colorbar=True, cbar_lbl_size=18, cbar_tick_size=16,
-                  arange=None, prange=None, force_vmin=None, force_vmax=None):
+                  arange=None, prange=None):
     """
     Creates an image of the full detector with data_to_plot overlaid. 
     Factored out of the original detector_image.
@@ -125,9 +125,6 @@ def plot_detector(data_to_plot, spapixrange, spepixrange,
              plotted. Overrides prange.
     prange : None or 2-tuplen
              Percentile range of DN scale. If None, entire range is plotted.
-    force_vmin, force_vmax : int
-                             if arange is not specified, user can force
-                             these values to serve as vmin and vmax for colorbar.
     
     Returns
     ----------
@@ -157,19 +154,13 @@ def plot_detector(data_to_plot, spapixrange, spepixrange,
         if arange is None:
             arange = [np.percentile(data_to_plot, prange[0]),
                       np.percentile(data_to_plot, prange[1])]
-
-        # Allows overriding the vmin and vmax; for instance, if you 
-        # have multiple externally-created plots that you want to
-        # display with a shared colorbar.
-        vmin = force_vmin if force_vmin is not None else arange[0] 
-        vmax = force_vmax if force_vmin is not None else arange[1]
         
         if scale == "linear":
-            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+            norm = mpl.colors.Normalize(vmin=arange[0], vmax=arange[1])
         elif scale == "sqrt":
-            norm = mpl.colors.PowerNorm(gamma=0.5, vmin=vmin, vmax=vmax)
+            norm = mpl.colors.PowerNorm(gamma=0.5, vmin=arange[0], vmax=arange[1])
         elif scale == "log":
-            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
+            norm = mpl.colors.LogNorm(vmin=arange[0], vmax=arange[1])
         else:
             raise ValueError
         

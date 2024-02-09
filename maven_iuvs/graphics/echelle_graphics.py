@@ -363,10 +363,6 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     for a in range(len(arange)):
         if arange[a] is None:
             arange[a] = np.nanpercentile(all_data, prange[a])
-
-    # These are vmin, vmax for all the values plotted, so we can use a common colorbar.
-    overall_vmin = arange[0]
-    overall_vmax = arange[1]
             
     # Other plot preparations --------------------------------------------------------------------------
     if show_DN_histogram:
@@ -474,7 +470,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     # Plot the main detector image -------------------------------------------------------------------------
     detector_image_echelle(light_fits, coadded_lights, light_spapixrng, light_spepixrng, 
                            fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
-                           prange=prange, arange=arange, force_vmin=overall_vmin, force_vmax=overall_vmax, 
+                           prange=prange, arange=arange,
                            cbar_lbl_size=fontsizes[fs]["labels"], cbar_tick_size=fontsizes[fs]["ticks"])
 
     # Styling for main detector image axis
@@ -500,16 +496,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     d1_spepixrng = get_pix_range(dark_fits, which="spectral")
 
     detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
-                           force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
+                           arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[0].set_title("First dark", fontsize=fontsizes[fs]["title"])
 
     detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
-                           force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
+                           arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[1].set_title("Second dark", fontsize=fontsizes[fs]["title"])
 
     # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
     detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
-                           force_vmin=overall_vmin, force_vmax=overall_vmax, show_colorbar=False, plot_full_extent=False)
+                           arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[2].set_title("Average dark", fontsize=fontsizes[fs]["title"])
 
     # If dark had a nan, show it but print a message.
