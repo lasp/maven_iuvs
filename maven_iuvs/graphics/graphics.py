@@ -1329,23 +1329,31 @@ def reset_symlog_labels(fig, axes):
             tick.set_pad(11)
 
 
-def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
+def make_sza_plot(fitfile, ax=None, linecolor="cornflowerblue"):
     """
     Plots the spacecraft SZA procession vs. integration.
     
     Parameters
     ----------
-    ax : AxesObject
-         Externally-created axis on which to draw the plot.
     fitfile : IUVSFITS or HDUList
              IUVS FITS file to use
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
     linecolor : string
                color to use for plot lines.
     
     Returns
     ----------
-    none
+    fig : matplotlib Figure instance
+          Returned if ax is not passed as an argument
     """
+
+    new_ax = False
+    if ax is None:
+        new_ax = True
+        fig = plt.figure(figsize=(5, 5))
+        ax = fig.add_subplot(1, 1, 1)
+
     SZA_arr = fitfile["PixelGeometry"].data["PIXEL_SOLAR_ZENITH_ANGLE"]
     SZA_arr_shape = SZA_arr.shape
     total_ints = SZA_arr_shape[0]
@@ -1360,9 +1368,12 @@ def make_sza_plot(ax, fitfile, linecolor="cornflowerblue"):
     ax.set_ylabel("SZA (°)", fontsize=20)
     # ax.set_ylim(0,180)
     ax.set_title("Solar zenith angle", fontsize=20)
+
+    if new_ax:
+        return fig
     
 
-def make_SCalt_plot(ax, fitfile, t=""):
+def make_SCalt_plot(fitfile, ax=None, t=""):
     """
     Plots the spacecraft altitude procession vs. integration.
     
@@ -1377,8 +1388,16 @@ def make_SCalt_plot(ax, fitfile, t=""):
     
     Returns
     ----------
-    none
+    fig : matplotlib Figure instance
+          Returned if ax is not passed as an argument
     """
+
+    new_ax = False
+    if ax is None:
+        new_ax = True
+        fig = plt.figure(figsize=(5, 5))
+        ax = fig.add_subplot(1, 1, 1)
+
     arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
     arr_shape = arr.shape
     
@@ -1387,9 +1406,11 @@ def make_SCalt_plot(ax, fitfile, t=""):
     ax.set_xlabel("Integration no.", fontsize=20)
     ax.set_ylabel("Alt (km)", fontsize=20)
     ax.set_title(f"Spacecraft altitude{t}", fontsize=20)
+
+    if new_ax:
+        return fig
     
-    
-def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76), mikes=True):
+def make_tangent_lat_lon_plot(fitfile, ax=None, t="", colmap=idl_colorbars.getcmap(76), mikes=True):
     """
     Plots the latitude and longitude of the spacecraft tangent line to the surface vs. integration.
     
@@ -1406,8 +1427,16 @@ def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76
     
     Returns
     ----------
-    none
+    fig : matplotlib Figure instance
+          Returned if ax is not passed as an argument
     """
+
+    new_ax = False
+    if ax is None:
+        new_ax = True
+        fig = plt.figure(figsize=(5, 5))
+        ax = fig.add_subplot(1, 1, 1)
+
     lat_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LAT"]
     lon_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LON"]
     
@@ -1426,3 +1455,6 @@ def make_tangent_lat_lon_plot(ax, fitfile, t="", colmap=idl_colorbars.getcmap(76
     ax.set_ylabel("Latitude", fontsize=20)
 
     ax.set_title(f"Tangent point lat/lon{t}", fontsize=20)
+
+    if new_ax:
+        return fig

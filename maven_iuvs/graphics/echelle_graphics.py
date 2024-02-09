@@ -532,9 +532,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
             for side in ["left", "right", "top", "bottom"]:
                 a.spines[side].set_visible(False)
     else:
-        make_sza_plot(GeoAxes[0], light_fits)
-        make_SCalt_plot(GeoAxes[1], light_fits)
-        make_tangent_lat_lon_plot(GeoAxes[2], light_fits)
+        make_sza_plot(light_fits, ax=GeoAxes[0])
+        make_SCalt_plot(light_fits, ax=GeoAxes[1])
+        make_tangent_lat_lon_plot(light_fits, ax=GeoAxes[2])
     
     # Plot the light integration thumbnails ---------------------------------------------------------------------
     
