@@ -98,7 +98,7 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
         finally:
             if quicklook_status == "File exists":
                 already_done.append(light_idx['name'])
-            elif "Missing critical observation data" in quicklook_status:
+            elif quicklook_status == "Missing critical observation data":
                 badfiles.append(light_idx['name'])
             elif quicklook_status == "Success":
                 processed.append(light_idx['name'])
