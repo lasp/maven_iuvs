@@ -381,3 +381,57 @@ def fit_line(myfits, wavelength,
         return linevalues, lineunc, myplot.fig
 
     return linevalues, lineunc
+
+
+def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
+    """
+    Determines the DN count rate (DN/pixel/s) over the given spatial x spectral ranges
+    for the data contained in hdul.
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : array
+                  Pixels which define the slit start and end.
+    spepixrange : array
+                  Pixels which define the spectral window over which
+                  we can expect to find the emisssion.
+    return_npix : Whether to return the total number of pixels in the 
+                  spatial x spectral window defined, 
+                  i.e. product of nspapix * nspepix.
+
+    Returns
+    -------
+    countrate : DN per pixel per second
+    npix : number of pixels contained in the spatial x spectral window.
+
+    """
+    binning = get_binning_scheme(hdul)
+    n_int = get_n_int(hdul)
+    
+    # Retrieve indices at which to index the binned data 
+    spalo, spahi = spapixrange
+    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
+                                             spalo, spahi, 'SPA')
+    spelo, spehi = spepixrange
+    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
+                                             spelo, spehi, 'SPE')
+
+    npix = nspapix*nspepix
+
+    if binning['nspa'] == 0 or binning['nspe'] == 0:
+        # data is bad and contains no frames
+        countsperpix = np.nan
+    elif n_int == 1:
+        # single integration
+        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
+    else: # n_int > 1
+        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
+        
+    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
+    
+    if return_npix:
+        return countrate, npix
+    
+    return countrate
