@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pkg_resources
+from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
 
 # instrument variables
 slit_width_deg = 10  # [deg]
@@ -82,8 +83,7 @@ def calculate_calibration_curve(hdul,
     """
 
     # Check that FITS file is l1b
-    # TODO: replace with IUVSFITS.level when available
-    level = hdul['Primary'].header['filename'].split("_")[2]
+    level = iuvs_data_product_level_from_fname(hdul['Primary'].header['filename'])
     if level != 'l1b':
         raise ValueError("Input file must be IUVS l1b.")
 
