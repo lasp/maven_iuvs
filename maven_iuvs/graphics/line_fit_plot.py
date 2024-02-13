@@ -1,40 +1,133 @@
-import warnings
 import idl_colorbars
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from maven_iuvs.binning import get_npix_per_bin, get_pix_range
+from maven_iuvs.graphics import color_dict
 
 
-def detector_image(myfits, integration=0,
-                   fig=None, ax=None,
-                   norm=None, cmap=109,
-                   scale="linear",
-                   arange=None, prange=None):
-    """Makes a density plot of detector counts for the input FITS file and
-    specified integration.
+def detector_image_echelle(myfits, data, spapixrange, spepixrange, num_frames=1, **kwargs):
+    """Makes a density plot of detector DN/pix/sec for the input image data
+    valid for l1a echelle files.
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
-        IUVS FITS file to be plotted.
-    integration : int
-       Integration number to be plotted.
-    fig, ax : matplotlib.pyplot figure and axis instance
-        figure and axis on which to draw.
-    norm : matplotlib norm
-        Norm to be used in density plot. Overrides scale.
-    cmap : int
-        Colormap number to use from idl_colorbars package.
-    scale : "linear", "log", or "sqrt".
-        Scale to use in drawing the plot. Overriden by norm.
-    arange : None or 2-tuple
-        Absolute range of counts scale. If None, entire range is
-        plotted. Overrides prange.
-    prange : None or 2-tuplen
-        Percentile range of counts scale. If None, entire range is plotted.
+    myfits : astropy HDUlist
+             Input light fits file. Currently only used to get number of pixels per bin 
+    data : array
+           Coadded detector image data to be plotted (not yet divided by number of frames)
+    spapixrange : array
+                  Pixels in the spatial range at which data are recorded
+    spepixrange : array
+                  Pixels in the spectral range at which data are recorded
+    num_frames : int
+                 Number of total frames which were used to compile data, which 
+                 should be co-added data (but not yet divided by number of frames)
+    **kwargs : dictionary
+               arguments which can be passed to plot_detector.
 
     Returns
     -------
+    fig : matplotlib.pyplot figure instance
+        If ax==None, the new figure created by this routine.
+    """
+
+    # Collect number of pixels per bin to correctly display data
+    npixperbin = get_npix_per_bin(myfits)
+    
+    # Divide out the number of pix per bin
+    # Total frames are already divided out elsewhere (in coadd_lights)   
+    data = data / npixperbin
+
+    plot_detector(data, spapixrange, spepixrange, **kwargs)
+
+
+def detector_image(myfits, integration=0, **kwargs):
+    """Makes a density plot of detector DN for the input FITS file and
+    specified integration. Valid for l1b files, where dark subtraction
+    has already been done.
+
+    Parameters
+    ----------
+    myfits : astropy.io.fits instance
+             IUVS FITS file to be plotted.
+    integration : int
+                  Integration number to be plotted.
+    fig, ax : matplotlib.pyplot figure and axis instance
+              figure and axis on which to draw.
+    norm : matplotlib norm
+           Norm to be used in density plot. Overrides scale.
+    cmap : int
+           Colormap number to use from idl_colorbars package.
+    scale : "linear", "log", or "sqrt".
+             Scale to use in drawing the plot. Overriden by norm.
+
+    Returns
+    -------
+    fig : matplotlib.pyplot figure instance
+        If ax==None, the new figure created by plot_detector.
+    """
+
+    # Collect the data for the given integration
+    data = myfits['detector_dark_subtracted'].data[integration]
+
+    spapixrange = get_pix_range(myfits, which="spatial")
+    spepixrange = get_pix_range(myfits, which="spectral")
+    npixperbin = get_npix_per_bin(myfits)
+            
+    data = data / npixperbin
+
+    fig = plot_detector(data, spapixrange, spepixrange, **kwargs)
+
+
+def plot_detector(data_to_plot, spapixrange, spepixrange, 
+                  fig=None, ax=None, plot_full_extent=True,
+                  scale="linear", print_scale_type=False, 
+                  norm=None, cmap=109, show_colorbar=True, cbar_lbl_size=18, cbar_tick_size=16,
+                  arange=None, prange=None):
+    """
+    Creates an image of the full detector with data_to_plot overlaid. 
+    Factored out of the original detector_image.
+
+    Parameters
+    ----------
+    data_to_plot : 2D Array
+                   Valid data on the detector, prepared in whatever way 
+                   is desired. 
+    spapixrange : 1D Array
+                  Pixel values in the spatial dimension of the data.
+    spepixrange : 1D Array
+                  Pixel values in the spectral dimension of the data.
+    fig, ax : matplotlib.pyplot figure and axis instance
+              figure and axis on which to draw.
+    plot_full_extent : boolean
+                       if True, creates a 1024x1024 square 
+                       which contains the detector image.
+                       If False, the plot will automatically 
+                       set its own limits, which will then typically
+                       be the ends of spapixrange and spepixrange.
+    scale : "linear", "log", or "sqrt".
+             Scale to use in drawing the plot. Overriden by norm.
+    print_scale_type : boolean
+                       Whether to print some text on the canvas stating the value of scale.
+    norm : matplotlib norm
+           Norm to be used in density plot. Overrides scale.
+    cmap : int
+           Colormap number to use from idl_colorbars package.
+    show_colorbar : boolean
+                    Whether to plot the colorbar. 
+    cbar_lbl_size : int
+                    Font size in points for the colorbar label
+    cbar_tick_size : int
+                    Font size in points for the colorbar tick labels    
+    arange : None or 2-tuple
+             Absolute range of DN scale. If None, entire range is
+             plotted. Overrides prange.
+    prange : None or 2-tuplen
+             Percentile range of DN scale. If None, entire range is plotted.
+    
+    Returns
+    ----------
     fig : matplotlib.pyplot figure instance
         If ax==None, the new figure created by this routine.
     """
@@ -50,72 +143,50 @@ def detector_image(myfits, integration=0,
 
     cmap = idl_colorbars.getcmap(cmap)
 
-    ax.set_xlim([0, 1024])
-    ax.set_ylim([0, 1024])
-
-    # get the data
-    data = myfits['detector_dark_subtracted'].data[integration]
-
-    # figure out the binning
-    spapixlo = myfits['Binning'].data['SPAPIXLO'][0]
-    spapixhi = myfits['Binning'].data['SPAPIXHI'][0]
-    spepixlo = myfits['Binning'].data['SPEPIXLO'][0]
-    spepixhi = myfits['Binning'].data['SPEPIXHI'][0]
-    if not (set((spapixhi[:-1]+1)-spapixlo[1:]) == {0}
-            and set((spepixhi[:-1]+1)-spepixlo[1:]) == {0}):
-        raise ValueError("Error in bin table")
-
-    spepixrange = np.concatenate([[spepixlo[0]], spepixhi+1])
-    spapixrange = np.concatenate([[spapixlo[0]], spapixhi+1])
-
-    spepixwidth = spepixrange[1:]-spepixrange[:-1]
-    spapixwidth = spapixrange[1:]-spapixrange[:-1]
-
-    npixperbin = np.outer(spapixwidth, spepixwidth)
-
-    data = data/npixperbin
-
+    if plot_full_extent:
+        ax.set_xlim([0, 1024])
+        ax.set_ylim([0, 1024])
+    
     # figure out what norm to use
     if norm is None:
         if prange is None:
             prange = [0, 100]
         if arange is None:
-            arange = [np.percentile(data, prange[0]),
-                      np.percentile(data, prange[1])]
+            arange = [np.percentile(data_to_plot, prange[0]),
+                      np.percentile(data_to_plot, prange[1])]
+        
         if scale == "linear":
-            norm = mpl.colors.Normalize(vmin=arange[0],
-                                        vmax=arange[1])
+            norm = mpl.colors.Normalize(vmin=arange[0], vmax=arange[1])
         elif scale == "sqrt":
-            norm = mpl.colors.PowerNorm(gamma=0.5,
-                                        vmin=arange[0],
-                                        vmax=arange[1])
+            norm = mpl.colors.PowerNorm(gamma=0.5, vmin=arange[0], vmax=arange[1])
         elif scale == "log":
-            norm = mpl.colors.LogNorm(vmin=arange[0],
-                                      vmax=arange[1])
+            norm = mpl.colors.LogNorm(vmin=arange[0], vmax=arange[1])
         else:
             raise ValueError
-
-    ax.patch.set_color('#666666')
+        
+    ax.patch.set_color(color_dict['darkgrey'])
     ax.patch.set_alpha(1.0)
-    pcm = ax.pcolormesh(spepixrange, spapixrange,
-                        data,
-                        norm=norm,
-                        cmap=cmap)
+    pcm = ax.pcolormesh(spepixrange, spapixrange, data_to_plot, norm=norm, cmap=cmap)
 
     # add the colorbar axes
-    ax_pos = ax.get_position()
-    cax_width_frac = 0.07
-    cax_margin = 0.02
-    cax = fig.add_axes((ax_pos.x1+cax_margin*ax_pos.width,
-                        ax_pos.y0,
-                        cax_width_frac*ax_pos.width,
-                        ax_pos.height))
-    fig.colorbar(pcm, cax=cax)
-    if scale == "linear":
-        cax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
-
+    if show_colorbar:
+        ax_pos = ax.get_position()
+        cax_width_frac = 0.07
+        cax_margin = 0.02
+        cax = fig.add_axes((ax_pos.x1+cax_margin*ax_pos.width,
+                            ax_pos.y0,
+                            cax_width_frac*ax_pos.width,
+                            ax_pos.height))
+        cb = fig.colorbar(pcm, cax=cax)
+        cb.set_label(label="DN/sec/px", size=cbar_lbl_size) 
+        cax.tick_params(which="both", labelsize=cbar_tick_size)
+        if scale == "linear":
+            cax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            
+        if print_scale_type==True:
+            ax.text(1.05, -0.05, f"{scale} scale", color=color_dict["darkgrey"], fontsize=16, transform=ax.transAxes)
+        
     if new_ax:
-        # fig.show()
         return fig
 
 
@@ -144,7 +215,7 @@ class LineFitPlot:
 
         Parameters
         ----------
-        myfits : IUVSFITS or HDUList
+        myfits : astropy.io.fits instance
             Input FITS file to plot.
         n_int : int
             Number of integrations in myfits.
@@ -231,7 +302,7 @@ class LineFitPlot:
         file_info_text = 'FUV integration report\n'
         file_info_text += myfits['Primary'].header['FILENAME']+'\n'
         file_info_text += ('MCP_VOLT: '
-                           + str(myfits['Observation'].data['MCP_VOLT'][0]))
+                           + str(myfits['Primary'].header['MCP_VOLT']))
         self.thumbnail_axes.text(file_text_start, 1, file_info_text,
                                  ha='left', va='top',
                                  transform=self.thumbnail_axes.transAxes,
@@ -289,7 +360,7 @@ class LineFitPlot:
 
         Parameters
         ----------
-        myfits : IUVSFITS or HDUList
+        myfits : astropy.io.fits instance
             Input FITS file to plot.
         iint : int
             Integration number to plot

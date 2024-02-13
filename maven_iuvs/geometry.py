@@ -1,17 +1,11 @@
 import os
 from datetime import datetime
-
-import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
-import shapely.geometry as sgeom
 import spiceypy as spice
-from astropy.io import fits
 from skimage.transform import resize
 import pkg_resources
-
 from maven_iuvs.instrument import slit_width_deg
-from maven_iuvs.constants import R_Mars_km
 
 
 def beta_flip(hdul):
@@ -566,8 +560,7 @@ def get_sun_vector_iau(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -586,8 +579,7 @@ def get_pixel_mrh_point_iau_mars_vector(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -643,8 +635,7 @@ def get_pixel_corner_sza(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -669,8 +660,7 @@ def get_pixel_corner_local_time(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -699,8 +689,7 @@ def get_pixel_corner_emission_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -725,8 +714,7 @@ def get_pixel_corner_zenith_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
-        IUVS FITS interface.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -757,7 +745,7 @@ def get_pixel_corner_phase_angle(myfits):
 
     Parameters
     ----------
-    myfits : HDUList or IUVSFITS
+    myfits : astropy.io.fits instance
         IUVS FITS interface.
 
     Returns
@@ -782,8 +770,7 @@ def get_pixel_vec_mso(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
-        An IUVS FITS file object.
+    myfits : astropy.io.fits instance
 
     Returns
     -------
@@ -941,3 +928,28 @@ def pixelcorner_avg(pixel_x, pixel_y, pixel_z=None,
         return avgxy[:, :, 0], avgxy[:, :, 1], avgxy[:, :, 2]
 
     return avgxy[:, :, 0], avgxy[:, :, 1]
+
+
+def has_geometry_pvec(hdul):
+    """
+    Determines whether geodetic latitudes are available for the pixels in the pixel vector
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+
+    Returns
+    -------
+    n_int : int
+            number of integrations
+
+    """    
+    geom_quantity = hdul['PixelGeometry'].data['PIXEL_CORNER_LAT']
+    
+    n_nan = np.sum(np.isnan(geom_quantity))
+    n_quant = np.product(np.shape(geom_quantity))
+
+    nanfrac = n_nan / n_quant
+    
+    return (nanfrac < 1.0)

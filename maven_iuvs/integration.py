@@ -2,10 +2,12 @@ import os
 import warnings
 import numpy as np
 from scipy.interpolate import interp1d
-
+from astropy.io import fits
 from maven_iuvs import anc_dir
 from maven_iuvs.instrument import calculate_calibration_curve
 from maven_iuvs.graphics import LineFitPlot
+from maven_iuvs.miscellaneous import get_n_int
+from maven_iuvs.binning import get_binning_scheme, pix_to_bin
 
 def get_lsf_from_bins(spatial_binning):
     """Get IUVS line spread function appropriate to the input spatial
@@ -44,12 +46,13 @@ def get_lsf_from_bins(spatial_binning):
 
 
 def get_lsf(myfits):
-    """Get IUVS line spread function array appropriate to the input IUVS
+    """
+    Get IUVS line spread function array appropriate to the input IUVS
     FITS file.
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -57,7 +60,6 @@ def get_lsf(myfits):
     lsf : N x M numpy array of floats
         Array with the LSF corresponding to each spatial bin. N =
         number of spatial bins, M = number of spectral elements in LSF.
-
     """
     spalo = myfits['Binning'].data['SPAPIXLO'][0]
     spalo = np.append(spalo,
@@ -71,7 +73,7 @@ def get_lsf_interp(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -100,18 +102,18 @@ def get_lsf_interp(myfits):
 
 
 def get_muv_contamination_templates(myfits_fuv):
-    """Returns MUV contamination templates for an input FUV IUVSFITS
+    """Returns MUV contamination templates for an input FUV fits
     file. This is a stub to be filled out by Sonal at some point in
     the future.
 
     Parameters
     ----------
-    myfits_fuv : IUVSFITS or HDUList
+    myfits_fuv : astropy.io.fits instance
         FITS file interface to an IUVS FUV FITS file.
 
     Returns
     -------
-    myfits_muv : IUVSFITS
+    myfits_muv : astropy.io.fits instance
         MUV companion to the input FUV file
     muv_contamination_templates : numpy ndarray of floats
         n_spa x n_spe array of MUV contamination templates for each
@@ -119,12 +121,10 @@ def get_muv_contamination_templates(myfits_fuv):
 
     """
     # find the filename of the matching muv file
-    # TODO: replace with IUVSFITS when available
     fuv_filename = myfits_fuv.filename()
     fuv_dir = os.path.dirname(fuv_filename)
     muv_filename = os.path.basename(fuv_filename).replace('fuv', 'muv')
     muv_filename = os.path.join(fuv_dir, muv_filename)
-    import astropy.io.fits as fits
     myfits_muv = fits.open(muv_filename)
 
     # get the MUV contamination templates
@@ -142,7 +142,7 @@ def get_lya_flatfield(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
 
     Returns
@@ -169,13 +169,14 @@ def fit_line(myfits, wavelength,
              calibrate=True, flatfield_correct=True,
              correct_muv=False,
              plot=False):
-    """Fit a spectral line in the input IUVS FITS file and return line
+    """
+    Fit a spectral line in the input IUVS FITS file and return line
     brightness for each integration and spatial element of the
     file. Developed and tested for Lyman alpha.
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         FITS file interface to an IUVS FITS file.
     wavelength : float
         Wavelength of the line to be fit. (e.g. 121.56 for Lyman
@@ -206,13 +207,12 @@ def fit_line(myfits, wavelength,
         naive error propagation in the fit function.
     fig : matplotlib.pyplot.figure
         If plot = True, the figure object of the plot of line fits.
-
     """
 
-    # TODO: replace with IUVSFITS throughout
-    import astropy.io.fits as fits
     if not isinstance(myfits, fits.hdu.hdulist.HDUList):
         myfits = fits.open(myfits)
+
+    datalevel = iuvs_data_product_level_from_fname(myfits['Primary'].header['filename'])
 
     if correct_muv:
         warnings.warn('correct_muv not implemented,'
@@ -255,12 +255,20 @@ def fit_line(myfits, wavelength,
 
         for ispa in range(n_spa):
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
-            DN = myfits['detector_dark_subtracted'].data[iint, ispa]
-            DN_unc = myfits['Random_dn_unc'].data[iint, ispa]
+
+            if datalevel=="l1b":
+                DN = myfits['detector_dark_subtracted'].data[iint, ispa]
+                DN_unc = myfits['Random_dn_unc'].data[iint, ispa] 
+            elif datalevel=="l1a":
+                DN = myfits['Primary'].data[iint, ispa] 
+                DN_unc = np.empty_like(DN) 
+                DN_unc[:] = np.nan
+                
             if correct_muv:
                 muv = muv_contamination_templates[ispa]
             else:
-                muv = np.zeros_like(DN)
+                muv = np.empty_like(DN)
+                muv[:] = np.nan
 
             # subset the data to be fitted to the vicinity of the spectral line
             d_lambda = 2.5
@@ -272,7 +280,7 @@ def fit_line(myfits, wavelength,
             lineDNmax = np.max([lineDNmax, np.max(fitDN)])
 
             # guess what the fit parameters should be
-            backguess = (np.median(fitDN[0:3])+np.median(fitDN[-3:-1]))/2
+            backguess = (np.median(fitDN[0:3]) + np.median(fitDN[-3:-1]))/2
             slopeguess = ((np.median(fitDN[-3:-1]) - np.median(fitDN[0:3]))
                           /
                           (fitwaves[-1]-fitwaves[0]))
@@ -372,3 +380,57 @@ def fit_line(myfits, wavelength,
         return linevalues, lineunc, myplot.fig
 
     return linevalues, lineunc
+
+
+def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
+    """
+    Determines the DN count rate (DN/pixel/s) over the given spatial x spectral ranges
+    for the data contained in hdul.
+
+    Parameters
+    ----------
+    hdul : astropy FITS HDUList object
+           HDU list for a given observation
+    spapixrange : array
+                  Pixels which define the slit start and end.
+    spepixrange : array
+                  Pixels which define the spectral window over which
+                  we can expect to find the emisssion.
+    return_npix : Whether to return the total number of pixels in the 
+                  spatial x spectral window defined, 
+                  i.e. product of nspapix * nspepix.
+
+    Returns
+    -------
+    countrate : DN per pixel per second
+    npix : number of pixels contained in the spatial x spectral window.
+
+    """
+    binning = get_binning_scheme(hdul)
+    n_int = get_n_int(hdul)
+    
+    # Retrieve indices at which to index the binned data 
+    spalo, spahi = spapixrange
+    spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
+                                             spalo, spahi, 'SPA')
+    spelo, spehi = spepixrange
+    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
+                                             spelo, spehi, 'SPE')
+
+    npix = nspapix*nspepix
+
+    if binning['nspa'] == 0 or binning['nspe'] == 0:
+        # data is bad and contains no frames
+        countsperpix = np.nan
+    elif n_int == 1:
+        # single integration
+        countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
+    else: # n_int > 1
+        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
+        
+    countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
+    
+    if return_npix:
+        return countrate, npix
+    
+    return countrate

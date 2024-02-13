@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pkg_resources
+from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
 
 # instrument variables
 slit_width_deg = 10  # [deg]
@@ -47,6 +48,9 @@ slit_pix_max = 916  # ending pixel position of slit out of 1023 (0 indexing)
 slit. This is out of 1024 pixels (index 1023) for a 1024x1024 pixel
 detector."""
 
+ech_Lya_slit_start = 346  # Starting pixel of slit in echelle mode for H/D Ly alpha
+
+ech_Lya_slit_end = 535  # Ending pixel of slit in echelle mode for H/D Ly alpha
 
 def calculate_calibration_curve(hdul,
                                 wavelengths=None,
@@ -79,8 +83,7 @@ def calculate_calibration_curve(hdul,
     """
 
     # Check that FITS file is l1b
-    # TODO: replace with IUVSFITS.level when available
-    level = hdul['Primary'].header['filename'].split("_")[2]
+    level = iuvs_data_product_level_from_fname(hdul['Primary'].header['filename'])
     if level != 'l1b':
         raise ValueError("Input file must be IUVS l1b.")
 

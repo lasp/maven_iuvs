@@ -75,7 +75,6 @@ def setup_user_paths():
 
     Notes
     -------
-
     This is an interactive routine called once, generally the first
     time the user calls sync_data.
 
@@ -131,11 +130,13 @@ def setup_user_paths():
     user_paths_file.write("iuvs_vm_username = \""+vm_username+"\"\n")
     user_paths_file.write("auto_spice_load = "+auto_spice_load+"\n")
     user_paths_file.close()
+
     # now scripts can import the relevant directories from user_paths
 
-
+ 
 def get_default_data_directory(level='l1b'):
-    """Returns default l1b_dir defined in user_paths.py, creating the
+    """
+    Returns default l1b_dir defined in user_paths.py, creating the
     file if needed.
 
     Parameters
@@ -169,7 +170,6 @@ def get_default_data_directory(level='l1b'):
                         " Is it accessible?")
 
     return local_dir
-
 
 def call_rsync(remote_path,
                local_path,
@@ -219,9 +219,9 @@ def call_rsync(remote_path,
         progress_flag = '--progress'
 
     # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
-    if " " in local_dir:
-        local_dir = local_dir.replace(" ", "\ ")
-        
+    if " " in local_path:
+        local_path = local_path.replace(" ", "\ ")
+
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,
                               extra_flags,
@@ -236,6 +236,7 @@ def call_rsync(remote_path,
     cpl = child.compile_pattern_list([pexpect.EOF,
                                       '.* password: ',
                                       '[0-9]+%'])
+
     while True:
         i = child.expect_list(cpl, timeout=None)
         if i == 0:  # end of file
@@ -431,8 +432,8 @@ def sync_data(spice=True, level='l1b',
     Returns
     -------
     None.
-
     """
+
     # setup search pattern
     pattern = get_filename_glob_string(**filename_kwargs)
 
@@ -482,10 +483,11 @@ def sync_data(spice=True, level='l1b',
         else:
             raise ValueError('local_dir must be l1a or l1b')
 
-    # Check to be sure that the vm is in the known_hosts file.
+     # Check to be sure that the vm is in the known_hosts file.
     is_vm_found = subprocess.run(["ssh-keygen", "-H", "-F", vm], capture_output=True)
     if (is_vm_found.returncode == 1) or ("found" not in is_vm_found.stdout.decode('utf-8')):
-        raise Exception(f"{vm} is not in the list of known_hosts. Please manually connect via ssh; upon first connection, it will be added automatically to ~./.ssh/known_hosts.")
+        raise Exception(f"{vm} is not in the list of known_hosts. Please manually connect"
+                         " via ssh; upon first connection, it will be added automatically to ~./.ssh/known_hosts.")
 
     # try to sync the files, if it fails, user probably isn't on the VPN
     try:
@@ -505,6 +507,7 @@ def sync_data(spice=True, level='l1b',
         # sync level 1B data
         if level is not None:
             # get the file names of all the relevant files
+            print(f"Running sync on {datetime.datetime.utcnow().strftime('%a %d %b %Y, %I:%M%p')}")
             print('Fetching names of production and stage'
                   ' files from the VM...')
             prod_filenames = get_vm_file_list(vm,
@@ -780,7 +783,8 @@ def get_integrated_reports_dir():
 
 
 def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
-    """Sync Integrated Reports data from MAVEN Ops page. Syncs all new
+    """
+    Sync Integrated Reports data from MAVEN Ops page. Syncs all new
     files and all files from last 180 days by default.
 
     Parameters
@@ -796,7 +800,6 @@ def sync_integrated_reports(sdc_username, sdc_password, check_old=False):
     Returns
     -------
     none
-
     """
 
     print("syncing Integrated Reports... ")

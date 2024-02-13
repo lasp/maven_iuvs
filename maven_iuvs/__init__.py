@@ -16,6 +16,9 @@ from . import instrument
 from . import constants
 from . import integration
 from . import file_classes
+from . import binning
+from . import echelle
+
 
 try:
     from .user_paths import auto_spice_load as _auto_spice_load

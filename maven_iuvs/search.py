@@ -11,7 +11,6 @@ from astropy.io import fits
 #  NOTE: depends on maven_iuvs.download must be encapsulated to avoid
 #  circular import
 from maven_iuvs.geometry import beta_flip
-from maven_iuvs.file_classes import IUVSFITS
 
 
 def find_files(data_directory=None,
@@ -19,7 +18,7 @@ def find_files(data_directory=None,
                use_index=None,
                count=False,
                **filename_kwargs):
-    """Return IUVSFITS files for a given glob pattern.
+    """Return fits files for a given glob pattern.
 
     Parameters
     ----------
@@ -51,7 +50,7 @@ def find_files(data_directory=None,
     Returns
     -------
     files : array
-        A sorted list of IUVSFITS objects whose filenames match the
+        A sorted list of fits files whose filenames match the
         input.
 
     n_files : int
@@ -63,7 +62,7 @@ def find_files(data_directory=None,
     pattern = get_filename_glob_string(**filename_kwargs)
 
     if data_directory is None:
-        from maven_iuvs.download import get_default_directory
+        from maven_iuvs.download import get_default_data_directory
         from maven_iuvs import (_iuvs_l1a_filenames_index,
                                 _iuvs_l1b_filenames_index)
         # ^^^ avoids circular import
@@ -75,7 +74,7 @@ def find_files(data_directory=None,
             _iuvs_filenames_index = _iuvs_l1b_filenames_index
             file_level = 'l1b'
 
-        data_directory = get_default_directory(level=file_level)
+        data_directory = get_default_data_directory(level=file_level)
         if use_index is None or use_index is True:
             use_index = True
         if len(_iuvs_filenames_index) == 0:
@@ -106,7 +105,6 @@ def find_files(data_directory=None,
         orbfiles = []
     else:
         orbfiles = get_latest_files(dropxml(orbfiles))
-        #orbfiles = [IUVSFITS(f) for f in orbfiles]
 
     if count:
         return orbfiles, n_files
@@ -469,7 +467,7 @@ def get_solar_lyman_alpha(myfits):
 
     Parameters
     ----------
-    myfits : IUVSFITS or HDUList
+    myfits : astropy.io.fits instance
         Input IUVS FITS file containing a time for which to return an
         interpolated EUVM brightness.
 
@@ -487,7 +485,6 @@ def get_solar_lyman_alpha(myfits):
     from scipy.io.idl import readsav
     import spiceypy as spice
 
-    # TODO: switch to IUVSFITS once available
     if isinstance(myfits, str):
         myfits = fits.open(myfits)
 

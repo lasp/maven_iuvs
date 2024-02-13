@@ -26,6 +26,7 @@ setuptools.setup(
         'pytz>=2018.9',
         'spiceypy>=2.2.0',
         'sysrsync>=0.1.2',
+        'tqdm>=4.66.1',
         'twill>=2.0.1',
         'mayavi>=4.7.2',
         'PyQt5>=5.15.2',
