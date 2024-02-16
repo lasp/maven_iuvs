@@ -107,48 +107,49 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
 
         ki += 1
 
-    logfile_name = f"log{selected_l1a[0]['orbit']}-{selected_l1a[-1]['orbit']}_processed_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    with open(f"{savefolder}{logfile_name}", "w") as logfile:
-        logfile.write(f"Finished. Ran orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n\n")
-        
-        # Log files that already existed 
-        if len(already_done) > 0:
-            logfile.write(f"{len(already_done)} files were already done, not re-generated:\n")
-            for f in already_done:
-                logfile.write(f"\t{f}\n")
-            logfile.write("\n") # newline
+    if savefolder is not None:
+        logfile_name = f"log{selected_l1a[0]['orbit']}-{selected_l1a[-1]['orbit']}_processed_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        with open(f"{savefolder}{logfile_name}", "w") as logfile:
+            logfile.write(f"Finished. Ran orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n\n")
+            
+            # Log files that already existed 
+            if len(already_done) > 0:
+                logfile.write(f"{len(already_done)} files were already done, not re-generated:\n")
+                for f in already_done:
+                    logfile.write(f"\t{f}\n")
+                logfile.write("\n") # newline
 
-        # Log files that were successfully processed for the first time
-        if len(processed) > 0:
-            logfile.write(f"Successfully processed {len(processed)} files:\n")
-            for f in processed:
-                logfile.write(f"\t{f}\n")
-            logfile.write("\n") # newline
+            # Log files that were successfully processed for the first time
+            if len(processed) > 0:
+                logfile.write(f"Successfully processed {len(processed)} files:\n")
+                for f in processed:
+                    logfile.write(f"\t{f}\n")
+                logfile.write("\n") # newline
 
-        # Log files without appropriate darks
-        if len(files_missing_dark)>0:
-            logfile.write(f"{len(files_missing_dark)} files were missing darks:\n")
-            for f in files_missing_dark:
-                logfile.write(f"\t{f}\n")
-            logfile.write("\n") # newline
+            # Log files without appropriate darks
+            if len(files_missing_dark)>0:
+                logfile.write(f"{len(files_missing_dark)} files were missing darks:\n")
+                for f in files_missing_dark:
+                    logfile.write(f"\t{f}\n")
+                logfile.write("\n") # newline
 
-        # Log files with bad data
-        if len(badfiles) > 0:
-            logfile.write(f"{len(badfiles)} file(s) had no valid data:\n")
-            for f in badfiles:
-                logfile.write(f"\t{f}\n")
-            logfile.write("\n") # newline
-       
-        # Log files that threw a weird error
-        if unique_exceptions:
-            logfile.write(f"\n{len(unique_exceptions)} files had unhandled unique exceptions that need to be addressed: \n")
-            for e in unique_exceptions:
-                logfile.write(f"\t{e}\n")
-            logfile.write("\n") # newline
+            # Log files with bad data
+            if len(badfiles) > 0:
+                logfile.write(f"{len(badfiles)} file(s) had no valid data:\n")
+                for f in badfiles:
+                    logfile.write(f"\t{f}\n")
+                logfile.write("\n") # newline
+           
+            # Log files that threw a weird error
+            if unique_exceptions:
+                logfile.write(f"\n{len(unique_exceptions)} files had unhandled unique exceptions that need to be addressed: \n")
+                for e in unique_exceptions:
+                    logfile.write(f"\t{e}\n")
+                logfile.write("\n") # newline
 
-        logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark)}\n")
+            logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark)}\n")
 
-        print(f"\nLog written for orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n")
+            print(f"\nLog written for orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n")
 
 
 def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1):
@@ -315,11 +316,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     dark_fits = fits.open(dark_path)
     
     # Set up filename and check to see if file is already done
-    ql_filepath = savefolder + f"{light_fits['Primary'].header['filename'][:-5]}.png"
+    if savefolder is not None:
+        ql_filepath = savefolder + f"{light_fits['Primary'].header['filename'][:-5]}.png"
 
-    if not overwrite:
-        if Path(ql_filepath).is_file():
-            return "File exists"
+        if not overwrite:
+            if Path(ql_filepath).is_file():
+                return "File exists"
     
     # Find number of light integrations
     n_ints = get_n_int(light_fits)
