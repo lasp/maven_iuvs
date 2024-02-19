@@ -278,6 +278,16 @@ def coadd_lights(light_fits, dark_fits):
     return coadded_lights / total_frames, [nan_light_inds, bad_light_inds, nan_dark_inds], total_frames
 
 
+def median_light_frame(light_fits, dark_fits):
+    """
+    Obtains a median light frame, which can be useful for displaying the observations without cosmic rays, etc.
+    """
+    dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, dark_fits)
+    medframe = np.nanmedian(dark_subtracted, axis=0)
+
+    return medframe
+
+
 def subtract_darks(light_fits, dark_fits):
     """
     Given matching light and dark fits, subtracts off the darks from lights
