@@ -13,7 +13,8 @@ from pathlib import Path
 from maven_iuvs.binning import get_pix_range
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
-    pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames
+    pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
+    median_light_frame
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
@@ -177,14 +178,14 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     fig = plt.figure(figsize=figsz)
     COLS = 16
     ROWS = 6
-    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.45, wspace=1.1)
+    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.45, wspace=1.3)
 
     TopGrid.update(bottom=0.5)
 
     # Define some sizes
     d_main = 5  # colspan of main detector plot
-    d_dk = 3  # colspan/rowspan of darks and geometry # d_sm
-    d_geo = 2
+    d_dk = 3  # colspan/rowspan of darks and colspan of geometry
+    d_geo = 2  # rowspan of geometry plots
     start_sm = 6  # col to start darks and geometry
     
     # Detector images and geometry ------------------------------------------------------------
@@ -222,7 +223,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     
     # Thumbnail area -------------------------------------------------------------------------
     BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.05, wspace=0.05) 
-    BottomGrid.update(top=0.45)#(top=0.43)
+    BottomGrid.update(top=0.45)
     
     row_count = 0
     col_count = 0
@@ -248,7 +249,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, figsz=(36, 26), show_D_inset=True, show_D_guideline=True, 
-                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="medium"):
+                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="large", useframe="median"):
     """ 
     Fills in the quicklook figure for a single observation.
     
@@ -344,7 +345,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     avg_dark = get_dark_frames(dark_fits, average=True)
 
     # get all the data values so we can make one common colorbar
-    all_data = np.concatenate((coadded_lights, first_dark, second_dark, avg_dark), axis=None) 
+    all_data = np.concatenate((detector_image_to_plot, first_dark, second_dark, avg_dark), axis=None) 
 
     # Set the plotting ranges --------------------------------------------------------------------------
     # By allowing prange and arange to be a mix of 'None' and actual values,
@@ -401,11 +402,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     else:
         aspect_ratio = spatial_extent / spectral_extent
 
-    # Define some font sizes for the QL 
-    fontsizes = {"small": {"ticks": 9, "labels": 10, "title":14, "general": 12}, 
-                 "medium": {"ticks": 11, "labels": 12, "title":16, "general": 14},
-                 "large": {"ticks": 15, "labels": 16, "title":20, "general": 18 }, 
-                 "huge": {"ticks": 19, "labels": 20, "title":24, "general": 22}}
+    # Define how many pts to add to various fonts given the qualitative font description supplied
+    fontsizes = {"small": 0, "medium": 4, "large": 8, "huge": 12}
 
     # Now start to bulid the quicklook image   -----------------------------------------------------------------------
     QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=figsz, aspect=aspect_ratio)
@@ -418,18 +416,20 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
     spec_x = [(light_spepixrng[i] + light_spepixrng[i + 1]) / 2 for i in range(len(light_spepixrng) - 1)]  
     # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
-    spectrum = np.sum(coadded_lights[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
-    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=16)
-    DetAxes[0].set_ylabel("Avg. DN/sec/px", fontsize=16)
+    spectrum = np.sum(detector_image_to_plot[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
+    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=8+fontsizes[fs])
+    DetAxes[0].set_ylabel("Avg. DN/sec/px", fontsize=8+fontsizes[fs])
     DetAxes[0].plot(spec_x, spectrum)
     DetAxes[0].set_xlim(spec_x[0], spec_x[-1])
     DetAxes[0].set_ylim(bottom=0)
     DetAxes[0].axes.get_xaxis().set_visible(True) # try in vain to turn off x-axis.     
-    DetAxes[0].tick_params(axis="x", bottom=False, labelbottom=False, labelcolor="white", color="white") # try in vain to turn off x-axis.
+    DetAxes[0].tick_params(axis="x", bottom=False, labelbottom=False, labelcolor="white", color="white") 
         
     # Find where the Lyman alpha emission should be
     wvs = light_fits['Observation'].data['WAVELENGTH'][0][0]  # We only need one row since all are the same.
-    Hlya_i = np.argmax(spectrum)  # find index where spectrum has the most power (that'll be Lyman alpha)
+    Hlya_i_guess, Hlya_val = find_nearest(wvs, 121.567)  # This is a guess for where it should be--this helps rule out rogue cosmic rays that might sometimes dominate
+    peak_in_lya_window = np.max(spectrum[Hlya_i_guess-5:Hlya_i_guess+5])
+    Hlya_i = np.where(spectrum == peak_in_lya_window)[0][0]  # find index where spectrum has the most power (that'll be Lyman alpha)
     Hlya = wvs[Hlya_i]  # this is the recorded wavelength in the FITS file which goes with the highest power in the spectrum, i.e. effective location of lyman alpha.
     Dlya_i, Dlya = find_nearest(wvs, Hlya - 0.033)  # calculate the index of where D lyman alpha should be based on H lyman alpha. 0.033 is the difference in wavelength in nm.
 
@@ -472,21 +472,21 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         inset.yaxis.tick_right()
     
     # Plot the main detector image -------------------------------------------------------------------------
-    detector_image_echelle(light_fits, coadded_lights, light_spapixrng, light_spepixrng, 
+    detector_image_echelle(light_fits, detector_image_to_plot, light_spapixrng, light_spepixrng,
                            fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
-                           prange=prange, arange=arange,
-                           cbar_lbl_size=fontsizes[fs]["labels"], cbar_tick_size=fontsizes[fs]["ticks"])
+                           prange=prange, arange=arange, 
+                           cbar_lbl_size=10+fontsizes[fs], cbar_tick_size=9+fontsizes[fs])
 
     # Styling for main detector image axis
     DetAxes[1].axhline(ech_Lya_slit_start, linewidth=0.5, color="gainsboro")
     DetAxes[1].axhline(ech_Lya_slit_end, linewidth=0.5, color="gainsboro")
     trans = transforms.blended_transform_factory(DetAxes[1].transAxes, DetAxes[1].transData)
-    DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=16, transform=trans, ha="right")
-    DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=16, transform=trans, ha="right")
-    DetAxes[1].set_xlabel("Spectral", fontsize=fontsizes[fs]["labels"])
-    DetAxes[1].set_ylabel("Spatial", fontsize=fontsizes[fs]["labels"])
-    DetAxes[1].set_title("Coadded detector image (dark subtracted)", fontsize=fontsizes[fs]["title"])
-    DetAxes[1].tick_params(which="both", labelsize=fontsizes[fs]["ticks"])
+    DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
+    DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
+    DetAxes[1].set_xlabel("Spectral", fontsize=10+fontsizes[fs])
+    DetAxes[1].set_ylabel("Spatial", fontsize=10+fontsizes[fs])
+    DetAxes[1].set_title(f"{'Median' if useframe=='median' else 'Coadded'} detector image (dark subtracted)", fontsize=16+fontsizes[fs])
+    DetAxes[1].tick_params(which="both", labelsize=9+fontsizes[fs])
 
     # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
     # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
@@ -501,16 +501,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
                            arange=arange, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[0].set_title("First dark", fontsize=fontsizes[fs]["title"])
+    DarkAxes[0].set_title("First dark", fontsize=16+fontsizes[fs])
 
     detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
                            arange=arange, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[1].set_title("Second dark", fontsize=fontsizes[fs]["title"])
+    DarkAxes[1].set_title("Second dark", fontsize=16+fontsizes[fs])
 
     # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
     detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
                            arange=arange, show_colorbar=False, plot_full_extent=False)
-    DarkAxes[2].set_title("Average dark", fontsize=fontsizes[fs]["title"])
+    DarkAxes[2].set_title("Average dark", fontsize=16+fontsizes[fs])
 
     # If dark had a nan, show it but print a message.
     if len(nan_dark_inds) != 0:
@@ -519,7 +519,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     
     # Plot the geometry frames ---------------------------------------------------------------------------------
     if index_data_pair[0]['name'] in no_geo:
-        GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=26, transform=GeoAxes[0].transAxes)
+        GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=14+fontsizes[fs], transform=GeoAxes[0].transAxes)
 
         for a in GeoAxes:
             a.tick_params(axis="both", which="both", labelbottom=False, labelleft=False, left=False, bottom=False)
@@ -534,7 +534,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     
     for i in range(n_ints):
         if i in nan_light_inds:
-            ThumbAxes[i].text(0.1, 1.1, "Missing data", color=color_dict['darkgrey'], va="top", fontsize=14, transform=ThumbAxes[i].transAxes)
+            ThumbAxes[i].text(0.1, 1.1, "Missing data", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
         elif i in bad_light_inds:
             ThumbAxes[i].text(0.1, 1.1, "Saturated/broken", color=color_dict['darkgrey'], va="top", fontsize=14, transform=ThumbAxes[i].transAxes)
         elif i in light_frames_with_nan_dark:
