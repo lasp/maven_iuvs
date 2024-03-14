@@ -3,6 +3,15 @@ import datetime
 import re 
 
 
+# Common regular expressions for parsing filenames
+orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
+orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)"
+datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}"
+fn_RE = r"(?<=00/).+"
+folder_RE = r".+(?=mvn)"
+uniqueID_RE = r"[a-z]+-orbit[0-9]{5}-[a-z]+_[0-9]{8}[tT]{1}[0-9]{6}"
+
+
 def clear_line(n=100):
     """
     Clears a previously-printed line in the terminal output.
@@ -122,21 +131,28 @@ def orbit_folder(orbit):
     return f"orbit{orbit_set:05}"
 
 
-def iuvs_orbno_from_fname(fname):
+def iuvs_orbno_from_fname(fname, search_full_path=False):
     """
     Collects the orbit number from the filename.
     Parameters
     ----------
     fname : string
             IUVS observation filename
+    search_full_path : boolean
+                       if True, this function will use regular expressions to search the full file path.
+                       Avoids problem where searching the full path using split() returns only the orbit set 
+                       (i.e. 16900 instead of 16910)
 
     Returns
     -------
     orb_string : int
                  orbit number
     """
-    orb_string = str(fname).split('orbit')[1][:5]
-    return int(orb_string)
+    if search_full_path:
+        return int(re.search(orbno_RE, fname).group(0))
+    else:
+        orb_string = str(fname).split('orbit')[1][:5]
+        return int(orb_string)
 
 
 def iuvs_segment_from_fname(fname):
