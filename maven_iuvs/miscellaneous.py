@@ -1,6 +1,7 @@
 import numpy as np
 import datetime
 import re 
+import os
 
 
 # Common regular expressions for parsing filenames
@@ -131,7 +132,7 @@ def orbit_folder(orbit):
     return f"orbit{orbit_set:05}"
 
 
-def iuvs_orbno_from_fname(fname, search_full_path=False):
+def iuvs_orbno_from_fname(fname):
     """
     Collects the orbit number from the filename.
     Parameters
@@ -148,11 +149,8 @@ def iuvs_orbno_from_fname(fname, search_full_path=False):
     orb_string : int
                  orbit number
     """
-    if search_full_path:
-        return int(re.search(orbno_RE, fname).group(0))
-    else:
-        orb_string = str(fname).split('orbit')[1][:5]
-        return int(orb_string)
+    orb_string = os.path.basename(fname).split('orbit')[1][:5]
+    return int(orb_string)
 
 
 def iuvs_segment_from_fname(fname):
