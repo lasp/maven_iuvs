@@ -54,15 +54,15 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
     print(f"  covering observations after {weekly_report_idx[0]['datetime'].isoformat()[:19].replace('T',' ')} UTC")
     print(f"                              orbit {iuvs_orbno_from_fname(weekly_report_idx[0]['name'])}+\n")
 
-    latest_orbit_with_files = iuvs_orbno_from_fname(weekly_report_idx[-1])
-    print(f'Data available through ------> orbit {latest_orbit_with_files} ({iuvs_filename_to_datetime(weekly_report_idx[-1]["name"]).isoformat()[:10]})')
+    latest_orbit_with_files = iuvs_orbno_from_fname(weekly_report_idx[-1]['name'])
+    print(f"Data available through ------> orbit {latest_orbit_with_files} ({iuvs_filename_to_datetime(weekly_report_idx[-1]['name']).isoformat()[:10]})")
 
     geom_files = find_files_with_geometry(weekly_report_idx)
     try:
         latest_orbit_with_geometry = iuvs_orbno_from_fname(geom_files[-1])
-        print(f'Geometry available through --> orbit {latest_orbit_with_geometry} ({iuvs_filename_to_datetime(geom_files[-1]["name"]).isoformat()[:10]})')
+        print(f"Geometry available through --> orbit {latest_orbit_with_geometry} ({iuvs_filename_to_datetime(geom_files[-1]['name']).isoformat()[:10]})")
     except IndexError:
-        print(f'Geometry not available after orbit {iuvs_orbno_from_fname(weekly_report_idx[0])}. ')
+        print(f"Geometry not available after orbit {iuvs_orbno_from_fname(weekly_report_idx[0]['name'])}. ")
         geom_idx = [fidx for fidx in idx if fidx['geom'] == True]
         print(f"Most recent file with geometry: {iuvs_orbno_from_fname(geom_idx[-1]['name'])}")
 
@@ -239,7 +239,7 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
 # Relating to dark vs. light observations -----------------------------
 
 
-def coadd_lights(light_fits, dark_fits):
+def coadd_lights(light_fits, dark_fits, return_bad_inds=True):
     """
     Co-add all light frames within light_fits, including subtraction
     of dark frames in dark_fits.
@@ -268,14 +268,16 @@ def coadd_lights(light_fits, dark_fits):
     """
 
     # dark subtraction
-    dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, dark_fits)
+    data_dark_subtracted, total_good_frames, bad_inds = subtract_darks(light_fits, dark_fits)
 
-    # Finally do the co-adding
-    total_frames = dark_subtracted.shape[0] - len(bad_light_inds)  # Valid frames only
-    coadded_lights = np.nansum(dark_subtracted, axis=0)
+    # Do the co-adding
+    coadded_lights = np.nansum(data_dark_subtracted, axis=0)
 
-    # return everything necessary
-    return coadded_lights / total_frames, [nan_light_inds, bad_light_inds, nan_dark_inds], total_frames
+    # return everything necessary; this basically returns an average frame (because it divides by total frames used).
+    if return_bad_inds:
+        return coadded_lights / total_good_frames, total_good_frames, bad_inds
+    else:
+        return coadded_lights / total_good_frames, total_good_frames
 
 
 def subtract_darks(light_fits, dark_fits):
@@ -364,23 +366,27 @@ def subtract_darks(light_fits, dark_fits):
         light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])
         nan_dark_inds.append(1)   
 
-    # Collect indices of frames which can't be processed for whatever reason:
+    # Collect indices of frames which can't be processed for whatever reason. 
+    # Note that any frames whose associated dark frame is 0 WILL be caught here. 
     i_bad = sorted(list(set([*nan_light_inds, *bad_light_inds, *light_frames_with_nan_dark])))
+
     # Get a list of indices of good frames by differencing the indices of all remaining frames with bad indices.
-    # Note that i_all starts at 1 since frame 0 will be separately handled.
-    i_all = np.asarray(range(1, dark_subtracted.shape[0]))
-    i_good = np.setxor1d(i_all, i_bad).astype(int)
+    i_all = np.asarray(range(0, dark_subtracted.shape[0])) # ALL frame indices
+    i_good = np.setxor1d(i_all, i_bad).astype(int)  # ALL good frames, for return. 
+    i_good_except_0th = np.setxor1d(i_good, [0]).astype(int)  # Used to do the dark subtraction for the 1st through nth frames.
 
     # Do the dark subtraction: separately for frame 0 which has its own dark, then all other frames, then set bad frames to nan.
-    dark_subtracted[0, :, :] = light_data[0] - first_dark
-    dark_subtracted[i_good, :, :] = light_data[i_good, :, :] - second_dark
+    # Note that it's possible at this point for EITHER first_dark OR second_dark to contain NaNs. If they do,
+    # their associated light frame will be caught and set to nan in the line that sets nans below.
+    dark_subtracted[0, :, :] = light_data[0] - first_dark  
+    dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
     dark_subtracted[i_bad, :, :] = np.nan
 
     # Throw an error if there are no acceptable frames
     if np.isnan(dark_subtracted).all(): 
         raise Exception(f"Missing critical observation data: no valid lights")
 
-    return dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds
+    return dark_subtracted, len(i_good), [nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds]
 
 
 def get_dark_frames(dark_fits, average=False):
