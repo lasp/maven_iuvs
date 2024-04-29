@@ -336,7 +336,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     except Exception as e:
         return e
 
-    nan_light_inds, bad_light_inds, bad_dark_inds = bad_inds  # unpack indices of problematic frames
+    nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = bad_inds  # unpack indices of problematic frames
 
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
@@ -515,15 +515,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     DarkAxes[2].set_title("Average dark", fontsize=16+fontsizes[fs])
 
     # If dark had a nan, show it but print a message.
-    if np.isnan(first_dark).any():
-        dark_msg_ax = 0
-    elif np.isnan(second_dark).any():
-        dark_msg_ax = 1
-    else:
-        dark_msg_ax = None
-
-    if dark_msg_ax is not None:
-        DarkAxes[dark_msg_ax].text(0, -0.05, "Dark frame with NaNs not included in dark subtraction.", fontsize=14, transform=DarkAxes[dark_msg_ax].transAxes)
+    if len(nan_dark_inds) != 0:
+        for i in nan_dark_inds:
+            DarkAxes[i].text(0, -0.05, "Dark frame with NaNs not included in dark subtraction.", fontsize=14, transform=DarkAxes[i].transAxes)
     
     # Plot the geometry frames ---------------------------------------------------------------------------------
     if index_data_pair[0]['name'] in no_geo:
