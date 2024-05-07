@@ -1,6 +1,5 @@
 import datetime
 import numpy as np
-import scipy as sp
 from astropy.io import fits
 import textwrap
 import os 
@@ -26,6 +25,7 @@ from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
 
+from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -252,63 +252,29 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
 # Relating to dark vs. light observations -----------------------------
 
 
-def coadd_lights(light_fits, dark_fits, return_bad_inds=True, clean_data=True, median=False):
+def coadd_lights(data, n_good):
     """
     Co-add all light frames within light_fits, including subtraction
     of dark frames in dark_fits.
 
     Parameters
     ----------
-    light_fits : astropy.io.fits instance
-                 fits object representing the light observations.
-    dark_fits : astropy.io.fits instance
-                 fits object representing the associated darks.
+    data : array
+           detector image data, size (frames, spatial, wavelength)
+    n_good : int
+             number of valid frames of data used, calculated by subtract_darks.
 
     Returns
     ----------
     coadded_lights : array
                      Essentially the mean-frame of the detector
-    nan_light_inds : array
-                     Indices of light frames in which there are nan values.
-    bad_light_inds : array
-                     Indices of light frames in which there are bad values (not nans)
-    nan_dark_inds : array
-                    Indices of dark frames in which there are nans.
-    total_frames : int
-                   total number of good frames which were used to create the 
-                   co-added image. Returned so the value can be added to 
-                   quicklooks.
     """
-
-    # dark subtraction
-    data, total_good_frames, bad_inds = subtract_darks(light_fits, dark_fits)
-
-    # CLean it up - this shuld be moved out 
-    if clean_data:
-        mask = get_lya_mask(data, light_fits)
-        data = remove_hot_pixels(remove_cosmic_rays(data, mask), mask)
 
     # Do the co-adding
-    if median:
-        coadded_lights = np.nanmedian(data, axis=0)
-    else:
-        coadded_lights = np.nansum(data, axis=0) / total_good_frames
+    coadded_lights = np.nansum(data, axis=0)
 
     # return everything necessary; this basically returns an average frame (because it divides by total frames used).
-    if return_bad_inds:
-        return coadded_lights, total_good_frames, bad_inds
-    else:
-        return coadded_lights, total_good_frames
-
-
-def median_light_frame(light_fits, dark_fits):
-    """
-    Obtains a median light frame, which can be useful for displaying the observations without cosmic rays, etc.
-    """
-    dark_subtracted, nan_light_inds, bad_light_inds, nan_dark_inds = subtract_darks(light_fits, dark_fits)
-    medframe = np.nanmedian(dark_subtracted, axis=0)
-
-    return medframe
+    return coadded_lights / n_good
 
 
 def subtract_darks(light_fits, dark_fits):
