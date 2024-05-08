@@ -14,7 +14,7 @@ from maven_iuvs.binning import get_pix_range
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
-    median_light_frame
+    subtract_darks
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
@@ -249,7 +249,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, figsz=(36, 26), show_D_inset=True, show_D_guideline=True, 
-                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="large", useframe="median"):
+                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="large", useframe="coadded"):
     """ 
     Fills in the quicklook figure for a single observation.
     
@@ -329,12 +329,13 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     n_ints_dark = get_n_int(dark_fits)
 
     # PROCESS THE DATA ---------------------------------------------------------------------------------
-    try: 
-        coadded_lights, bad_inds, n_frames = coadd_lights(light_fits, dark_fits)
-        median_frame = median_light_frame(light_fits, dark_fits)  # This can be replaced with more robust subtraction alter
-        detector_image_to_plot = median_frame if useframe=="median" else coadded_lights
-    except Exception as e:
-        return e
+
+    # Dark subtraction
+    dark_subtracted, n_good_frames, bad_inds =  subtract_darks(light_fits, dark_fits)
+
+    # determine plottable image
+    coadded_lights = coadd_lights(dark_subtracted, n_good_frames)
+    detector_image_to_plot = np.nanmedian(dark_subtracted, axis=0) if useframe=="median" else coadded_lights
 
     nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = bad_inds  # unpack indices of problematic frames
 
@@ -539,14 +540,14 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
             ThumbAxes[i].text(0.1, 1.1, "Missing data", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
         elif i in bad_light_inds:
             ThumbAxes[i].text(0.1, 1.1, "Saturated/broken", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
-        elif i in bad_dark_inds:
+        elif i in light_frames_with_nan_dark:
             ThumbAxes[i].text(0.1, 1.1, "Bad dark frame", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
 
         this_frame = light_fits['Primary'].data[i]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         
-    ThumbAxes[0].text(0, 1.3, f"{n_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
+    ThumbAxes[0].text(0, 1.3, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Explanatory text printing ----------------------------------------------------------------------------------
     utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
@@ -558,9 +559,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}:  {segment}",
                 f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))}°", 
                 f"UTC date/time: {utc_obj.strftime('%Y-%m-%d')}, {utc_obj.strftime('%H:%M:%S')}", 
-                f"{t1:<24}Light: {n_frames:<14}Dark: {n_ints_dark}",
+                f"{t1:<24}Light: {n_good_frames:<14}Dark: {n_ints_dark}",
                 f"{t2:<22}Light: {index_data_pair[0]['int_time']} s{'':<6}Dark: {index_data_pair[1]['int_time']} s",
-                f"Total light integrations: {(index_data_pair[0]['int_time'] * n_frames)} s",
+                f"Total light integrations: {(index_data_pair[0]['int_time'] * n_good_frames)} s",
                 #
                 f"Light file: {light_fits['Primary'].header['filename']}", 
                 f"Dark file: {dark_fits['Primary'].header['filename']}"]
