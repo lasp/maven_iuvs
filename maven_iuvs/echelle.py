@@ -1,10 +1,12 @@
 import datetime
 import numpy as np
+import scipy as sp
 from astropy.io import fits
 import textwrap
 import os 
 import copy
 import skimage as ski
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import math
@@ -1740,6 +1742,14 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
          
     """
 
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
     fig = plt.figure(figsize=(8,6))
     mygrid = gs.GridSpec(4, 1, figure=fig, hspace=0.1)
     mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
@@ -1764,10 +1774,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         mainax.axvline(fit_params_for_printing['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
     
     # Print text
-    linestart = 0.7
-    linedy = 0.05
-    printme = [r"H $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac'], 3)}", 
-               r"D $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac_D'], 3)}",
+    printme = [#r"H $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac'], 3)}", 
+               #r"D $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac_D'], 3)}",
               ]
 
     # Plot background fit
@@ -1778,17 +1786,14 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     if "kR" in unit:
         # background_subtracted = data_vals - thebackground
         # Htot, Dtot = line_brightness(data_wavelengths, background_subtracted, [H_a, H_b], [D_a, D_b])
-        print(fit_params_for_printing['area'])
-        printme.append(f"H brightness: {fit_params_for_printing['area']}")
-        printme.append(f"D brightness: {fit_params_for_printing['area_D']}")
+        printme.append(f"H: {fit_params_for_printing['area']} kR")
+        printme.append(f"D: {fit_params_for_printing['area_D']} kR")
+        textx = [0.38, 0.28]
+        texty = [0.5, 0.17]
+        talign = ["left", "right"]
 
-    j = 0
     for i in range(0, len(printme)):
-        if (i == 3) & (fit_params_for_printing["lambdac_D"] is np.nan):
-            continue
-        else: 
-            mainax.text(0.55, linestart-j*linedy, printme[i], transform=mainax.transAxes)
-            j += 1
+        mainax.text(textx[i], texty[i], printme[i], transform=mainax.transAxes, ha=talign[i])
 
     # ax.set_yscale("log")
     mainax.set_ylabel(f"Brightness ({unit})")
