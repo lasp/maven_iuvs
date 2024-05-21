@@ -26,7 +26,7 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
-
+from statistics import median_high
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 
 # WEEKLY REPORT CODE ==================================================
@@ -842,7 +842,7 @@ def find_files_with_geometry(file_index):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Powell", clean_data=True, run_writeout=True):
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Powell", clean_data=True, clean_method="new", run_writeout=True):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -892,9 +892,11 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
                                                 [0, 3-1, 20+3, 20+5], 
                                                 [0, 13-1, 30+3, 30+5], 
                                                 [27, 346-11, 535+11, 535+43]]
-                            })   
+                            })
+    Nwaves = get_binning_scheme(light_fits)["nspe"]
+    Nspaces = get_binning_scheme(light_fits)["nspa"]
     
-    this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
+    this_dict = binning_df.loc[(binning_df['Nspa'] == Nspaces) & (binning_df['Nspe'] == Nwaves)]
     bg_inds = this_dict['back_rows_arr'].values[0]
 
     # Load the LSF
@@ -912,17 +914,45 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     data, n_good, i_bad = subtract_darks(light_fits, dark_fits)
     
     if clean_data is True:
-        data = remove_cosmic_rays(data)
-        data = remove_hot_pixels(data)
+        if clean_method=="new":
+            data = remove_cosmic_rays(data)
+            data = remove_hot_pixels(data)
+        elif clean_method=="IDL":
 
+            # Cosmic rays
+            for w in range(0, Nwaves-1): 
+                for s in range(0, Nspaces-1):
+                    pixvalue = data[:, s, w]
+                    medval   = median_high(pixvalue) # This is how it's done in the IDL pipeline - they call median without the /EVEN keyword, biasing it toward high. 
+                    sigma    = np.std(pixvalue, ddof=1)
+                    whererays    = np.where( (pixvalue > medval+2*sigma) | (pixvalue < medval-2*sigma) )
+                    pixvalue[whererays] = medval
+                    data[:, s, w] = pixvalue
+
+            # spec_postray = np.sum(data[:, this_dict['aprow1'].values[0]:this_dict['aprow2'].values[0], :], axis=1)
+            # print(spec_postray[0, :])
+
+            # Hot pixels
+            Wdt = 3
+            for i in range(0, n_int-1): 
+                for w in range(Wdt, Nwaves-1-Wdt):
+                    for s in range(Wdt, Nspaces-1-Wdt): 
+                        Farea = data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1]
+                        Fmed = np.median(Farea)
+                        Fsigma = np.sqrt( np.sum((Farea-Fmed)**2) / ((2.*Wdt+1)**2) )
+                        Fdif = data[i, s, w] - Fmed 
+                        if (Fdif > 3*Fsigma) | (Fdif < -3*Fsigma): 
+                            data[i, s, w] = np.median(data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1])
+
+            # spec_posthot = np.sum(data[:, this_dict['aprow1'].values[0]:this_dict['aprow2'].values[0], :], axis=1)
+            # print(spec_posthot[0, :])
+                    
     # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
     # note that the actual backgroudn will be different from what IDL spits out because the
     # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
     # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
     back_below = np.sum(data[:, bg_inds[0]:bg_inds[1], :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
     back_above = np.sum(data[:, bg_inds[2]:bg_inds[3], :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
-    print(back_below.shape)
-    print(back_above.shape)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # Arrays to store brightness values 
@@ -1033,7 +1063,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         I_fit_kR = convert_spectrum_DN_to_photons(light_fits, I_fit) * conv_to_kR_with_LSFunit
         background_array_kR = convert_spectrum_DN_to_photons(light_fits, bg_fit) * conv_to_kR_with_LSFunit
         I_fit_kR_bg_subtracted = I_fit_kR - background_array_kR 
-        spec_per_kR = convert_spectrum_DN_to_photons(light_fits, spec) * conv_to_kR_with_LSFunit
 
         # Indices so we can find the peak as the IDL pipeline does
         iHlc, Hlc = find_nearest(wavelengths, fit_params_for_printing["lambdac"])
@@ -1046,9 +1075,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         D_brightnesses_peak_method[i] = np.max(I_fit_kR_bg_subtracted[iDlc-3:iDlc+3])
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        I_fit_kR_BUbg = convert_spectrum_DN_to_photons(light_fits, I_fit_BUbg ) * conv_to_kR_with_LSFunit
+        I_fit_kR_BUbg = convert_spectrum_DN_to_photons(light_fits, I_fit_BUbg) * conv_to_kR_with_LSFunit
         med_bk_converted = convert_spectrum_DN_to_photons(light_fits, med_bk) * conv_to_kR_with_LSFunit
         I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - med_bk_converted 
+        spec_per_kR = convert_spectrum_DN_to_photons(light_fits, spec) * conv_to_kR_with_LSFunit # For plotting.
         
         iHlc_BUbg, Hlc_BUbg = find_nearest(wavelengths, fit_params_for_printing_BUbg["lambdac"])
         iDlc_BUbg, Dlc_BUbg = find_nearest(wavelengths, fit_params_for_printing_BUbg["lambdac_D"])
@@ -1849,7 +1879,7 @@ def remove_cosmic_rays(data, mask=None, Ns=2):
     
     # this section looks across frames for any pixels that are outside the median+Ns*sigma. 
     # pixels that are outside that range are set to the median value. 
-    medval = np.median(data, axis=0)
+    medval = np.median(data, axis=0) # TODO: If this can be a vectorized form of median_high, it would match better with IDL pipeline.  
     sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1)
     
     no_rays = copy.deepcopy(data)
