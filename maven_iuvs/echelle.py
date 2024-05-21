@@ -842,7 +842,7 @@ def find_files_with_geometry(file_index):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Powell", clean_data=True):
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Powell", clean_data=True, run_writeout=True):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -966,7 +966,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
 
         # The l1c files keep track of the spectra in "photons per second" which is the spectrum with background subtracted,
-        # so we have to also. This is per integration so we don't need n.
+        # so we have to also.
         spec_ph_s = convert_spectrum_DN_to_photons(light_fits, spec) / (t_int)
         background_array_ph_s = convert_spectrum_DN_to_photons(light_fits, bg_fit) / (t_int)
         popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
@@ -1030,53 +1030,101 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=unc_kr_per_nm, t=titletext, unit=unittext_kR, 
                       H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1] )
         
-    
+        # Background comparison ===============================================================================
+
+        # Sum up this region to get an empty spectrum
+        si1, si2 = get_ech_slit_indices(light_fits)
+        new_vbot = si2+5
+        new_aprow1 = new_vbot+13
+        new_aprow2 = new_aprow1 + (si2-si1)
+        # print(f"Off-slit region is from indices {new_aprow1} to {new_aprow2}")
+        empty_spec = np.sum(data[i, new_aprow1:new_aprow2, :], axis=0)
+
+        # Fit background in this area
+        aboveslit_bg_fit = sp.optimize.minimize(badness_bg, [0, np.median(empty_spec), 121], args=(wavelengths, empty_spec), method="Powell")
+        bg_fit_above = background(wavelengths, aboveslit_bg_fit.x[0], aboveslit_bg_fit.x[2], aboveslit_bg_fit.x[1])
+
+        # subtract and plot
+        should_be_zero = convert_spectrum_DN_to_photons(light_fits, empty_spec - bg_fit_above) * conv_to_kR_with_LSFunit
+        rms_above = np.std(should_be_zero)
+
+        fig, ax = plt.subplots()
+        ax.plot(wavelengths, should_be_zero, color="xkcd:gray", label="above slit - bg")
+        ax.plot(wavelengths, np.zeros_like(should_be_zero), color="xkcd:electric blue", linewidth=2, label="0")
+        ax.set_ylim(-1, 1)
+        ax.text(0.05, 0.05, f"RMS = {np.round(rms_above, 2)}", transform=ax.transAxes)
+        ax.set_title(f"Above slit minus background, int={i}")
+        plt.show()
+
+        # now compare the background with the dark frame
+        darkdat = dark_fits['Primary'].data
+        if i == 0:
+            empty_spec_drk = np.sum(darkdat[0, si1:si2, :], axis=0)
+        else:
+            empty_spec_drk = np.sum(darkdat[1, si1:si2, :], axis=0)
+
+        # get linear fit to dark bg
+        dark_bg_fit = sp.optimize.minimize(badness_bg, [0, np.median(empty_spec_drk), 121], args=(wavelengths, empty_spec_drk), method="Powell")
+        bg_fit_dark = background(wavelengths, dark_bg_fit.x[0], dark_bg_fit.x[2], dark_bg_fit.x[1])
+
+        should_be_zero_dark = empty_spec_drk - bg_fit_dark
+        rms_dark = np.std(should_be_zero_dark)
+
+        fig2, ax2 = plt.subplots()
+        ax2.set_ylim(-5000,5000)
+        ax2.plot(wavelengths, should_be_zero_dark, color="xkcd:gray", label="above slit - bg")
+        ax2.plot(wavelengths, np.zeros_like(should_be_zero_dark), color="xkcd:electric blue", linewidth=2, label="0")
+        ax2.text(0.05, 0.05, f"RMS = {np.round(rms_dark, 2)}", transform=ax.transAxes)
+        ax2.set_title(f"Dark frame, on slit, minus background, int={i}")
+        plt.show()
+        
     # Prepare results to be sent to IDL for file writeout 
     # ============================================================================================
 
-    # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
-    center_idx = 4
-    this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
-    yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
-    yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value liek IDL does.
+    if run_writeout:
+        # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
+        center_idx = 4
+        this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
+        yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
+        yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value liek IDL does.
 
-    thedict = {
-        "BRIGHT_H_kR": H_brightnesses_from_integrating, #  H brightness (BkR_H) in kR
-        "BRIGHT_D_kR": D_brightnesses_from_integrating, # D brightness (BkR_D) in kR
-        "BRIGHT_OneSIGMA_kR": 0 ,  # TODO: (BkR_U) in kR
-        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
-        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
-        "ET": light_fits["Integration"].data["ET"], 
-        "UTC": light_fits["Integration"].data["UTC"],
-        "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
-        "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
-    }
+        thedict = {
+            "BRIGHT_H_kR": H_brightnesses_from_integrating, #  H brightness (BkR_H) in kR
+            "BRIGHT_D_kR": D_brightnesses_from_integrating, # D brightness (BkR_D) in kR
+            "BRIGHT_OneSIGMA_kR": 0 ,  # TODO: (BkR_U) in kR
+            "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
+            "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
+            "ET": light_fits["Integration"].data["ET"], 
+            "UTC": light_fits["Integration"].data["UTC"],
+            "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
+            "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
+        }
 
-    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in thedict.items() ]) )
+        brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in thedict.items() ]) )
 
-    # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
-    # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
-    # This error has been corrected in this version. 
-    bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s.transpose(),    # values
-                                columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
-    
-    # Save the output to some files that will be saved outside the Python module.
-    brightness_writeout.to_csv("../../brightness.csv", index=False)
-    bright_data_ph_per_s.to_csv("../../ph_per_s.csv", index=False)
+        # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
+        # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
+        # This error has been corrected in this version. 
+        bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s.transpose(),    # values
+                                    columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
+        
+        # Save the output to some files that will be saved outside the Python module.
+        brightness_writeout.to_csv("../../brightness.csv", index=False)
+        bright_data_ph_per_s.to_csv("../../ph_per_s.csv", index=False)
 
-    # Now call IDL
-    os.chdir("/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/")
-    commands = f'''
-                .com write_l1c_file_from_python.pro
-                write_l1c_file_from_python, '{light_l1a_path}', '{savepath}'
-                ''' 
+        # Now call IDL
+        os.chdir("/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/")
+        commands = f'''
+                    .com write_l1c_file_from_python.pro
+                    write_l1c_file_from_python, '{light_l1a_path}', '{savepath}'
+                    ''' 
 
-    proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
-    print("IDL is now open")
-    outs, errs = proc.communicate(input=commands, timeout=600)
-    print("Output: ", outs)
-    print("Errors: ", errs)
-    print("Finished writing to IDL, I hope")
+        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
+        print("IDL is now open")
+        outs, errs = proc.communicate(input=commands, timeout=600)
+        print("Output: ", outs)
+        print("Errors: ", errs)
+        print("Finished writing to IDL, I hope")
 
     return H_brightnesses_from_integrating, D_brightnesses_from_integrating, H_brightnesses_peak_method, D_brightnesses_peak_method
 
@@ -1127,6 +1175,34 @@ def fit_line(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, so
     I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF)
 
     return bestfit, I_bin
+
+
+def badness_bg(params, wavelength_data, DN_data):
+    """
+    Similar to badness, but for a linear fit to the background on the detector.
+    Used so we can fit the background in off-slit regions and dark files for 
+    determining how good the fit is at representing the background.
+    
+    Parameters
+    ----------
+    params : array
+             Parameters for the line in the format M, B, lambda_c (of hydrogen).
+    wavelength_data : array
+             wavelength that will be fit; nm 
+    DN_data : array
+              DN of the spectrum that will be fit 
+    """
+
+    # initial guess
+    bg_m_guess, bg_b_guess, bg_lamc_guess = params
+
+    # "model"
+    DN_model = background(bg_m_guess, wavelength_data, bg_lamc_guess, bg_b_guess)
+
+    # "badness"
+    badness = np.sum((DN_model - DN_data)**2 / 1)
+
+    return badness
 
 
 def badness_of_fit(params, wavelength_data, DN_data, binedges, CLSF, uncertainty): 
@@ -1758,10 +1834,14 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.tick_params(labelbottom=False)
     residax.tick_params(labelbottom=True)
     mainax.set_title(t)
+
+    # Plot background fit
+    thebackground = background(data_wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
+    mainax.plot(data_wavelengths, thebackground, label="background", linewidth=2, zorder=2)
         
     # Plot the data and fit and a guideline for the central wavelength
     mainax.errorbar(data_wavelengths, data_vals, yerr=data_unc, label="data", linewidth=1, zorder=3, alpha=0.7)
-    mainax.plot(data_wavelengths, model_fit, label="fit", linewidth=2, zorder=2)
+    mainax.plot(data_wavelengths, model_fit, label="model", linewidth=2, zorder=2)
     mainax.axvline(fit_params_for_printing['lambdac'], color="gray", zorder=1, linewidth=0.5, )
 
     if show_integration_regions:
@@ -1777,10 +1857,6 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     printme = [#r"H $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac'], 3)}", 
                #r"D $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac_D'], 3)}",
               ]
-
-    # Plot background fit
-    thebackground = background(data_wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
-    mainax.plot(data_wavelengths, thebackground, label="background", linewidth=2, zorder=2)
     
     # Now subtract the background entirely from the fit and then integrate to see the total brightness
     if "kR" in unit:
@@ -1804,9 +1880,9 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     # Residual axis
     sign = np.sign(model_fit-data_vals)
-    residual = sign * (model_fit - data_vals)**2
+    residual = sign * (data_vals - model_fit)**2
     residax.plot(data_wavelengths, residual, linewidth=1)
-    residax.set_ylabel(f"Residuals\n (sgn((fit-data)^2))")
+    residax.set_ylabel(f"Residuals\n (sgn((data-model)^2))")
     residax.set_xlabel("Wavelength (nm)")
     
     plt.show()
