@@ -870,8 +870,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     ----------
     some sort of file to be sent to IDL (TODO: fix this comment)
     """
+    # NOTE: The data shape in Python is (frames, spatial, spectral). IDL is (spectral, spatial, frames).
+
     # Certain detector parameters
-    # --------------------------------------------------------------------------------------------
+    # ============================================================================================
     # This is used to get the right indices for MRH and SZA, etc. Taken straight from IDL.
     binning_df = pd.DataFrame({  
                                 "Nspa": [18, 50, 159, 92, 64, 74, 1024],
@@ -891,41 +893,62 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
                                                 [0, 13-1, 30+3, 30+5], 
                                                 [27, 346-11, 535+11, 535+43]]
                             })   
+    
+    this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
+    bg_inds = this_dict['back_rows_arr'].values[0]
 
     # Load the LSF
-    # --------------------------------------------------------------------------------------------
+    # ============================================================================================
     lsf_new = sp.io.readsav("../IDL_pipeline/lsf_new.idl", idict=None, python_dict=False)
     lsfx_nm = lsf_new["echw"] / 10 # convert wavelength to nm, not angstrom
 
-    # Number of integrations and integration time ------------------------------------------------
+    # Number of integrations and integration time
+    # ============================================================================================
     n_int = get_n_int(light_fits)
     t_int = light_fits["Primary"].header["INT_TIME"]  
 
-    # Dark subtraction and data cleanup ----------------------------------------------------------
+    # Dark subtraction and data cleanup 
+    # ============================================================================================
     data, n_good, i_bad = subtract_darks(light_fits, dark_fits)
     
     if clean_data is True:
         data = remove_cosmic_rays(data)
         data = remove_hot_pixels(data)
 
+    # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
+    # note that the actual backgroudn will be different from what IDL spits out because the
+    # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
+    # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
+    back_below = np.sum(data[:, bg_inds[0]:bg_inds[1], :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
+    back_above = np.sum(data[:, bg_inds[2]:bg_inds[3], :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    print(back_below.shape)
+    print(back_above.shape)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     # Arrays to store brightness values 
+    # ==============================================================================================
     H_brightnesses_from_integrating = np.empty(n_int)
     D_brightnesses_from_integrating = np.empty(n_int)
     H_brightnesses_peak_method = np.empty(n_int) # Same as what IDL pipeline does. Ignores bin width.
     D_brightnesses_peak_method = np.empty(n_int) # Same   as what IDL pipeline does. Ignores bin width.
+    H_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
+    D_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
     bright_data_ph_per_s = np.ndarray((n_int, get_wavelengths(light_fits).size))
 
     # Wavelengths and binwidths (which typically don't change)
+    # ==============================================================================================
     wavelengths = get_wavelengths(light_fits)
     binwidth_nm = dx_array(wavelengths)
 
     # Conversion factors
+    # ============================================================================================
     Aeff =  32.327455  # Acquired by testing on one file. TODO: Check if this needs to change with each file. 
     conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
     conv_to_kR_per_nm = 1 / (t_int * binwidth_nm * Aeff)
     conv_to_kR = 1 / (t_int * Aeff)
 
-    # Uncertainty on the data ---------------------------------------------------------------------------
+    # Uncertainty on the data 
+    # ============================================================================================
     # Let's start by just wholesale adapting the uncertainty calculation from Matteo in the IDL pipeline and see what it looks like.
     # In progress
     volt = mcp_volt_to_gain(mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0]), channel="FUV")
@@ -934,22 +957,23 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     fit_function = 40 / (2**((700-volt)/50))
     
     # This is the correct shape, not sure if it's reasonable values though:
-    ran_DN = np.sqrt(data * fit_function + sigma_background**2) # NOTE: check if it's okay to do this on the cleaned data. Probably not
+    ran_DN = np.sqrt(data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
     ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
 
-    for i in range(n_int): # Loop over integrations
+    # Loop over integrations to do the fits
+    for i in range(n_int): 
         # print(f"Working on integration {i}")
         # Acquire the spatially-added spectrum and uncertainties
-        # ---------------------------------------------------------------------------------------------------
+        # ============================================================================================
         spec = get_spectrum(data, light_fits, integration=i)  
         unc = add_in_quadrature(ran_DN, light_fits, integration=i) 
 
         # Generate the CLSF from the LSF
-        # ---------------------------------------------------------------------------------------------------
+        # ============================================================================================
         theCLSF = CLSF_from_LSF(lsf_new["echf"], LSFx=lsfx_nm)
 
         # PERFORM FIT
-        # ---------------------------------------------------------------------------------------------------
+        # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
         H_i = [20, 170] # Range for integrating H and D. 
@@ -961,9 +985,35 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         fit_params_for_printing = {'area': round(bestfit.x[0]), 'area_D': round(bestfit.x[1]), 
                     'lambdac': round(bestfit.x[2], 3), 'lambdac_D': round(bestfit.x[2]-D_offset, 3), 
                     'M': round(bestfit.x[3] ), 'B': round(bestfit.x[4])}
-    
+        
         # Construct a background array from the fit which can then be converted like the spectrum
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
+        
+        # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # get this iteration's median background.
+        avg_bk = (back_above[i, :] + back_below[i, :]) / 2. # average the above-slit and below-slit slices
+        margin = 7 # for a total window size of 15. 
+        med_bk = np.zeros_like(avg_bk)
+        med_bk[0:margin] = avg_bk[0:margin]
+        med_bk[-margin:] = avg_bk[-margin:]
+        for k in range(margin, len(avg_bk)-margin):
+            med_bk[k] = np.median(avg_bk[k-margin:k+margin+1])
+        med_bk *= (this_dict['aprow2'].values[0] - this_dict['aprow1'].values[0] + 1)
+
+        # Don't send in the background parameters since we don't need 'em. they're at the end
+        bestfit_BUbg, I_fit_BUbg = fit_line_BUbg(initial_guess[:-2], wavelengths, spec, light_fits, theCLSF, med_bk, unc=unc, solver=solv) 
+
+        # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
+        # since we didn't do integrated brightness in this method.
+        fit_params_for_printing_BUbg = {'peakH': 0, 
+                                        'peakD': 0, 
+                                        'lambdac': round(bestfit_BUbg.x[2], 3), 
+                                        'lambdac_D': round(bestfit_BUbg.x[2]-D_offset, 3), 
+                                       }
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+        # COLLECT BRIGHTNESSES
+        # ============================================================================================
 
         # The l1c files keep track of the spectra in "photons per second" which is the spectrum with background subtracted,
         # so we have to also.
@@ -978,10 +1028,12 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         # IDL pipeline method (grab Peak brightness in kR) 
         # ---------------------------------------------------------------------------------------------------
         # This section is mainly here for comparison between the methods.
+        # Do all this for our method with linear background, and for the fit with BU background.
 
         I_fit_kR = convert_spectrum_DN_to_photons(light_fits, I_fit) * conv_to_kR_with_LSFunit
         background_array_kR = convert_spectrum_DN_to_photons(light_fits, bg_fit) * conv_to_kR_with_LSFunit
         I_fit_kR_bg_subtracted = I_fit_kR - background_array_kR 
+        spec_per_kR = convert_spectrum_DN_to_photons(light_fits, spec) * conv_to_kR_with_LSFunit
 
         # Indices so we can find the peak as the IDL pipeline does
         iHlc, Hlc = find_nearest(wavelengths, fit_params_for_printing["lambdac"])
@@ -993,7 +1045,22 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         H_brightnesses_peak_method[i] = np.max(I_fit_kR_bg_subtracted[iHlc-3:iHlc+3])
         D_brightnesses_peak_method[i] = np.max(I_fit_kR_bg_subtracted[iDlc-3:iDlc+3])
 
-        # Our Python method: Line integrated brightness  
+        # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        I_fit_kR_BUbg = convert_spectrum_DN_to_photons(light_fits, I_fit_BUbg ) * conv_to_kR_with_LSFunit
+        med_bk_converted = convert_spectrum_DN_to_photons(light_fits, med_bk) * conv_to_kR_with_LSFunit
+        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - med_bk_converted 
+        
+        iHlc_BUbg, Hlc_BUbg = find_nearest(wavelengths, fit_params_for_printing_BUbg["lambdac"])
+        iDlc_BUbg, Dlc_BUbg = find_nearest(wavelengths, fit_params_for_printing_BUbg["lambdac_D"])
+
+        H_brightnesses_peak_method_BUbg[i] = np.max(I_fit_kR_BUbg_subtracted[iHlc_BUbg-3:iHlc_BUbg+3])
+        D_brightnesses_peak_method_BUbg[i] = np.max(I_fit_kR_BUbg_subtracted[iDlc_BUbg-3:iDlc_BUbg+3])
+
+        fit_params_for_printing_BUbg["peakH"] = round(H_brightnesses_peak_method_BUbg[i], 2)
+        fit_params_for_printing_BUbg["peakD"] = round(D_brightnesses_peak_method_BUbg[i], 2)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        # Line integrated brightness method
         # ---------------------------------------------------------------------------------------------------
         # Here we convert to kR/nm so that we can make a plot
         I_fit_kR_pernm = convert_spectrum_DN_to_photons(light_fits, I_fit) * conv_to_kR_per_nm
@@ -1018,7 +1085,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         D_brightnesses_from_integrating[i] = D_kR
         
         # Plot fit
-        # ---------------------------------------------------------------------------------------------------
+        # ============================================================================================
         titletext = f"Fit: Integration {i}, {re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)}"
         unittext_kR = "kR/nm"
         unc_kr_per_nm = convert_spectrum_DN_to_photons(light_fits, unc)*conv_to_kR_per_nm
@@ -1030,14 +1097,21 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=unc_kr_per_nm, t=titletext, unit=unittext_kR, 
                       H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1] )
         
-        # Background comparison ===============================================================================
+        # Also plot with the BU background ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        plot_line_fit_BUbg(wavelengths, spec_per_kR, I_fit_kR_BUbg, fit_params_for_printing_BUbg, med_bk_converted, data_unc=unc_kr_per_nm, 
+                           t=f"Fit with the BU background, int={i}", unit="kR", H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1])
+        
+        # Background comparison
+        # ============================================================================================
+        # The background, collected from and subtracted from regions (a) above the slit, and (b) in a dark file,
+        # should be 0.
 
-        # Sum up this region to get an empty spectrum
+        # Get an empty spectrum from a region above the slit
+        # ---------------------------------------------------------------------------------------------------
         si1, si2 = get_ech_slit_indices(light_fits)
         new_vbot = si2+5
         new_aprow1 = new_vbot+13
         new_aprow2 = new_aprow1 + (si2-si1)
-        # print(f"Off-slit region is from indices {new_aprow1} to {new_aprow2}")
         empty_spec = np.sum(data[i, new_aprow1:new_aprow2, :], axis=0)
 
         # Fit background in this area
@@ -1056,7 +1130,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         ax.set_title(f"Above slit minus background, int={i}")
         plt.show()
 
-        # now compare the background with the dark frame
+        # Dark frame background comparison
+        # ---------------------------------------------------------------------------------------------------
         darkdat = dark_fits['Primary'].data
         if i == 0:
             empty_spec_drk = np.sum(darkdat[0, si1:si2, :], axis=0)
@@ -1126,7 +1201,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         print("Errors: ", errs)
         print("Finished writing to IDL, I hope")
 
-    return H_brightnesses_from_integrating, D_brightnesses_from_integrating, H_brightnesses_peak_method, D_brightnesses_peak_method
+    return H_brightnesses_from_integrating, D_brightnesses_from_integrating, H_brightnesses_peak_method, D_brightnesses_peak_method, H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
 
 
 # Line fitting =============================================================
@@ -1173,6 +1248,53 @@ def fit_line(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, so
     bestfit = sp.optimize.minimize(badness_of_fit, param_initial_guess, args=(wavelengths, spec, edges, CLSF, unc), method=solver)
 
     I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF)
+
+    return bestfit, I_bin
+
+
+def fit_line_BUbg(param_initial_guess, wavelengths, spec, light_fits, CLSF, BU_bg, unc=1, solver=None):
+
+    """
+    Given an initial guess for fit parameters and observational data, this fits the model to the data 
+    and minimizes the "badness".
+
+    Parameters
+    ----------
+    param_initial_guess : list or array
+                          includes initial guess of values for each fit parameter: peak DN, central wavelengths, background offset.
+                          Peak DN and central wavelengths are passed for H and D in that order, but background is for the whole emission.
+    wavelengths : array
+            Array of wavelengths for fitting, in nm.
+    spec : array
+           spatially-added spectrum. Same size as wavelengths. 
+    light_fits : astropy.io.fits instance
+                File with light observation.
+    CLSF : array (n, 2)
+           CLSF object based on the LSF of the instrument. 
+    unc : int or array
+          uncertainty on spec. Determined in a parent function based on the l1a file.
+    solver : string
+             fitting algorithm to use, to be passed to scipy.optimize.minimize.
+    BU_bg : array
+            Background constructed as in the BU IDL pipeline, for comparison with other methods.
+   
+    Returns
+    ----------
+    bestfit : scipy.optimize.minimize result object
+              result of the fitting algorithm
+    I_bin : array
+            the simple fit of the LSF to the data, (A_H * LSF) + (A_D * LSF) + (background), encoding
+            the DN per bin.
+    
+    """
+
+    # Get bin edges in nm.
+    edges = get_bin_edges(light_fits)
+
+    # Now call the fitting routine
+    bestfit = sp.optimize.minimize(badness_of_fit_BUbg, param_initial_guess, args=(wavelengths, spec, edges, CLSF, unc, BU_bg), method=solver)
+
+    I_bin = lineshape_model_BUbg(bestfit.x, wavelengths, edges, CLSF, BU_bg)
 
     return bestfit, I_bin
 
@@ -1239,6 +1361,42 @@ def badness_of_fit(params, wavelength_data, DN_data, binedges, CLSF, uncertainty
     return badness
 
 
+def badness_of_fit_BUbg(params, wavelength_data, DN_data, binedges, CLSF, uncertainty, BU_bg): 
+    """
+    Retrieves the model of the lineshape to fit, then evaluates the goodness (or badness) of fit. 
+    Badness will be minimized in a parent function.
+
+    Parameters
+    ----------
+    wavelength_data : array
+             wavelength that will be fit; nm 
+    DN_data : array
+              DN of the spectrum that will be fit 
+    binedges : array
+              array of bin edges for wavelengths, in nm.
+    CLSF : array (n, 2)
+          CLSF object based on the LSF of the instrument. 
+    uncertainty : int or array
+                  uncertainty on the spectrum
+    BU_bg : array
+            Background constructed as in the BU IDL pipeline, for comparison with other methods.
+    
+    Returns
+    -----------
+    badness : float
+              A single value defining the badness of the fit to the data, to be minimized.
+    """
+    
+    # Generate a model fit based on the given parameters
+    DN_fit = lineshape_model_BUbg(params, wavelength_data, binedges, CLSF, BU_bg) 
+
+    # Fit the model to the existing data assuming Gaussian distributed photo events 
+    # TODO: Improve what is used here for Poisson distribution
+    badness = np.sum((DN_fit - DN_data)**2 / uncertainty)
+
+    return badness
+
+
 def lineshape_model(params, wavelength_data, binedges, theCLSF):
     """
     Builds the line shape model of the form:
@@ -1283,6 +1441,55 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF):
     I_bin = (total_brightness_H * normalized_line_shape_H + 
              total_brightness_D * normalized_line_shape_D +
              background(wavelength_data, background_m, central_wavelength_H, background_b)
+            )
+
+    return I_bin
+
+
+def lineshape_model_BUbg(params, wavelength_data, binedges, theCLSF, BU_bg):
+    """
+    Builds the line shape model of the form:
+    (A_H * LSF) + (A_D * LSF) + (Background)
+
+    Parameters:
+    -----------
+    params : list
+            parameters of the model line shape to attempt to fit
+    wavelength_data : array
+                      observation independent variable (currently assumed to be wavelength)
+    binedges : array
+               array of bin edges for wavelengths, in nm.
+    theCLSF : array
+              the cumulative line spread function for the LSF
+    BU_bg : array
+            Background constructed as in the BU IDL pipeline, for comparison with other methods.
+
+    Returns:
+    ----------
+    I_bin : array
+            brightness per bin 
+
+    """
+    total_brightness_H = params[0] # Integrated - DN
+    total_brightness_D = params[1] # Integrated - DN
+    central_wavelength_H = params[2] # nm
+    central_wavelength_D = params[2] - D_offset # nm
+
+    # Interpolate the CLSF for a given attempted central wavelength 
+    interpolated_CLSF_H = interpolate_CLSF(central_wavelength_H, binedges, theCLSF)
+    interpolated_CLSF_D = interpolate_CLSF(central_wavelength_D, binedges, theCLSF)
+    
+    # Get the fraction of light per bin using the fundamental theorem of calculus on the interpolated CLSF.
+    frac_per_bin_H = np.diff(interpolated_CLSF_H) # Unitless
+    frac_per_bin_D = np.diff(interpolated_CLSF_D) # Unitless
+
+    normalized_line_shape_H = frac_per_bin_H 
+    normalized_line_shape_D = frac_per_bin_D
+
+    # Return the flux per bin
+    I_bin = (total_brightness_H * normalized_line_shape_H + 
+             total_brightness_D * normalized_line_shape_D +
+             BU_bg
             )
 
     return I_bin
@@ -1793,7 +2000,7 @@ def vectorized_window_Fsig(data, Wdt, padmode):
 
 # Fitting plots because they don't work in echelle_Graphics because of circular import
 
-def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, H_a=0, H_b=0, D_a=0, D_b=0, t="Fit", unit="DN", show_integration_regions=False, logview=False):
+def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, H_a=0, H_b=0, D_a=0, D_b=0, t="Fit", unit="DN", show_integration_regions=False, logview=False, plot_bg=True):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -1836,8 +2043,9 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.set_title(t)
 
     # Plot background fit
-    thebackground = background(data_wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
-    mainax.plot(data_wavelengths, thebackground, label="background", linewidth=2, zorder=2)
+    if plot_bg:
+        thebackground = background(data_wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
+        mainax.plot(data_wavelengths, thebackground, label="background", linewidth=2, zorder=2)
         
     # Plot the data and fit and a guideline for the central wavelength
     mainax.errorbar(data_wavelengths, data_vals, yerr=data_unc, label="data", linewidth=1, zorder=3, alpha=0.7)
@@ -1864,6 +2072,99 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         # Htot, Dtot = line_brightness(data_wavelengths, background_subtracted, [H_a, H_b], [D_a, D_b])
         printme.append(f"H: {fit_params_for_printing['area']} kR")
         printme.append(f"D: {fit_params_for_printing['area_D']} kR")
+        textx = [0.38, 0.28]
+        texty = [0.5, 0.17]
+        talign = ["left", "right"]
+
+    for i in range(0, len(printme)):
+        mainax.text(textx[i], texty[i], printme[i], transform=mainax.transAxes, ha=talign[i])
+
+    # ax.set_yscale("log")
+    mainax.set_ylabel(f"Brightness ({unit})")
+    if logview:
+        mainax.set_yscale("log")
+    mainax.legend()
+    mainax.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
+
+    # Residual axis
+    sign = np.sign(model_fit-data_vals)
+    residual = sign * (data_vals - model_fit)**2
+    residax.plot(data_wavelengths, residual, linewidth=1)
+    residax.set_ylabel(f"Residuals\n (sgn((data-model)^2))")
+    residax.set_xlabel("Wavelength (nm)")
+    
+    plt.show()
+
+    pass
+
+
+def plot_line_fit_BUbg(data_wavelengths, data_vals, model_fit, fit_params_for_printing, thebackground, data_unc=None, H_a=0, H_b=0, D_a=0, D_b=0, t="Fit", unit="DN", logview=False, plot_bg=True):
+    """
+    Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
+
+    Parameters
+    ----------
+    data_wavelengths : array
+                       Wavelengths in nm for the recorded data
+    data_vals : array
+                Values on the detector at a given wavelength, either in DN or kR after conversion.
+    model_fit : array
+                Fit of the LSF to the H and D emissions
+    fit_params_for_printing : dictionary
+                 A custom dictionary object for easily accessing the parameter fits by name.
+                 Keys: area, area_d, lambdac, lambdac_D, M, B.
+    H_a, H_b, D_a, D_b : ints
+                         indices of data_wavelengths over which the line area was integrated.
+                         Used here to call fill_betweenx in the event we want to show it on the plot.
+    t : string
+        title to use for the plot.
+    unit : string
+           description of the unit to write on the y-axis label. Typically "DN" or "kR" with a /s/nm possibly appended.
+         
+    """
+
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
+    fig = plt.figure(figsize=(8,6))
+    mygrid = gs.GridSpec(4, 1, figure=fig, hspace=0.1)
+    mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
+    residax = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax) 
+
+    mainax.tick_params(labelbottom=False)
+    residax.tick_params(labelbottom=True)
+    mainax.set_title(t)
+
+    # Plot background fit
+    if plot_bg:
+        mainax.plot(data_wavelengths, thebackground, label="background", linewidth=2, zorder=2)
+        
+    # Plot the data and fit and a guideline for the central wavelength
+    mainax.errorbar(data_wavelengths, data_vals, yerr=data_unc, label="data", linewidth=1, zorder=3, alpha=0.7)
+    mainax.plot(data_wavelengths, model_fit, label="model", linewidth=2, zorder=2)
+    mainax.axvline(fit_params_for_printing['lambdac'], color="gray", zorder=1, linewidth=0.5, )
+
+    # get index of lambda for D so we can find the value there
+    if fit_params_for_printing["lambdac_D"] is not np.nan:
+        D_i = find_nearest(data_wavelengths, fit_params_for_printing['lambdac_D'])[0]
+        mainax.axvline(fit_params_for_printing['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
+    
+    # Print text
+    printme = [#r"H $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac'], 3)}", 
+               #r"D $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac_D'], 3)}",
+              ]
+    
+    # Now subtract the background entirely from the fit and then integrate to see the total brightness
+    if "kR" in unit:
+        # background_subtracted = data_vals - thebackground
+        # Htot, Dtot = line_brightness(data_wavelengths, background_subtracted, [H_a, H_b], [D_a, D_b])
+        printme.append(f"H: {fit_params_for_printing['peakH']} kR")
+        printme.append(f"D: {fit_params_for_printing['peakD']} kR")
         textx = [0.38, 0.28]
         texty = [0.5, 0.17]
         talign = ["left", "right"]
