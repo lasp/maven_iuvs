@@ -951,8 +951,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     # note that the actual backgroudn will be different from what IDL spits out because the
     # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
     # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
-    back_below = np.sum(data[:, bg_inds[0]:bg_inds[1], :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
-    back_above = np.sum(data[:, bg_inds[2]:bg_inds[3], :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    back_below = np.sum(data[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
+    back_above = np.sum(data[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # Arrays to store brightness values 
