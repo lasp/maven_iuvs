@@ -1819,15 +1819,15 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=95, H_b=135, D_a=80, D_b=1
     DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b], x=wavelengths[H_a:H_b]) # Mike said 400 is a good approx..
     DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b], x=wavelengths[D_a:D_b])
 
-    # central wavelength initial guess - go with the canonical values
+    # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
+    # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
     lambda_H_lya_guess = 121.567
-    lambda_D_lya_guess = 121.534
 
     # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
     bg_m_guess = 0
     bg_b_guess = np.median(spectrum)
 
-    return [DN_H_guess, DN_D_guess, lambda_H_lya_guess, lambda_D_lya_guess, bg_m_guess, bg_b_guess]
+    return [DN_H_guess, DN_D_guess, lambda_H_lya_guess, bg_m_guess, bg_b_guess]
 
 # Cosmic ray and hot pixel removal -------------------------------------------
 
