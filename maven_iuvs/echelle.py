@@ -29,6 +29,9 @@ from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 
+from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
+from numpy.linalg import inv
+
 # WEEKLY REPORT CODE ==================================================
 
 
@@ -1050,6 +1053,25 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         initial_guess = line_fit_initial_guess(wavelengths, spec, H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1]) 
         bestfit, I_fit = fit_line(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv) 
 
+        if solv=="Powell":
+            # The Powell method doesn't take any derivatives, so there is no hessian. But if we'd like to 
+            # get the uncertainties, we can estimate the Hessian using stattools per this link.
+            # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
+            hessian = approx_hess2(bestfit.x, badness_of_fit, args=(wavelengths, 
+                                                                    spec, 
+                                                                    get_bin_edges(light_fits), 
+                                                                    theCLSF, 
+                                                                    unc))
+            param_uncert = np.sqrt(np.diag(inv(hessian)))
+        else:
+            try:
+                param_uncert = np.diag(bestfit.hess_inv)
+            except Exception as y:
+                print("ERROR, I haven't figured out uncertainties for methods other than Powell.")
+                raise y
+
+        rel_brightness_uncert = [(param_uncert[0] / bestfit.x[0]), (param_uncert[1] / bestfit.x[1])]
+
         # Create a convenient dictionary which can be used with a plotting routine
         fit_params_for_printing = {'area': round(bestfit.x[0]), 'area_D': round(bestfit.x[1]), 
                     'lambdac': round(bestfit.x[2], 3), 'lambdac_D': round(bestfit.x[2]-D_offset, 3), 
@@ -1156,6 +1178,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         H_kR = convert_spectrum_DN_to_photons(light_fits, bestfit.x[0]) * conv_to_kR 
         D_kR = convert_spectrum_DN_to_photons(light_fits, bestfit.x[1]) * conv_to_kR 
 
+        # Uncertainty on the brightness (relative, calculated as uncertainty in DN/fit total flux in DN)
+        H_kR_sigma = H_kR * rel_brightness_uncert[0]
+        D_kR_sigma = D_kR * rel_brightness_uncert[1]
+
         # Append the brightnesses for this integration to the output arrays
         H_brightnesses_from_integrating[i] = H_kR
         D_brightnesses_from_integrating[i] = D_kR
@@ -1168,6 +1194,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         fit_params_for_printing['area'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
+        fit_params_for_printing['uncert_H'] = H_kR_sigma
+        fit_params_for_printing['uncert_D'] = D_kR_sigma
 
         # Plot in kR/sec/nm
         plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=unc_kr_per_nm, t=titletext, unit=unittext_kR, 
@@ -2146,8 +2174,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     if "kR" in unit:
         # background_subtracted = data_vals - thebackground
         # Htot, Dtot = line_brightness(data_wavelengths, background_subtracted, [H_a, H_b], [D_a, D_b])
-        printme.append(f"H: {fit_params_for_printing['area']} kR")
-        printme.append(f"D: {fit_params_for_printing['area_D']} kR")
+        printme.append(f"H: {fit_params_for_printing['area']} ± {fit_params_for_printing['uncert_H']} kR")
+        printme.append(f"D: {fit_params_for_printing['area_D']} ± {fit_params_for_printing['uncert_D']} kR")
         textx = [0.38, 0.28]
         texty = [0.5, 0.17]
         talign = ["left", "right"]
