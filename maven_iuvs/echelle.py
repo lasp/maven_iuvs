@@ -842,7 +842,7 @@ def find_files_with_geometry(file_index):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Powell", clean_data=True, clean_method="new", run_writeout=True):
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", clean_data=True, clean_method="new", run_writeout=True):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -875,24 +875,45 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     # Certain detector parameters
     # ============================================================================================
     # This is used to get the right indices for MRH and SZA, etc. Taken straight from IDL.
-    binning_df = pd.DataFrame({  
-                                "Nspa": [18, 50, 159, 92, 64, 74, 1024],
-                                "Nspe": [201, 160, 160, 512, 384, 332, 1024],
-                                "NbinsY": [38, 11, 5, 11, 11, 11, 1], 
-                                "xcH": [178, 261, 260, 0, 256, 256, 0],
-                                "ycH": [310, 299, 229, 5, 313, 203, 0],
-                                "aprow1": [1, 4, 23, 31, 3, 13, 346],
-                                "aprow2": [6, 21, 61, 48, 20, 30, 535],
-                                "noise_lo_lim": [8, 8, 8, 25, 10, 10, 8],
-                                "noise_hi_lim": [42, 28, 28, 60, 37, 30, 42],
-                                "back_rows_arr": [[0, 1-1, 6+1, 6+1], 
-                                                [0, 4-1, 21+3, 21+5], 
-                                                [0, 23-1, 61+5, 61+11],
-                                                [27, 31-1, 48+3, 48+5], 
-                                                [0, 3-1, 20+3, 20+5], 
-                                                [0, 13-1, 30+3, 30+5], 
-                                                [27, 346-11, 535+11, 535+43]]
-                            })
+    if calibration=="new":
+        binning_df = pd.DataFrame({  
+                                    "Nspa": [18, 50, 159, 92, 64, 74, 1024],
+                                    "Nspe": [201, 160, 160, 512, 384, 332, 1024],
+                                    "NbinsY": [38, 11, 5, 11, 11, 11, 1], 
+                                    "xcH": [178, 261, 260, 0, 256, 256, 0],
+                                    "ycH": [310, 299, 229, 5, 313, 203, 0],
+                                    "aprow1": [1, 4, 23, 31, 3, 13, 346],
+                                    "aprow2": [6, 21, 61, 48, 20, 30, 535],
+                                    "noise_lo_lim": [8, 8, 8, 25, 10, 10, 8],
+                                    "noise_hi_lim": [42, 28, 28, 60, 37, 30, 42],
+                                    "back_rows_arr": [[0, 1-1, 6+1, 6+1], 
+                                                    [0, 4-1, 21+3, 21+5], 
+                                                    [0, 23-1, 61+5, 61+11],
+                                                    [27, 31-1, 48+3, 48+5], 
+                                                    [0, 3-1, 20+3, 20+5], 
+                                                    [0, 13-1, 30+3, 30+5], 
+                                                    [27, 346-11, 535+11, 535+43]]
+                                })
+    elif calibration=="old":
+        binning_df = pd.DataFrame({  
+                                    "Nspa":          [18,  50,  159, 92,  64,  74,  1024],
+                                    "Nspe":          [201, 160, 160, 512, 384, 332, 1024],
+                                    "NbinsY":        [38,  11,  5,   11,  11,  11,  1], 
+                                    "xcH":           [178, 261, 260, 0,   256, 256, 0],
+                                    "ycH":           [310, 299, 229, 5,   313, 203, 0],
+                                    "aprow1":        [1,   4,   23,  31,  3,   13,  346],
+                                    "aprow2":        [6,   21,  61,  48,  20,  30,  535],
+                                    "noise_lo_lim":  [35,  35,  8,   35,  20,  20,  8],
+                                    "noise_hi_lim":  [115, 75,  28,  100, 70,  70,  42],
+                                    "back_rows_arr": [[0, 1, 7, 9], 
+                                                      [0, 2, 22, 24], 
+                                                      [0, 23-1, 61+5, 61+11], # 159x160 not defined in old calibration
+                                                      [27, 29, 49, 51], 
+                                                      [0, 4, 23, 25], 
+                                                      [0, 13, 34, 40], 
+                                                      [27, 346-11, 535+11, 535+43]] # 1024x1024 not defined in old calibration
+                                })
+
     Nwaves = get_binning_scheme(light_fits)["nspe"]
     Nspaces = get_binning_scheme(light_fits)["nspa"]
     
@@ -901,15 +922,20 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
 
     # Load the LSF
     # ============================================================================================
-    lsf_new = sp.io.readsav("../IDL_pipeline/lsf_new.idl", idict=None, python_dict=False)
-    lsfx_nm = lsf_new["echw"] / 10 # convert wavelength to nm, not angstrom
+    if calibration=="new":
+        lsf = sp.io.readsav("../IDL_pipeline/lsf_new.idl", idict=None, python_dict=False)
+        lsfx_nm = lsf["echw"] / 10 # convert wavelength to nm, not angstrom
+        lsf_f = lsf["echf"]
+    elif calibration=="old":
+        lsf = sp.io.readsav("../IDL_pipeline/lsf_old.idl", idict=None, python_dict=False)
+        lsfx_nm = lsf["w"] / 10 # convert wavelength to nm, not angstrom
+        lsf_f = lsf["f"]
 
     # Number of integrations and integration time
     # ============================================================================================
     n_int = get_n_int(light_fits)
     t_int = light_fits["Primary"].header["INT_TIME"]  
 
-    # Dark subtraction and data cleanup 
     # ============================================================================================
     data, n_good, i_bad = subtract_darks(light_fits, dark_fits)
     
@@ -951,8 +977,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     # note that the actual backgroudn will be different from what IDL spits out because the
     # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
     # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
-    back_below = np.sum(data[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
-    back_above = np.sum(data[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    if calibration=="new":
+        back_below = np.sum(data[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
+        back_above = np.sum(data[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    elif calibration=="old":
+        Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
+        backgrounds_oldcal = np.zeros((data.shape[0], data.shape[2]))
+        for i in range(n_int):
+            backgrounds_oldcal[i, :] = ( np.sum(data[i, bg_inds[0]:bg_inds[1], :], axis=0) + np.sum(data[i, bg_inds[2]:bg_inds[3], :], axis=0) ) / Nbacks 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # Arrays to store brightness values 
@@ -973,7 +1005,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
     # Conversion factors
     # ============================================================================================
     Aeff =  32.327455  # Acquired by testing on one file. TODO: Check if this needs to change with each file. 
-    conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
+
+    if calibration=="new":
+        conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
+    elif calibration=="old":
+        Ph_pers_perkR = 29.8
+        Adj_Factor = 100/88  
+        conv_to_kR_with_LSFunit = Adj_Factor / (t_int * Ph_pers_perkR) # There's some extra factors in the old cal...
+    
     conv_to_kR_per_nm = 1 / (t_int * binwidth_nm * Aeff)
     conv_to_kR = 1 / (t_int * Aeff)
 
@@ -1000,7 +1039,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
 
         # Generate the CLSF from the LSF
         # ============================================================================================
-        theCLSF = CLSF_from_LSF(lsf_new["echf"], LSFx=lsfx_nm)
+        theCLSF = CLSF_from_LSF(lsf_f, LSFx=lsfx_nm)
 
         # PERFORM FIT
         # ============================================================================================
@@ -1021,17 +1060,24 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # get this iteration's median background.
-        avg_bk = (back_above[i, :] + back_below[i, :]) / 2. # average the above-slit and below-slit slices
-        margin = 7 # for a total window size of 15. 
-        med_bk = np.zeros_like(avg_bk)
-        med_bk[0:margin] = avg_bk[0:margin]
-        med_bk[-margin:] = avg_bk[-margin:]
-        for k in range(margin, len(avg_bk)-margin):
-            med_bk[k] = np.median(avg_bk[k-margin:k+margin+1])
-        med_bk *= (this_dict['aprow2'].values[0] - this_dict['aprow1'].values[0] + 1)
+        if calibration=="new":
+            avg_bk = (back_above[i, :] + back_below[i, :]) / 2. # average the above-slit and below-slit slices
 
+            # recreate how IDL does the "sliding window" median of width 15
+            margin = 7 # for a total window size of 15. 
+            med_bk = np.zeros_like(avg_bk)
+            med_bk[0:margin] = avg_bk[0:margin]
+            med_bk[-margin:] = avg_bk[-margin:]
+            for k in range(margin, len(avg_bk)-margin):
+                med_bk[k] = np.median(avg_bk[k-margin:k+margin+1])
+            med_bk *= (this_dict['aprow2'].values[0] - this_dict['aprow1'].values[0] + 1)
+
+            IDL_style_background = med_bk
+        elif calibration=="old":
+            IDL_style_background = backgrounds_oldcal[i, :]
+    
         # Don't send in the background parameters since we don't need 'em. they're at the end
-        bestfit_BUbg, I_fit_BUbg = fit_line_BUbg(initial_guess[:-2], wavelengths, spec, light_fits, theCLSF, med_bk, unc=unc, solver=solv) 
+        bestfit_BUbg, I_fit_BUbg = fit_line_BUbg(initial_guess[:-2], wavelengths, spec, light_fits, theCLSF, IDL_style_background, unc=unc, solver=solv) 
 
         # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
         # since we didn't do integrated brightness in this method.
@@ -1076,8 +1122,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         I_fit_kR_BUbg = convert_spectrum_DN_to_photons(light_fits, I_fit_BUbg) * conv_to_kR_with_LSFunit
-        med_bk_converted = convert_spectrum_DN_to_photons(light_fits, med_bk) * conv_to_kR_with_LSFunit
-        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - med_bk_converted 
+        IDL_style_background_converted = convert_spectrum_DN_to_photons(light_fits, IDL_style_background) * conv_to_kR_with_LSFunit
+        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - IDL_style_background_converted 
         spec_per_kR = convert_spectrum_DN_to_photons(light_fits, spec) * conv_to_kR_with_LSFunit # For plotting.
         
         iHlc_BUbg, Hlc_BUbg = find_nearest(wavelengths, fit_params_for_printing_BUbg["lambdac"])
@@ -1128,7 +1174,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, solv="Po
                       H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1] )
         
         # Also plot with the BU background ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        plot_line_fit_BUbg(wavelengths, spec_per_kR, I_fit_kR_BUbg, fit_params_for_printing_BUbg, med_bk_converted, data_unc=unc_kr_per_nm, 
+        plot_line_fit_BUbg(wavelengths, spec_per_kR, I_fit_kR_BUbg, fit_params_for_printing_BUbg, IDL_style_background_converted, data_unc=unc_kr_per_nm, 
                            t=f"Fit with the BU background, int={i}", unit="kR", H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1])
         
         # Background comparison
