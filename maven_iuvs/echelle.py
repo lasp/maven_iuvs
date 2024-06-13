@@ -10,6 +10,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import math
+from pathlib import Path
 import re 
 import pandas as pd
 import subprocess
