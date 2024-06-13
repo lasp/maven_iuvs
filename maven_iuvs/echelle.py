@@ -28,7 +28,6 @@ from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
-from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 
 from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
 from numpy.linalg import inv
