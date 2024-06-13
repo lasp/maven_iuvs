@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import pkg_resources
-from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
+from maven_iuvs.binning import get_pix_range
+from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname, get_n_int, \
+                                     find_nearest
 
 # instrument variables
 slit_width_deg = 10  # [deg]
@@ -51,6 +53,8 @@ detector."""
 ech_Lya_slit_start = 346  # Starting pixel of slit in echelle mode for H/D Ly alpha
 
 ech_Lya_slit_end = 535  # Ending pixel of slit in echelle mode for H/D Ly alpha
+
+ech_LSF_unit = 0.35540982 # LSF units: kR / ph / s
 
 def calculate_calibration_curve(hdul,
                                 wavelengths=None,
@@ -239,3 +243,67 @@ def mcp_volt_to_gain(volt, channel="FUV"):
         gain = A*np.exp(alpha*volt)
 
     return gain
+
+
+# TODO: Move these to appropriate places once done.
+def convert_spectrum_DN_to_photons(light_fits, spectrum):
+    """
+    Converts a spectrum in DN to photo events. 
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+    spectrum : array
+               A spectrum recorded in DN. May be a fitted LSF or actual data.
+
+    Returns
+    ----------
+    spectrum converted ot photoevents.
+    """
+    
+    return spectrum * DN_to_PE_conversion_factor(light_fits)
+
+
+def DN_to_PE_conversion_factor(light_fits):
+    """
+    For a given light observation file, this returns the conversion factor which, when multiplied by a spectrum in DN/sec/nm,
+    will convert the spectrum to photons.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns
+    ----------
+    conv_factor : float
+                  Multiplies a spectrum in DN to convert it to photoevents.
+    """
+    gain = light_fits['Engineering'].data['MCP_GAIN'][0] # MCP gain in DN
+    gain_v = mcp_dn_to_volt(gain)  # gives Gain in Volts
+    gain_PE  = mcp_volt_to_gain(gain_v, channel="FUV")  # gives Gain in PhotoElectrons    
+    conv_factor = 1 / (gain_PE)
+
+    return conv_factor
+
+
+def get_ech_slit_indices(light_fits):
+    """
+    Get the indices along the spatial dimension of the detector array that correspond 
+    to the beginning and end of the echelle slit. 
+
+    Parameters 
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns 
+    ----------
+    list containing slit_i1, slit_i2, the indices of the start and end of the slit. 
+    """
+    spapixrng = get_pix_range(light_fits, which="spatial")
+    slit_i1 = find_nearest(spapixrng, ech_Lya_slit_start)[0]  # start of slit
+    slit_i2 = find_nearest(spapixrng, ech_Lya_slit_end)[0]  # end of slit
+    return [slit_i1, slit_i2]
+

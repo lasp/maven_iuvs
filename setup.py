@@ -31,6 +31,8 @@ setuptools.setup(
         'mayavi>=4.7.2',
         'PyQt5>=5.15.2',
         'h5py>=2.10.0',
-        'idl_colorbars>=1.1.2'
+        'idl_colorbars>=1.1.2',
+        'scipy>=1.11.2',
+        'scikit-image>=0.21.0'
     ]
 )
