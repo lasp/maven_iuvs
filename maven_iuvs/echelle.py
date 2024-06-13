@@ -995,8 +995,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     # ==============================================================================================
     H_brightnesses_from_integrating = np.empty(n_int)
     D_brightnesses_from_integrating = np.empty(n_int)
-    H_brightnesses_peak_method = np.empty(n_int) # Same as what IDL pipeline does. Ignores bin width.
-    D_brightnesses_peak_method = np.empty(n_int) # Same   as what IDL pipeline does. Ignores bin width.
     H_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
     D_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
     bright_data_ph_per_s = np.ndarray((n_int, get_wavelengths(light_fits).size))
@@ -1123,25 +1121,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac'], popt[2])
         spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
         bright_data_ph_per_s[i, :] = spec_ph_s_bg_sub
-        
-        # IDL pipeline method (grab Peak brightness in kR) 
-        # ---------------------------------------------------------------------------------------------------
-        # This section is mainly here for comparison between the methods.
-        # Do all this for our method with linear background, and for the fit with BU background.
-
-        I_fit_kR = convert_spectrum_DN_to_photons(light_fits, I_fit) * conv_to_kR_with_LSFunit
-        background_array_kR = convert_spectrum_DN_to_photons(light_fits, bg_fit) * conv_to_kR_with_LSFunit
-        I_fit_kR_bg_subtracted = I_fit_kR - background_array_kR 
-
-        # Indices so we can find the peak as the IDL pipeline does
-        iHlc, Hlc = find_nearest(wavelengths, fit_params_for_printing["lambdac"])
-        iDlc, Dlc = find_nearest(wavelengths, fit_params_for_printing["lambdac_D"])
-
-        # the fitted central wavelength is not guaranteed to be perfectly matched to the indices above, 
-        # so instead of just grabbing the value at that index, we will look in the small region around that index
-        # (± 3 indices) and grab the max in that area.
-        H_brightnesses_peak_method[i] = np.max(I_fit_kR_bg_subtracted[iHlc-3:iHlc+3])
-        D_brightnesses_peak_method[i] = np.max(I_fit_kR_bg_subtracted[iDlc-3:iDlc+3])
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         I_fit_kR_BUbg = convert_spectrum_DN_to_photons(light_fits, I_fit_BUbg) * conv_to_kR_with_LSFunit
@@ -1308,7 +1287,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         print("Errors: ", errs)
         print("Finished writing to IDL, I hope")
 
-    return H_brightnesses_from_integrating, D_brightnesses_from_integrating, H_brightnesses_peak_method, D_brightnesses_peak_method, H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
+    return H_brightnesses_from_integrating, D_brightnesses_from_integrating,\
+           H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
 
 
 # Line fitting =============================================================
