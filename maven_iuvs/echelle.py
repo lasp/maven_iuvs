@@ -23,12 +23,12 @@ from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photons, 
                                    mcp_dn_to_volt, mcp_volt_to_gain
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
-    uniqueID_RE, find_nearest
+    uniqueID_RE, find_nearest, fn_RE, orbit_folder
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
-
+from maven_iuvs.user_paths import l1a_dir
 from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
 from numpy.linalg import inv
 
@@ -255,6 +255,43 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
     return selected_lights
 
 # Relating to dark vs. light observations -----------------------------
+def get_dark(light_filepath):
+    """
+    Automatically find and return the appropriate dark for a specific light file. 
+    
+    Parameters
+    ----------
+    light_filepath : string
+                     Pathname to the raw l1a light file
+
+    Returns
+    ----------
+    thedarkpath : string
+                  Pathname for the associated dark
+    """
+
+    # Make the indices
+    ech_l1a_idx = get_dir_metadata(l1a_dir)
+    dark_idx = make_dark_index(ech_l1a_idx)
+
+    # Get orbit number
+    orbitno = iuvs_orbno_from_fname(light_filepath)
+    seg = iuvs_segment_from_fname(light_filepath)
+    orbfolder = orbit_folder(orbitno)
+
+    # Trim down the index to just the light file we want to find a dark match for
+    selected_l1a = downselect_data(ech_l1a_idx, 
+                                   orbit=orbitno, 
+                                   segment=seg, 
+                                   date=datetime.datetime.fromisoformat(re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_filepath).group(0)))
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx, verbose=True)
+
+    # Get filename
+    justfn = re.search(fn_RE, light_filepath).group(0)
+
+    thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
+
+    return thedarkpath
 
 
 def coadd_lights(data, n_good):
