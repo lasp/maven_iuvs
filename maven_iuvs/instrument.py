@@ -283,7 +283,7 @@ def DN_to_PE_conversion_factor(light_fits):
     """
     gain = light_fits['Engineering'].data['MCP_GAIN'][0] # MCP gain in DN
     gain_v = mcp_dn_to_volt(gain)  # gives Gain in Volts
-    gain_PE  = mcp_volt_to_gain(gain_v, channel="FUV")  # gives Gain in PhotoElectrons    
+    gain_PE  = mcp_volt_to_gain(gain_v, channel=light_fits["Engineering"].data["XUV"])  # gives Gain in PhotoElectrons    
     conv_factor = 1 / (gain_PE)
 
     return conv_factor
