@@ -1243,7 +1243,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
           
 
-def do_conversion(light_fits, model_I, spec, unc, background_array, model_conversion, calibration="new"):
 def DN_to_physical_units(light_fits, model_I, spec, unc, background_array, model_conversion):
     """
     Converts DN to physical units of kR / nm.
