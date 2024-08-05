@@ -247,9 +247,9 @@ def mcp_volt_to_gain(volt, channel="FUV"):
 
 
 # TODO: Move these to appropriate places once done.
-def convert_spectrum_DN_to_photons(light_fits, spectrum):
+def convert_spectrum_DN_to_photoevents(light_fits, spectrum):
     """
-    Converts a spectrum in DN to photo events. 
+    Converts a spectrum in DN to photoevents, but doesn't fully calibrate it.
 
     Parameters
     ----------
