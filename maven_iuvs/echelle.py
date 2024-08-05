@@ -15,11 +15,11 @@ import re
 import pandas as pd
 import subprocess
 from numpy.lib.stride_tricks import sliding_window_view
-from maven_iuvs.binning import get_bin_edges, get_binning_scheme
+from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
 from maven_iuvs.constants import D_offset
 # from maven_iuvs.graphics.echelle_graphics import plot_line_fit
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photons, \
-                                   get_ech_slit_indices, get_wavelengths, \
+                                   get_wavelengths, \
                                    ech_Lya_slit_start, ech_Lya_slit_end, \
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
@@ -880,6 +880,28 @@ def find_files_with_geometry(file_index):
 
     # print(f'{len(with_geom)} have geometry.\n')
     return with_geom
+
+# Basic echelle mode information ----------------------------------------
+
+def get_ech_slit_indices(light_fits):
+    """
+    Get the indices along the spatial dimension of the detector array that correspond 
+    to the beginning and end of the echelle slit. 
+
+    Parameters 
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns 
+    ----------
+    list containing slit_i1, slit_i2, the indices of the start and end of the slit. 
+    """
+    spapixrng = get_pix_range(light_fits, which="spatial")
+    slit_i1 = find_nearest(spapixrng, ech_Lya_slit_start)[0]  # start of slit
+    slit_i2 = find_nearest(spapixrng, ech_Lya_slit_end)[0]  # end of slit
+    return [slit_i1, slit_i2]
+
 
 # L1c processing ===========================================================
 

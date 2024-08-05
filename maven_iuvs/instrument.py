@@ -289,26 +289,6 @@ def DN_to_PE_conversion_factor(light_fits):
     return conv_factor
 
 
-def get_ech_slit_indices(light_fits):
-    """
-    Get the indices along the spatial dimension of the detector array that correspond 
-    to the beginning and end of the echelle slit. 
-
-    Parameters 
-    ----------
-    light_fits : astropy.io.fits instance
-                 File with light observation
-
-    Returns 
-    ----------
-    list containing slit_i1, slit_i2, the indices of the start and end of the slit. 
-    """
-    spapixrng = get_pix_range(light_fits, which="spatial")
-    slit_i1 = find_nearest(spapixrng, ech_Lya_slit_start)[0]  # start of slit
-    slit_i2 = find_nearest(spapixrng, ech_Lya_slit_end)[0]  # end of slit
-    return [slit_i1, slit_i2]
-
-
 def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     """
     Figure out the random uncertainty in DN.
