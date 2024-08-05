@@ -1244,8 +1244,31 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
           
 
 def do_conversion(light_fits, model_I, spec, unc, background_array, model_conversion, calibration="new"):
+def DN_to_physical_units(light_fits, model_I, spec, unc, background_array, model_conversion):
     """
-    Convert DN to physical units, kR / nm
+    Converts DN to physical units of kR / nm.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                File with light observation
+    model_I : 1D array
+              DN per bin; outcome of fitting the emission lines.
+    spec : 1D array
+           Spectrum in DN obtained after coadding the detector image across the slit in the spatial direction
+    unc : 1D array
+          DN uncertainty of spec
+    background_array : 1D array
+                       Fitted background
+    model_conversion : Float
+                       A conversion factor for translating the fit and spectrum to physical units; 
+                       depends on the data within the FITS file itself.
+    Returns
+    ----------
+    I_fit_phys_units, spec_phys_units, 
+    background_phys_units, unc_phys_units : 1D arrays
+                                            The input arguments after conversion.
+        
     """
     I_fit_phys_units = convert_spectrum_DN_to_photons(light_fits, model_I) * model_conversion
     spec_phys_units = convert_spectrum_DN_to_photons(light_fits, spec) * model_conversion
