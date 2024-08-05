@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import math
 import pkg_resources
 from maven_iuvs.binning import get_pix_range
 from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname, get_n_int, \
@@ -307,3 +308,21 @@ def get_ech_slit_indices(light_fits):
     slit_i2 = find_nearest(spapixrng, ech_Lya_slit_end)[0]  # end of slit
     return [slit_i1, slit_i2]
 
+
+def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
+    """
+    Figure out the random uncertainty in DN.
+
+    # Let's start by just wholesale adapting the uncertainty calculation from Matteo in the IDL pipeline and see what it looks like.
+    # In progress
+    """
+    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])   # I think it's wrong to use this. IDL is acquiring the voltage. mcp_volt_to_gain(, channel="FUV")
+    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # in a square bin of spatial x spectral. works out to 22 for recent dat
+    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) # WHERE the heck did I get this??
+    fit_function = 40 / (2**((700-volt)/50))
+    
+    # This is the correct shape, not sure if it's reasonable values though:
+    ran_DN = np.sqrt(dark_subtracted_and_cleaned_data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
+    ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
+
+    return ran_DN

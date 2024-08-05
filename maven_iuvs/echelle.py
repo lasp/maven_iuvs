@@ -20,7 +20,7 @@ from maven_iuvs.constants import D_offset
 # from maven_iuvs.graphics.echelle_graphics import plot_line_fit
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photons, \
                                    get_ech_slit_indices, ech_Lya_slit_start, ech_Lya_slit_end, \
-                                   mcp_dn_to_volt, mcp_volt_to_gain
+                                   ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
     uniqueID_RE, find_nearest, fn_RE, orbit_folder
@@ -1871,24 +1871,6 @@ def add_in_quadrature(uncertainties, light_fits, integration=0):
 
     return total_uncert
 
-
-def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
-    """
-    Figure out the random uncertainty in DN.
-
-    # Let's start by just wholesale adapting the uncertainty calculation from Matteo in the IDL pipeline and see what it looks like.
-    # In progress
-    """
-    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])   # I think it's wrong to use this. IDL is acquiring the voltage. mcp_volt_to_gain(, channel="FUV")
-    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # in a square bin of spatial x spectral. works out to 22 for recent dat
-    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) # WHERE the heck did I get this??
-    fit_function = 40 / (2**((700-volt)/50))
-    
-    # This is the correct shape, not sure if it's reasonable values though:
-    ran_DN = np.sqrt(dark_subtracted_and_cleaned_data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
-    ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
-
-    return ran_DN
 
 
 def get_wavelengths(light_fits):
