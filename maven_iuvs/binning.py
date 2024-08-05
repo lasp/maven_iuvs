@@ -1,4 +1,5 @@
 import numpy as np
+from maven_iuvs.instrument import get_wavelengths 
 
 def get_bin_edges(light_fits):
     """
