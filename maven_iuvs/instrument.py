@@ -326,3 +326,22 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
 
     return ran_DN
+
+
+def get_wavelengths(light_fits):
+    """
+    Retrieves wavelengths for use from a given light file. This is done in more than one place,
+    so it was useful to make a dedicated function.
+
+    Parameters:
+    -----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns:
+    -----------
+    wavelength array as defined in the light_fits file.
+    """
+
+    # TODO: build in code that will account for the possible case where wavelengths shift per integration
+    return light_fits["Observation"].data["Wavelength"][0, 1, :]

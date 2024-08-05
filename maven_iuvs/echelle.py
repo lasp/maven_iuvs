@@ -15,11 +15,12 @@ import re
 import pandas as pd
 import subprocess
 from numpy.lib.stride_tricks import sliding_window_view
-from maven_iuvs.binning import get_binning_scheme
+from maven_iuvs.binning import get_bin_edges, get_binning_scheme
 from maven_iuvs.constants import D_offset
 # from maven_iuvs.graphics.echelle_graphics import plot_line_fit
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photons, \
-                                   get_ech_slit_indices, ech_Lya_slit_start, ech_Lya_slit_end, \
+                                   get_ech_slit_indices, get_wavelengths, \
+                                   ech_Lya_slit_start, ech_Lya_slit_end, \
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
@@ -1871,66 +1872,6 @@ def add_in_quadrature(uncertainties, light_fits, integration=0):
 
     return total_uncert
 
-
-
-def get_wavelengths(light_fits):
-    """
-    Retrieves wavelengths for use from a given light file. This is done in more than one place,
-    so it was useful to make a dedicated function.
-
-    Parameters:
-    -----------
-    light_fits : astropy.io.fits instance
-                 File with light observation
-
-    Returns:
-    -----------
-    wavelength array as defined in the light_fits file.
-    """
-
-    # TODO: build in code that will account for the possible case where wavelengths shift per integration
-    return light_fits["Observation"].data["Wavelength"][0, 1, :]
-
-
-def get_bin_edges(light_fits):
-    """
-    Wavelengths as defined in the fits files are defined for the bin centers.
-    This function will calculate where the bin edges should be, since the 
-    recorded bin edges in the files are all for the standard resolution mode, 
-    and not able to be applied to echelle.
-    TODO: The method used here is probably "good enough" but could be improved.
-
-    Parameters:
-    -----------
-    light_fits : astropy.io.fits instance
-                 File with light observation
-    Returns:
-    -----------
-    edges : array
-            Defines the edges of the bins for the wavelengths, so we can calculate the flux
-            to assign to the bins.
-    """    
-
-    # Grab the wavelengths 
-    wavelengths = get_wavelengths(light_fits)
-
-    # First calculate the differences between all points x
-    dlambda = np.diff(wavelengths)
-    
-    # There will be one more bin edge than x points
-    edges = np.zeros(len(wavelengths) + 1)
-
-    # Handle the left edge
-    edges[0] = wavelengths[0] - (dlambda[0] / 2) 
-
-    # inner elements
-    for i in range(1, len(edges)-1):
-        edges[i] = wavelengths[i] - dlambda[i-1] / 2
-
-    # And the right edge
-    edges[-1] = wavelengths[-1] + dlambda[-1] / 2
-    
-    return edges
 
 
 def dx_array(x):
