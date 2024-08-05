@@ -1282,7 +1282,7 @@ def DN_to_physical_units(light_fits, model_I, spec, unc, background_array, model
     return I_fit_phys_units, spec_phys_units, background_phys_units, unc_phys_units
 
 
-def conversion_factors(t_int, binwidth_nm, calibration="new"):
+def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
     Identify and return the appropriate conversion factors for the data.
     """
