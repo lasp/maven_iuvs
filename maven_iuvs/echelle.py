@@ -1053,15 +1053,16 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             try:
                 param_uncert = np.diag(bestfit.hess_inv)
             except Exception as y:
-                print("ERROR, I haven't figured out uncertainties for methods other than Powell.")
-                raise y
+                print("Warning: Uncertainties not determined for methods other than Powell. Here are the results of the fitting algorithm:")
+                print(bestfit)
+                param_uncert = [0, 0]
 
         rel_brightness_uncert = [(param_uncert[0] / bestfit.x[0]), (param_uncert[1] / bestfit.x[1])]
 
         # Create a convenient dictionary which can be used with a plotting routine
         fit_params_for_printing = {'area': round(bestfit.x[0]), 'area_D': round(bestfit.x[1]), 
-                    'lambdac': round(bestfit.x[2], 3), 'lambdac_D': round(bestfit.x[2]-D_offset, 3), 
-                    'M': round(bestfit.x[3] ), 'B': round(bestfit.x[4])}
+                                    'lambdac': round(bestfit.x[2], 3), 'lambdac_D': round(bestfit.x[2]-D_offset, 3), 
+                                    'M': round(bestfit.x[3] ), 'B': round(bestfit.x[4])}
         
         # Construct a background array from the fit which can then be converted like the spectrum
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
@@ -1239,7 +1240,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
            H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
 
           
-
 def DN_to_physical_units(light_fits, model_I, spec, unc, background_array, model_conversion):
     """
     Converts DN to physical units of kR / nm.
