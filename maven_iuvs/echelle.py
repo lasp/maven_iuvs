@@ -1011,7 +1011,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
     # Conversion factors
     # ============================================================================================
-    conv_to_kR_per_nm, conv_to_kR_with_LSFunit, conv_to_kR = conversion_factors(t_int, binwidth_nm, calibration=calibration)
+    conv_to_kR_per_nm, conv_to_kR_with_LSFunit, conv_to_kR = get_conversion_factors(t_int, binwidth_nm, calibration=calibration)
 
     # Uncertainty on the data 
     # ============================================================================================
@@ -1097,8 +1097,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         # Convert to physical units
-        I_fit_kR_BUbg, spec_per_kR, IDL_style_background_converted, unc_kr_idl = get_conversion_factors(light_fits, I_fit_BUbg, spec, unc, 
-                                                                                               IDL_style_background, conv_to_kR_with_LSFunit, calibration=calibration)
+        I_fit_kR_BUbg, spec_per_kR, IDL_style_background_converted, unc_kr_idl = DN_to_physical_units(light_fits, I_fit_BUbg, spec, unc, 
+                                                                                               IDL_style_background, conv_to_kR_with_LSFunit)
         
         # Subtract the background - we have to do this becuase in this method we need the peak vlaue, and it's larger by (background)
         # if we don't subtract background.
@@ -1116,8 +1116,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Line integrated brightness method
         # ---------------------------------------------------------------------------------------------------
         # Convert to physical unitslight_fits, model_I, spec, unc, background_array, model_conversion
-        I_fit_kR_pernm, spec_kR_pernm, background_array, unc_kr_per_nm = get_conversion_factors(light_fits, I_fit, spec, unc, bg_fit, conv_to_kR_per_nm,
-                                                                                       calibration=calibration)
+        I_fit_kR_pernm, spec_kR_pernm, background_array, unc_kr_per_nm = DN_to_physical_units(light_fits, I_fit, spec, unc, bg_fit, conv_to_kR_per_nm)
         
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
