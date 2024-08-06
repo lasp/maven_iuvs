@@ -1142,8 +1142,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Plot fit
         # ============================================================================================
         titletext = f"Fit: Integration {i}, {re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)}"
-        unittext_kR = "kR/nm"
-        unc_kr_per_nm = convert_spectrum_DN_to_photons(light_fits, unc)*conv_to_kR_per_nm
 
         fit_params_for_printing['area'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
