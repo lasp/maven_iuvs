@@ -2,7 +2,7 @@ import numpy as np
 import datetime
 import re 
 import os
-
+from maven_iuvs.user_paths import l1a_dir
 
 # Common regular expressions for parsing filenames
 orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
@@ -10,7 +10,7 @@ orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)"
 datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}"
 fn_RE = r"(?<=00/).+"
 folder_RE = r".+(?=mvn)"
-uniqueID_RE = r"[a-z]+-orbit[0-9]{5}-[a-z]+_[0-9]{8}[tT]{1}[0-9]{6}"
+uniqueID_RE = r"(?<=l[0-2][a-c]\_).+(?=_v[\d]{0,2})"
 
 
 def clear_line(n=100):
@@ -212,3 +212,10 @@ def iuvs_data_product_level_from_fname(fname):
 
     seg_pattern = "(?<=iuv_)l[0-3][a-c]*"
     return re.search(seg_pattern, fname)[0]
+
+def relative_path_from_fname(fname):
+    """Given some filename, get the relative path it lives in"""
+
+    # Get orbit folder
+    orbfold = orbit_folder(iuvs_orbno_from_fname(fname))
+    return l1a_dir + orbfold + "/"
