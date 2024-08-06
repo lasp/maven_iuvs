@@ -256,7 +256,7 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
     return selected_lights
 
 # Relating to dark vs. light observations -----------------------------
-def get_dark(light_filepath):
+def get_dark(light_filepath, idx, drkidx):
     """
     Automatically find and return the appropriate dark for a specific light file. 
     
@@ -264,6 +264,10 @@ def get_dark(light_filepath):
     ----------
     light_filepath : string
                      Pathname to the raw l1a light file
+    idx : dictionary
+          metadata dictionary of light file information
+    drkidx : dictionary
+             metadata for all dark files 
 
     Returns
     ----------
@@ -271,26 +275,42 @@ def get_dark(light_filepath):
                   Pathname for the associated dark
     """
 
-    # Make the indices
-    ech_l1a_idx = get_dir_metadata(l1a_dir)
-    dark_idx = make_dark_index(ech_l1a_idx)
-
     # Get orbit number
     orbitno = iuvs_orbno_from_fname(light_filepath)
     seg = iuvs_segment_from_fname(light_filepath)
     orbfolder = orbit_folder(orbitno)
 
     # Trim down the index to just the light file we want to find a dark match for
-    selected_l1a = downselect_data(ech_l1a_idx, 
+    datetimeobj = re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_filepath).group(0)
+    selected_l1a = downselect_data(idx, 
                                    orbit=orbitno, 
                                    segment=seg, 
-                                   date=datetime.datetime.fromisoformat(re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_filepath).group(0)))
-    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx, verbose=True)
+                                   date=datetime.datetime.fromisoformat(datetimeobj))
 
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, drkidx, verbose=True)
+
+    if len(lights_and_darks.keys()) > 1:
+        raise Exception("There shouldn't be more than one entry in the light and dark pair dict")
+    
     # Get filename
     justfn = re.search(fn_RE, light_filepath).group(0)
 
-    thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
+    if justfn in files_missing_dark:
+        thedarkpath = "no valid dark"
+    else:
+        # Handle a special case where the entry in the index file is a newer revision, but we are
+        # working with an older revision. Happens in the full mission reprocess.
+        if justfn not in lights_and_darks:
+            
+            if len(lights_and_darks.keys()) == 1: # case where a different revision is in there
+                onlykey = list(lights_and_darks.keys())[0]
+                lights_and_darks[justfn] = lights_and_darks.pop(onlykey)
+                print("Revision mismatch on this file. Manually adjusted")
+                
+            elif len(lights_and_darks.keys()) == 0:
+                raise Exception("No pair identified but it's also not a file missing dark??")
+            
+        thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
 
     return thedarkpath
 
