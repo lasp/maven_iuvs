@@ -1828,6 +1828,9 @@ def get_spectrum(data, light_fits, average=False, coadded=False, integration=0):
     NOTE: This is called by both the l1a-->l1c pipeline and the quicklook maker,
     so don't get rid of the coadded functionality and think you're clever; we need
     that for the quicklooks.
+    NOTE: Although this function could operate on any detector image and produce
+    some kind of result, it is only really relevant to the orders containing the 
+    Lyman alpha emissions.
 
     Parameters:
     ----------
