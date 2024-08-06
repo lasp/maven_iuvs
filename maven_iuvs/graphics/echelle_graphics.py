@@ -15,7 +15,7 @@ from maven_iuvs.binning import get_pix_range
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
-    subtract_darks
+    subtract_darks, remove_cosmic_rays, remove_hot_pixels
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
@@ -333,12 +333,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     # Dark subtraction
     dark_subtracted, n_good_frames, bad_inds =  subtract_darks(light_fits, dark_fits)
-
-    # determine plottable image
-    coadded_lights = coadd_lights(dark_subtracted, n_good_frames)
-    detector_image_to_plot = np.nanmedian(dark_subtracted, axis=0) if useframe=="median" else coadded_lights
-
     nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = bad_inds  # unpack indices of problematic frames
+    all_bad_lights = list(set(nan_light_inds + bad_light_inds + light_frames_with_nan_dark))
+    
+    # Clean up the data
+    data = remove_cosmic_rays(dark_subtracted)
+    data = remove_hot_pixels(data, all_bad_lights)
+    
+    # determine plottable image
+    coadded_lights = coadd_lights(data, n_good_frames)
+    detector_image_to_plot = coadded_lights# np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
 
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
@@ -544,7 +548,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         elif i in light_frames_with_nan_dark:
             ThumbAxes[i].text(0.1, 1.1, "Bad dark frame", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
 
-        this_frame = light_fits['Primary'].data[i]
+        this_frame = data[i, :, :]#light_fits['Primary'].data[i]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         

@@ -958,11 +958,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
     # ============================================================================================
     data, n_good, i_bad = subtract_darks(light_fits, dark_fits)
+    nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = i_bad  # unpack indices of problematic frames
+    all_bad_lights = list(set(nan_light_inds + bad_light_inds + light_frames_with_nan_dark))
     
     if clean_data is True:
         if clean_method=="new":
             data = remove_cosmic_rays(data)
-            data = remove_hot_pixels(data)
+            data = remove_hot_pixels(data, all_bad_lights) # TODO: August 2024, there is some funniness with
+                                                           # this subtraction in lower left corner of detector.
         elif clean_method=="IDL":
 
             # Cosmic rays
@@ -2010,7 +2013,7 @@ def remove_cosmic_rays(data, mask=None, Ns=2):
     return no_rays
 
 
-def remove_hot_pixels(data, mask=None, Wdt=3, Ns=3):
+def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
     """
     Removes hot pixels from the data by calculating the median pixel value in a 7x7 surrounding box 
     at every pixel, and setting the central pixel to the median value if it is outside the median ± 3σ
@@ -2035,15 +2038,29 @@ def remove_hot_pixels(data, mask=None, Wdt=3, Ns=3):
     Nfr = data.shape[0]  # frames (integrations)
 
     window_edge = 2*Wdt + 1
-    no_hotp = data.astype(int, copy=False)
+
+    # Figure out which frames are nans out of the bad frames - it may not be all
+    if all_bad_lights is not None:
+        nanframes = []
+        for f in all_bad_lights:
+            if np.isnan(data[f, :, :]).any():
+                nanframes.append(f)
+
+    no_hotp = np.nan_to_num(x=data).astype(int, copy=False)
 
     # Transform to integers, required by scikit-image.
-    data = data.astype("int")
+    data = np.nan_to_num(x=data).astype("int")
     
     # here we are looking for the hot pixels. we find these by seeing if any pixels are anomalously larger than nearby px.
     # the nearby pixels are defined by a 7x7 box (3 on one side, 3 on the other). 
     # Note that as in IDL pipeline, this is done after cosmic rays are removed which may introduce some weirdness?
-    for f in range(0, Nfr-1):
+
+    if all_bad_lights is not None:
+        frame_list = list(set(list(range(0, Nfr-1))).difference(set(all_bad_lights)))
+    else:
+        frame_list = list(range(0, Nfr-1))
+
+    for f in frame_list:
         # Ignore roughly the region around Lyman alpha. This is really kludgy and doesn't work great
         if mask is not None:
             thisdata = np.ma.masked_array(data[f, :, :], mask=mask) 
@@ -2072,6 +2089,11 @@ def remove_hot_pixels(data, mask=None, Wdt=3, Ns=3):
         # Fix hot pixels by setting to the median value of the small area. 
         if len(coord)>0:
             no_hotp[f, hoti, hotj] = Fmed[hoti, hotj]
+
+    # Now reset the nan frames to nan
+    no_hotp = no_hotp.astype(float)
+    if all_bad_lights is not None:
+        no_hotp[nanframes, :, :] = np.nan
 
     return no_hotp
 
