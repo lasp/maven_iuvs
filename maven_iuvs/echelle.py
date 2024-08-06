@@ -178,7 +178,7 @@ def identify_rogue_observations(idx):
 
 # HELPER METHODS ======================================================
 
-def downselect_data(light_index, orbit=None, date=None, segment=None):
+def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, ls=None):
     """
     Given the light_index of files, this will select only those files which 
     match the orbit number, segment, or date. 
@@ -206,15 +206,14 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
 
     # First filter by segment; a given segment can occur on many dates and many orbits
     if segment is not None:
-        selected_lights = [entry for entry in selected_lights if iuvs_segment_from_fname(entry['name'])==segment]
+        selected_lights = [entry for entry in selected_lights if segment in iuvs_segment_from_fname(entry['name'])]
 
     # Then filter by orbit, since orbits sometimes cross over day boundaries
     if orbit is not None: 
         # If specifying orbits, first get rid of cruise data
-        selected_lights = [entry for entry in selected_lights if entry['orbit'] != "cruise"]
 
         if type(orbit) is int:
-            selected_lights = [entry for entry in selected_lights if entry['orbit']==orbit]
+            selected_lights = [entry for entry in selected_lights if ((entry['orbit']==orbit) & (entry['orbit'] != "cruise")) ]
         elif type(orbit) is list:
             if orbit[1] == -1: 
                 orbit[1] = 99999 # MAVEN will die before this orbit number is reached
@@ -252,6 +251,34 @@ def downselect_data(light_index, orbit=None, date=None, segment=None):
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")
+
+    # lat
+    if lat is not None:
+        if type(lat) is not list:
+            lat0 = math.floor(lat)
+            lat1 = math.ceil(lat)
+
+            selected_lights = [entry for entry in selected_lights 
+                               if np.all(( (lat0 <= entry['lat']) & (entry['lat'] <= lat1)) \
+                                         | np.isnan(entry['lat']) \
+                                         | np.isnan(entry['lat']))
+            ]
+
+        elif type(lat) is list:
+            selected_lights = [entry for entry in selected_lights 
+                               if np.all(( (lat[0] <= entry['lat']) & (entry['lat'] <= lat[1])) \
+                                         | np.isnan(entry['lat']) \
+                                         | np.isnan(entry['lat']))
+            ]
+
+    # ls
+    if ls is not None:
+        if type(ls) is not list:
+            ls0 = math.floor(lat)
+            ls1 = math.ceil(lat)
+            selected_lights = [entry for entry in selected_lights if (ls0 <= entry['Ls'] <= ls1)]
+        elif type(ls) is list:
+            selected_lights = [entry for entry in selected_lights if (ls[0] <= entry['Ls'] <= ls[1])]
 
     return selected_lights
 
@@ -788,7 +815,7 @@ def get_dir_metadata(the_dir, new_files_limit=None):
     return new_idx
 
 
-def get_file_metadata(fname):
+def get_file_metadata(fname, geospatial=False):
     # to add:
     # * signal at position of Ly α ?
     # * detectable D Ly α ?
@@ -800,6 +827,12 @@ def get_file_metadata(fname):
     ----------
     fname : string
             full path to an IUVS observation data file
+    geospatial : boolean
+                 Whether to add geospatial data (lat/lon, SZA, local time) 
+                 to the metadata. Useful for helping comb over the dataset 
+                 for particular observations, but it makes the files huge, 
+                 so we shouldn't use this for the daily use case of generating 
+                 reports. 
 
     Returns
     -------
@@ -811,19 +844,44 @@ def get_file_metadata(fname):
     binning = get_binning_scheme(this_fits)
     n_int = get_n_int(this_fits)
     shape = (n_int, binning['nspa'], binning['nspe'])
-    
-    return {'name': os.path.basename(fname),
-            'orbit': this_fits['Observation'].data['ORBIT_NUMBER'][0],
-            'shape': shape,
-            'n_int': n_int,
-            'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
-            'binning': binning,
-            'int_time': this_fits['Primary'].header['INT_TIME'],
-            'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
-            'geom': has_geometry_pvec(this_fits),
-            'missing_frames': locate_missing_frames(this_fits, n_int),
-            'countrate_diagnostics': get_countrate_diagnostics(this_fits)
-           }
+
+    metadata_dict = {'name': os.path.basename(fname),
+                     'orbit': this_fits['Observation'].data['ORBIT_NUMBER'][0],
+                     'segment': iuvs_segment_from_fname(fname),
+                     'shape': shape,
+                     'n_int': n_int,
+                     'datetime': iuvs_filename_to_datetime(os.path.basename(fname)),
+                     'binning': binning,
+                     'int_time': this_fits['Primary'].header['INT_TIME'],
+                     'mcp_gain': this_fits['Primary'].header['MCP_VOLT'],
+                     'geom': has_geometry_pvec(this_fits),
+                     'missing_frames': locate_missing_frames(this_fits, n_int),
+                     'countrate_diagnostics': get_countrate_diagnostics(this_fits),
+                     'Ls': this_fits['Observation'].data['SOLAR_LONGITUDE']
+    }
+
+    if geospatial:
+        try: 
+            metadata_dict['SZA'] = this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']
+        except KeyError:
+            metadata_dict['SZA'] = "['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'] does not exist"
+
+        try: 
+            metadata_dict['lat'] = this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']
+            metadata_dict['lon'] = this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']
+        except KeyError:
+            metadata_dict['lat'] = "['PixelGeometry'].data['PIXEL_CORNER_LAT'] does not exist"
+            metadata_dict['lon'] = "['PixelGeometry'].data['PIXEL_CORNER_LON'] does not exist"
+
+        try: 
+            flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
+            metadata_dict['min_lt'] = np.nanmin(flat_LT)
+            metadata_dict['max_lt'] = np.nanmax(flat_LT)
+        except KeyError:
+            metadata_dict['min_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
+            metadata_dict['max_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
+        
+    return metadata_dict
 
 
 def update_index(rootpath, new_files_limit_per_run=1000):
