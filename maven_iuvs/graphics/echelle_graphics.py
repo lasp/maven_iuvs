@@ -596,6 +596,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     return "Success" 
 
 
+# LINE FITTING ========================================================
+
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, H_a=0, H_b=0, D_a=0, D_b=0, t="Fit", unit="DN", show_integration_regions=False, logview=False, plot_bg=None):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
@@ -808,3 +810,36 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     plt.show()
 
     pass
+
+
+def plot_background_in_no_spectrum_region(wavelengths, empty_spec_minus_bg, spec_lbl="", plottitle=""):
+    """
+    Simply plot a zero line and a supplied "spectrum" which we want to be close
+    to zero. In regions of the detector where no data are taken (off-slit), or in
+    dark frames, a "spectrum" in that region minus the background fit in that region
+    should be reasonably close to zero.
+    
+    Parameters
+    ----------
+    wavelengths : array
+                  Wavelengths in nm.
+    empty_spec_minus_bg : array
+                          The difference of: a "spectrum" from a region on the detector above the slit,
+                          and the background fitted in that region.
+                          Thus, this array should be relatively close to zero.
+    spec_lbl : string 
+               Legend label for the fake "spectrum" describing where it was obtained
+    plottitle : string
+                Title for overall plot
+    Returns
+    ----------
+    A plot.
+    """
+    rms_above = np.std(empty_spec_minus_bg)
+    fig, ax = plt.subplots()
+    ax.plot(wavelengths, empty_spec_minus_bg, color="xkcd:gray", label=spec_lbl)
+    ax.plot(wavelengths, np.zeros_like(empty_spec_minus_bg), color="xkcd:electric blue", linewidth=2, label="Zero line")
+    ax.set_ylim(-1, 1)
+    ax.text(0.05, 0.05, f"RMS = {np.round(rms_above, 2)}", transform=ax.transAxes)
+    ax.set_title(plottitle)
+    plt.show()

@@ -905,7 +905,8 @@ def get_ech_slit_indices(light_fits):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", clean_data=True, clean_method="new", run_writeout=True):
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", clean_data=True, 
+                       clean_method="new", run_writeout=True, check_background=False):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -1159,55 +1160,32 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         
         # Background comparison
         # ============================================================================================
-        # The background, collected from and subtracted from regions (a) above the slit, and (b) in a dark file,
-        # should be 0.
+        # When a background is fit to and then subtracted from regions (a) above the slit, and (b) in a dark file,
+        # the result should be ~0. This section checks for this. Presently, this is mainly a test to be used
+        # to compare the background fit routine done here with that from IDL to see which is most reasonable.
 
-        # Get an empty spectrum from a region above the slit
-        # ---------------------------------------------------------------------------------------------------
-        si1, si2 = get_ech_slit_indices(light_fits)
-        new_vbot = si2+5
-        new_aprow1 = new_vbot+13
-        new_aprow2 = new_aprow1 + (si2-si1)
-        empty_spec = np.sum(data[i, new_aprow1:new_aprow2, :], axis=0)
+        if check_background:
+            # Above-slit region: find based on the way it's done in IDL pipeline
+            si1, si2 = get_ech_slit_indices(light_fits)
+            new_vbot = si2+5 # This will be the first row above the rows used for "background above" in IDL.
+            new_aprow1 = new_vbot+13 # 
+            new_aprow2 = new_aprow1 + (si2-si1)
 
-        # Fit background in this area
-        aboveslit_bg_fit = sp.optimize.minimize(badness_bg, [0, np.median(empty_spec), 121], args=(wavelengths, empty_spec), method="Powell")
-        bg_fit_above = background(wavelengths, aboveslit_bg_fit.x[0], aboveslit_bg_fit.x[2], aboveslit_bg_fit.x[1])
+            # Get the fake spectra
+            # Above slit
+            empty_spec_above_slit = np.sum(data[i, new_aprow1:new_aprow2+1 :], axis=0) # similar to IDL line: off_slit = total(img[*,new_aprow1:new_aprow2,*], 2)
+            # Dark frame
+            empty_spec_dark_frame = np.sum(dark_fits['Primary'].data[abs(np.sign(i)), si1:si2, :], axis=0) # abs(np.sign()) returns 0 if i = 0, 1 else.
 
-        # subtract and plot
-        should_be_zero = convert_spectrum_DN_to_photoevents(light_fits, empty_spec - bg_fit_above) * conv_to_kR_with_LSFunit
-        rms_above = np.std(should_be_zero)
+            # Fit background, subtract, and plot
+            for (fake_spec, lbl, t) in zip([empty_spec_above_slit, empty_spec_dark_frame],
+                                        ["Detector region above slit - background", "Dark frame on slit - background"],
+                                        [f"Above slit - background, int={i}", f"Dark frame, on slit, minus background, int={i}"]):
+                fake_spec_bg_fit = sp.optimize.minimize(badness_bg, [0, np.median(fake_spec), 121], args=(wavelengths, fake_spec), method="Powell")
+                bg_array = background(wavelengths, fake_spec_bg_fit.x[0], fake_spec_bg_fit.x[2], fake_spec_bg_fit.x[1])
+                should_be_zero = convert_spectrum_DN_to_photoevents(light_fits, fake_spec - bg_array) * conv_to_kR_with_LSFunit
+                echgr.plot_background_in_no_spectrum_region(wavelengths, should_be_zero, spec_lbl=lbl, plottitle=t)
 
-        fig, ax = plt.subplots()
-        ax.plot(wavelengths, should_be_zero, color="xkcd:gray", label="above slit - bg")
-        ax.plot(wavelengths, np.zeros_like(should_be_zero), color="xkcd:electric blue", linewidth=2, label="0")
-        ax.set_ylim(-1, 1)
-        ax.text(0.05, 0.05, f"RMS = {np.round(rms_above, 2)}", transform=ax.transAxes)
-        ax.set_title(f"Above slit minus background, int={i}")
-        plt.show()
-
-        # Dark frame background comparison
-        # ---------------------------------------------------------------------------------------------------
-        darkdat = dark_fits['Primary'].data
-        if i == 0:
-            empty_spec_drk = np.sum(darkdat[0, si1:si2, :], axis=0)
-        else:
-            empty_spec_drk = np.sum(darkdat[1, si1:si2, :], axis=0)
-
-        # get linear fit to dark bg
-        dark_bg_fit = sp.optimize.minimize(badness_bg, [0, np.median(empty_spec_drk), 121], args=(wavelengths, empty_spec_drk), method="Powell")
-        bg_fit_dark = background(wavelengths, dark_bg_fit.x[0], dark_bg_fit.x[2], dark_bg_fit.x[1])
-
-        should_be_zero_dark = empty_spec_drk - bg_fit_dark
-        rms_dark = np.std(should_be_zero_dark)
-
-        fig2, ax2 = plt.subplots()
-        ax2.set_ylim(-5000,5000)
-        ax2.plot(wavelengths, should_be_zero_dark, color="xkcd:gray", label="above slit - bg")
-        ax2.plot(wavelengths, np.zeros_like(should_be_zero_dark), color="xkcd:electric blue", linewidth=2, label="0")
-        ax2.text(0.05, 0.05, f"RMS = {np.round(rms_dark, 2)}", transform=ax.transAxes)
-        ax2.set_title(f"Dark frame, on slit, minus background, int={i}")
-        plt.show()
         
     # Prepare results to be sent to IDL for file writeout 
     # ============================================================================================
