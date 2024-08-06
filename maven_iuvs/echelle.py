@@ -1496,6 +1496,8 @@ def badness_of_fit(params, wavelength_data, DN_data, binedges, CLSF, uncertainty
 
     Parameters
     ----------
+    params : array
+             Fit parameters to be evaluated for badness
     wavelength_data : array
              wavelength that will be fit; nm 
     DN_data : array
