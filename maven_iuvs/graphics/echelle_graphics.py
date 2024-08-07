@@ -342,7 +342,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     
     # determine plottable image
     coadded_lights = coadd_lights(data, n_good_frames)
-    detector_image_to_plot = coadded_lights# np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
+    detector_image_to_plot = np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
 
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
