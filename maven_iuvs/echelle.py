@@ -913,7 +913,7 @@ def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     print(f'total files to add: {new_files_to_add}')
     
     for i in range(new_files_to_add//new_files_limit_per_run + 1):
-        idx = get_dir_metadata(rootpath, new_files_limit=new_files_limit_per_run)
+        idx = get_dir_metadata(rootpath, geospatial=geospatial, new_files_limit=new_files_limit_per_run)
         # clear_output()
         print(f'total files indexed: {len(idx)}')
 
