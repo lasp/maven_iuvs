@@ -747,7 +747,7 @@ def get_lya_countrates(idx_entry):
 # Metadata -------------------------------------------------------------
 
 
-def get_dir_metadata(the_dir, new_files_limit=None):
+def get_dir_metadata(the_dir, geospatial=False, new_files_limit=None):
     """
     Collect the metadata for all files within the_dir. May contain
     subdirectories.
@@ -765,7 +765,11 @@ def get_dir_metadata(the_dir, new_files_limit=None):
     new_idx : list of dictionaries
               Each dictionary contains metadata for one file.
     """
-    idx_fname = the_dir[:-1] + '_metadata.npy'
+    if geospatial:
+        name_ext = "_metadata_geosp.npy"
+    else:
+        name_ext = "_metadata.npy"
+    idx_fname = the_dir[:-1] +  name_ext
     print(f'loading {idx_fname}...')
     
     try:
@@ -794,7 +798,8 @@ def get_dir_metadata(the_dir, new_files_limit=None):
             
             f_metadata = get_file_metadata(find_files(data_directory=the_dir,
                                                       use_index=False,
-                                                      pattern=f)[0])
+                                                      pattern=f)[0],
+                                           geospatial=geospatial)
             add_to_idx.append(f_metadata)
         
         print('\n... done')
@@ -884,7 +889,7 @@ def get_file_metadata(fname, geospatial=False):
     return metadata_dict
 
 
-def update_index(rootpath, new_files_limit_per_run=1000):
+def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     """
     Updates the index file for rootpath, where the index file has the form <rootpath>_metadata.npy.
     
