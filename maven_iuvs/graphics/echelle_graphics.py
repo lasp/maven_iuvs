@@ -602,7 +602,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 # LINE FITTING ========================================================
 
-def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, H_a=0, H_b=0, D_a=0, D_b=0, t="Fit", unit="DN", show_integration_regions=False, logview=False, plot_bg=None):
+def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, 
+                  t="Fit", logview=False, plot_bg=None):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -646,7 +647,6 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     # Plot background fit
     if plot_bg is not None:
-        # thebackground = background(data_wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
         mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=2)
         
     # Plot the data and fit and a guideline for the central wavelength
@@ -654,53 +654,43 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.plot(data_wavelengths, model_fit, label="model", linewidth=2, zorder=2)
     mainax.axvline(fit_params_for_printing['lambdac'], color="gray", zorder=1, linewidth=0.5, )
 
-    if show_integration_regions:
-        mainax.fill_betweenx([0, np.max(data_vals)], data_wavelengths[H_a], x2=data_wavelengths[H_b], color="xkcd:salmon", alpha=0.3, zorder=1)
-        mainax.fill_betweenx([0, np.max(data_vals)], data_wavelengths[D_a], x2=data_wavelengths[D_b], color="xkcd:slate blue", alpha=0.3, zorder=1)
-
     # get index of lambda for D so we can find the value there
     if fit_params_for_printing["lambdac_D"] is not np.nan:
         D_i = find_nearest(data_wavelengths, fit_params_for_printing['lambdac_D'])[0]
         mainax.axvline(fit_params_for_printing['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
     
     # Print text
-    printme = [#r"H $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac'], 3)}", 
-               #r"D $\lambda_c$: "+f"{round(fit_params_for_printing['lambdac_D'], 3)}",
-              ]
-    
-    # Now subtract the background entirely from the fit and then integrate to see the total brightness
-    if "kR" in unit:
-        # background_subtracted = data_vals - thebackground
-        # Htot, Dtot = line_brightness(data_wavelengths, background_subtracted, [H_a, H_b], [D_a, D_b])
-        printme.append(f"H: {fit_params_for_printing['area']} ± {fit_params_for_printing['uncert_H']} kR")
-        printme.append(f"D: {fit_params_for_printing['area_D']} ± {fit_params_for_printing['uncert_D']} kR")
-        textx = [0.38, 0.28]
-        texty = [0.5, 0.17]
-        talign = ["left", "right"]
+    printme = []
+    printme.append(f"H: {fit_params_for_printing['area']} ± {round(fit_params_for_printing['uncert_H'], 2)} kR")
+    printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} kR")
+    textx = [0.38, 0.28]
+    texty = [0.5, 0.17]
+    talign = ["left", "right"]
 
     for i in range(0, len(printme)):
         mainax.text(textx[i], texty[i], printme[i], transform=mainax.transAxes, ha=talign[i])
 
-    # ax.set_yscale("log")
-    mainax.set_ylabel(f"Brightness ({unit})")
+    mainax.set_ylabel("Brightness (kR/nm)")
     if logview:
         mainax.set_yscale("log")
     mainax.legend()
     mainax.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
+    
 
     # Residual axis
-    sign = np.sign(model_fit-data_vals)
-    residual = sign * (data_vals - model_fit)**2
+    residual = (data_vals - model_fit) 
     residax.plot(data_wavelengths, residual, linewidth=1)
-    residax.set_ylabel(f"Residuals\n (sgn((data-model)^2))")
+    residax.set_ylabel(f"Residuals\n (data-model)")
     residax.set_xlabel("Wavelength (nm)")
+    bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
+    residax.set_ylim(-bound, bound)
     
     plt.show()
 
     pass
 
 def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, model_fit_new, model_fit_BU, fit_params_new, fit_params_BU, BUbackground, pybackground,
-                             data_unc_new=None, data_unc_BU=None, H_a=0, H_b=0, D_a=0, D_b=0, titles=["Python fit, linear background", "Python fit, Mayyasi+2023 background"], 
+                             data_unc_new=None, data_unc_BU=None, titles=["Linear background/vectorized cleanup", "Mayyasi+2023 background/pixel-by-pixel cleanup"], 
                              suptitle=None, unit=None, logview=False, plot_bg=True):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
@@ -755,7 +745,6 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     
     # Plot background fit
     if plot_bg:
-        # py_lin_bg = background(data_wavelengths, fit_params_new['M'], fit_params_new['lambdac'], fit_params_new['B'])
         mainax_new.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=2)
         mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=2)
         
@@ -782,10 +771,10 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     printme_BU = []
     
     # Now subtract the background entirely from the fit and then integrate to see the total brightness
-    printme_new.append(f"H: {fit_params_new['area']} kR")
-    printme_new.append(f"D: {fit_params_new['area_D']} kR")
-    printme_BU.append(f"H: {fit_params_BU['peakH']} kR")
-    printme_BU.append(f"D: {fit_params_BU['peakD']} kR")
+    printme_new.append(f"H: {fit_params_new['area']}\n± {round(fit_params_new['uncert_H'], 2)} kR")
+    printme_new.append(f"D: {fit_params_new['area_D']}\n± {round(fit_params_new['uncert_D'], 2)} kR")
+    printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
+    printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
     textx = [0.38, 0.28]
     texty = [0.5, 0.17]
     talign = ["left", "right"]
@@ -795,7 +784,7 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
         mainax_BU.text(textx[i], texty[i], printme_BU[i], transform=mainax_BU.transAxes, ha=talign[i])
 
     # ax.set_yscale("log")
-    residax_new.set_ylabel(f"Residuals\n (sgn((data-model)^2))")
+    residax_new.set_ylabel(f"Residuals\n (data-model)")
     if logview:
         mainax_new.set_yscale("log")
         mainax_BU.set_yscale("log")
@@ -803,14 +792,18 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     mainax_BU.legend()
 
     # Residual axis
-    sign_new = np.sign(model_fit_new - data_vals_new)
-    residual_new = sign_new * (data_vals_new - model_fit_new)**2
+    sign_new = np.sign(data_vals_new - model_fit_new)
+    residual_new = sign_new * np.abs(data_vals_new - model_fit_new)
     residax_new.plot(data_wavelengths, residual_new, linewidth=1)
+    bound = np.max([abs(np.min(residual_new)), np.max(residual_new)]) * 1.10
+    residax_new.set_ylim(-bound, bound)
 
-    sign_BU = np.sign(model_fit_BU - data_vals_BU)
-    residual_BU = sign_BU * (data_vals_BU - model_fit_BU)**2
+    sign_BU = np.sign(data_vals_BU - model_fit_BU)
+    residual_BU = sign_BU * np.abs(data_vals_BU - model_fit_BU)
+    bound = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
+    bound = bound * 1.10
     residax_BU.plot(data_wavelengths, residual_BU, linewidth=1)
-    
+    residax_BU.set_ylim(-bound, bound)
     plt.show()
 
     pass
