@@ -1186,12 +1186,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         # Convert to physical units
-        I_fit_kR_BUbg, spec_per_kR, IDL_style_background_converted, unc_kr_idl = DN_to_physical_units(light_fits, I_fit_BUbg, spec, unc, 
-                                                                                               IDL_style_background, conv_to_kR_with_LSFunit)
-        
+        I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_with_LSFunit
+        spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_with_LSFunit
+        data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_with_LSFunit
+        bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_with_LSFunit
+
         # Subtract the background - we have to do this becuase in this method we need the peak value, but the fit works
         # # by finding H + D + background.
-        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - IDL_style_background_converted 
+        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - bg_array_kR 
         
         # Store info for plotting
         for (brightarr, lamda, peakentry) in zip([H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg], 
@@ -1210,31 +1212,31 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         # Line integrated brightness method
         # ---------------------------------------------------------------------------------------------------
-        # Convert to physical unitslight_fits, model_I, spec, unc, background_array, model_conversion
-        I_fit_kR_pernm, spec_kR_pernm, background_array, unc_kr_per_nm = DN_to_physical_units(light_fits, I_fit, spec, unc, bg_fit, conv_to_kR_per_nm)
-        
+        # Convert the arrays to physical units
+        I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm
+        spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
+        data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
+        bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit ) * conv_to_kR_per_nm
+
+        # Now convert the total brightness and their uncertainties to physical units. Because the model
+        # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
+        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
+        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
+          
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array, p0=[-24, 121.567, 20], 
+        popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
                                            bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
         fit_params_for_printing['M'] = popt[0]
         fit_params_for_printing['B'] = popt[2]
-    
-        # Retrieve integrated brightnesses (these are the integrated areas under the emissions, 
-        # already retrieved in the fitting procedure). Because they are already in total DN, 
-        # we don't need to include a 1/nm factor here. 
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
-
-        # Uncertainty on the brightness
-        H_kR_sigma = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
-        D_kR_sigma = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
 
         # Add brightnesses and uncertainty to arrays so they can be written out to the l1c 
         H_brightnesses[i] = H_kR
         D_brightnesses[i] = D_kR
-        H_bright_1sig[i] = H_kR_sigma
-        D_bright_1sig[i] = D_kR_sigma
+        H_bright_1sig[i] = H_kR_1sig
+        D_bright_1sig[i] = D_kR_1sig
         
         # Plot fit
         # ============================================================================================
@@ -1242,17 +1244,17 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         fit_params_for_printing['area'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
-        fit_params_for_printing['uncert_H'] = H_kR_sigma
-        fit_params_for_printing['uncert_D'] = D_kR_sigma
+        fit_params_for_printing['uncert_H'] = H_kR_1sig
+        fit_params_for_printing['uncert_D'] = D_kR_1sig
 
         # Plot in kR/nm
-        # echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=unc_kr_per_nm, t=titletext,
-        #                     plot_bg=background_array)
+        # echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext,
+        #                     plot_bg=bg_array_kR_pernm)
         
         # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_per_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
-                                 fit_params_for_printing_BUbg, IDL_style_background_converted, background_array,
-                                 unit=["kR/nm", "kR"], data_unc_new=unc_kr_per_nm, data_unc_BU=unc_kr_idl, suptitle=titletext)
+        echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
+                                 fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm,
+                                 unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, data_unc_BU=data_unc_kR, suptitle=titletext)
         
         # Background comparison
         # ============================================================================================
@@ -1334,45 +1336,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
     return H_brightnesses, D_brightnesses,\
            H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
-
-          
-def DN_to_physical_units(light_fits, model_I, spec, unc, background_array, model_conversion):
-    """
-    Converts DN to physical units of kR / nm.
-
-    Parameters
-    ----------
-    light_fits : astropy.io.fits instance
-                File with light observation
-    model_I : 1D array
-              DN per bin; outcome of fitting the emission lines.
-    spec : 1D array
-           Spectrum in DN obtained after coadding the detector image across the slit in the spatial direction
-    unc : 1D array
-          DN uncertainty of spec
-    background_array : 1D array
-                       Fitted background
-    model_conversion : Float
-                       A conversion factor for translating the fit and spectrum to physical units; 
-                       depends on the data within the FITS file itself.
-    Returns
-    ----------
-    I_fit_phys_units, spec_phys_units, 
-    background_phys_units, unc_phys_units : 1D arrays
-                                            The input arguments after conversion.
-        
-    """
-    I_fit_phys_units = convert_spectrum_DN_to_photoevents(light_fits, model_I) * model_conversion
-    spec_phys_units = convert_spectrum_DN_to_photoevents(light_fits, spec) * model_conversion
-    # We can't convert the fit parameters (slope and intercept), so instead we convert the background
-    # array. In order to plot the background, we then fit that array once it's in the right units to 
-    # get the converted slope and intercept.
-    background_phys_units = convert_spectrum_DN_to_photoevents(light_fits, background_array) * model_conversion
-
-    # Uncertainty
-    unc_phys_units = convert_spectrum_DN_to_photoevents(light_fits, unc)*model_conversion
-
-    return I_fit_phys_units, spec_phys_units, background_phys_units, unc_phys_units
 
 
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
