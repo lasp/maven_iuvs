@@ -992,6 +992,7 @@ def get_ech_slit_indices(light_fits):
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", 
                        livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, 
+                       idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -1292,43 +1293,45 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     # Prepare results to be sent to IDL for file writeout 
     # ============================================================================================
 
+    # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
+    center_idx = 4
+    this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
+    yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
+    yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value like IDL does.
+
+    thedict = {
+        "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
+        "BRIGHT_D_kR": D_brightnesses, # D brightness (BkR_D) in kR
+        "BRIGHT_H_OneSIGMA_kR": H_bright_1sig,  # 1 sigma uncertainty in H brightness (BkR_U) in kR
+        "BRIGHT_D_OneSIGMA_kR": D_bright_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
+        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
+        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
+        "ET": light_fits["Integration"].data["ET"], 
+        "UTC": light_fits["Integration"].data["UTC"],
+        "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
+        "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
+    }
+
+    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in thedict.items() ]) )
+
+    # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
+    # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
+    # This error has been corrected in this version. 
+    bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s.transpose(),    # values
+                                columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
+    
+    # Save the output to some files that will be saved outside the Python module.
+    brightness_csv_path = idl_pipeline_folder + "brightness.csv"
+    ph_per_s_csv_path = idl_pipeline_folder + "ph_per_s.csv"
+    brightness_writeout.to_csv(brightness_csv_path, index=False)
+    bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
+    
     if run_writeout:
-        # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
-        center_idx = 4
-        this_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
-        yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
-        yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value like IDL does.
-
-        thedict = {
-            "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
-            "BRIGHT_D_kR": D_brightnesses, # D brightness (BkR_D) in kR
-            "BRIGHT_H_OneSIGMA_kR": H_bright_1sig,  # 1 sigma uncertainty in H brightness (BkR_U) in kR
-            "BRIGHT_D_OneSIGMA_kR": D_bright_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
-            "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
-            "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
-            "ET": light_fits["Integration"].data["ET"], 
-            "UTC": light_fits["Integration"].data["UTC"],
-            "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
-            "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
-        }
-
-        brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in thedict.items() ]) )
-
-        # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
-        # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
-        # This error has been corrected in this version. 
-        bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s.transpose(),    # values
-                                    columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
-        
-        # Save the output to some files that will be saved outside the Python module.
-        brightness_writeout.to_csv("../../brightness.csv", index=False)
-        bright_data_ph_per_s.to_csv("../../ph_per_s.csv", index=False)
-
         # Now call IDL
-        os.chdir("/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/")
+        os.chdir(idl_pipeline_folder)
         commands = f'''
                     .com write_l1c_file_from_python.pro
-                    write_l1c_file_from_python, '{light_l1a_path}', '{savepath}'
+                    write_l1c_file_from_python, '{light_l1a_path}', '{savepath}', '{brightness_csv_path}', '{ph_per_s_csv_path}'
                     ''' 
 
         proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
