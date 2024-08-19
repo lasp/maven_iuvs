@@ -991,7 +991,7 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", 
-                       livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, IDL_fit_unc=None):
+                       livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, 
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
     quantities that need to be written out to the .fits file are generated and saved, and IDL is 
@@ -1031,6 +1031,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     check_background : boolean
                        whether to make plots showing whether empty regions of the detector
                        minus the background fit there are comparable to zero.
+    plot_subtract_bg : boolean
+                       if True, subtracts background from model and data before plotting them.
 
     Returns
     ----------
@@ -1248,13 +1250,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         fit_params_for_printing['uncert_D'] = D_kR_1sig
 
         # Plot in kR/nm
-        # echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext,
-        #                     plot_bg=bg_array_kR_pernm)
+        echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext,
+                            plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately)
         
         # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
-                                 fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm,
-                                 unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, data_unc_BU=data_unc_kR, suptitle=titletext)
+                                 fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
+                                 titles=["Linear background", "Background ~Mayyasi+2023"], 
+                                 plot_subtract_bg=plot_subtract_bg, unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, 
+                                 data_unc_BU=data_unc_kR, suptitle=titletext)
         
         # Background comparison
         # ============================================================================================
