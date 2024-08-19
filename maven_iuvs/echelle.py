@@ -1152,7 +1152,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Create a convenient dictionary which can be used with a plotting routine
         fit_params_for_printing = {'area': round(fit_params[0]), 'area_D': round(fit_params[1]), 
                                     'lambdac': round(fit_params[2], 3), 'lambdac_D': round(fit_params[2]-D_offset, 3), 
-                                    'M': round(fit_params[3] ), 'B': round(fit_params[4])}
+                                    'M': round(fit_params[3]), 'B': round(fit_params[4])}
         
         # Construct a background array from the fit which can then be converted like the spectrum
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
@@ -1219,7 +1219,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm
         spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
         data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
-        bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit ) * conv_to_kR_per_nm
+        bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
 
         # Now convert the total brightness and their uncertainties to physical units. Because the model
         # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
@@ -1729,18 +1729,21 @@ def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibratio
         margin = 7 # for a total window size of 15. 
 
         for i in range(n_int):
-            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # average the above-slit and below-slit slices
+            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # equivalent to IDL "avg_bk" .average the above-slit and below-slit slices
 
             # Now do the sliding median window (width 15)
-            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin]
-            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:]
+            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin] # IDL ignores the first margin points and doesn't change them.
+            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:] # It also ignores the last margin points.
             for k in range(margin, len(backgrounds_newcal[i, :])-margin):
+                # The window size is 15 in IDL, so this usage of median should return the same values.
+                # There is only a discrepancy if the window size is even, since /EVEN is not set in the IDL pipeline.
                 bg_newcal_median_filtered[i, k] = np.median(backgrounds_newcal[i, k-margin:k+margin+1])
             bg_newcal_median_filtered[i, :] *= (binning_param_dict['aprow2'].values[0] - binning_param_dict['aprow1'].values[0] + 1)
 
         return bg_newcal_median_filtered
 
     elif calibration=="old":
+        # This one is currently not returning the right values, I think
         Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
         backgrounds_oldcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
         for i in range(n_int):
