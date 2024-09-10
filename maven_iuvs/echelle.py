@@ -991,7 +991,7 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", 
-                       livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, 
+                       livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, remove_rays=True, remove_hotpix=True,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
@@ -1068,8 +1068,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     
     if clean_data is True:
         if clean_method=="new":
-            data = remove_cosmic_rays(data)
-            data = remove_hot_pixels(data, all_bad_lights) # TODO: August 2024, there is some funniness with
+            if remove_rays:
+                data = remove_cosmic_rays(data, std_or_mad="mad")
+            if remove_hotpix:
+                data = remove_hot_pixels(data, all_bad_lights) # TODO: August 2024, there is some funniness with
                                                            # this subtraction in lower left corner of detector.
         elif clean_method=="IDL":
 
@@ -2019,7 +2021,7 @@ def get_lya_mask(datacube, light_fits):
     return mask
 
 
-def remove_cosmic_rays(data, mask=None, Ns=2): 
+def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"): 
     """
     Removes cosmic rays from the detector image by stacking images and setting any pixel
     which is outside the median ± Ns*sigma to the median value.
@@ -2044,7 +2046,10 @@ def remove_cosmic_rays(data, mask=None, Ns=2):
     # this section looks across frames for any pixels that are outside the median+Ns*sigma. 
     # pixels that are outside that range are set to the median value. 
     medval = np.median(data, axis=0) # TODO: If this can be a vectorized form of median_high, it would match better with IDL pipeline.  
-    sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1)
+    if std_or_mad=="std":
+        sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1
+    else:
+        sigma = sp.stats.median_abs_deviation(data, axis=0)
     
     no_rays = copy.deepcopy(data)
     
