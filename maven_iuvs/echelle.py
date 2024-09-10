@@ -991,7 +991,8 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
-                       clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, 
+                       clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False,
+                       print_algorithm_details_on_plot=False, 
                        remove_rays=True, remove_hotpix=True,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
@@ -1043,6 +1044,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                   if True, the remove_cosmic_rays() routine will be run.
     remove_hotpix : boolean
                     if True, the remove_hot_pixels() routine will be run.
+    print_algorithm_details_on_plot : boolean
+                                      if True, details about the solver algorithm and clean up will
+                                      be shown on the plots.
     idl_pipeline_folder : string
                           Local path of the IDL pipeline software, to which certain files will be written out 
                           to allow for the final l1c product creation via IDL called from subprocess.
@@ -1265,8 +1269,20 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         fit_params_for_printing['uncert_D'] = D_kR_1sig
 
         # Plot in kR/nm
+        if print_algorithm_details_on_plot:
+            extra_print_on_plot = [f"Algorithm: {fitpackage}", 
+                                   f"Calibration: {calibration}",
+                                   f"Clean data: {clean_data}"]
+            if clean_data:
+                extra_print_on_plot.append(f"Clean method: {clean_method}")
+                extra_print_on_plot.append(f"Remove cosmic rays: {remove_rays}")
+                extra_print_on_plot.append(f"Remove hot pix: {remove_hotpix}")
+        else: 
+            extra_print_on_plot = []
+            
+
         echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext,
-                            plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately)
+                            plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately, extra_print_on_plot=extra_print_on_plot)
         
         # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 

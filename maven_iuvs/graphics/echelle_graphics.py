@@ -602,8 +602,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 # LINE FITTING ========================================================
 
-def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, data_unc=None, 
-                  t="Fit", logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False):
+def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
+                  t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], 
+                  logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
+                  extra_print_on_plot=None):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -618,11 +620,25 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     fit_params_for_printing : dictionary
                  A custom dictionary object for easily accessing the parameter fits by name.
                  Keys: area, area_d, lambdac, lambdac_D, M, B.
-    H_a, H_b, D_a, D_b : ints
-                         indices of data_wavelengths over which the line area was integrated.
-                         Used here to call fill_betweenx in the event we want to show it on the plot.
+    wavelength_bin_edges : array or None
+                           If provided, this array of values will be plotted as vertical lines on the plot.
+    data_unc : array
+               uncertainty on data points in DN
     t : string
         title to use for the plot.
+    fittext_x, fittext_y : arrays
+                           x and y locations for text on plots printing the H and D brightness fits. Assumes
+                           transform=ax.transAxes.
+    logview : boolean
+              if True, y axis will be log scaled.
+    plot_bg : array or None
+              if provided, this is the background from the fit.
+    plot_subtract_bg : boolean
+                       if True, the background will be subtracted from the fits and the result will be plotted.
+    plot_bg_separately : boolean
+                         if True, the background array will be plotted as its own line.
+    extra_print_on_plot : array or None
+                          if provided, this extra text will be printed on the plot to the left of the fit lines.
     unit : string
            description of the unit to write on the y-axis label. Typically "DN" or "kR" with a /s/nm possibly appended.
          
@@ -635,6 +651,10 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mpl.rcParams['ytick.labelsize'] = 16
     mpl.rcParams['axes.labelsize'] = 18
     mpl.rcParams['axes.titlesize'] = 22
+
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
 
     fig = plt.figure(figsize=(12,6))
     mygrid = gs.GridSpec(4, 1, figure=fig, hspace=0.1)
@@ -653,41 +673,63 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         else: # show arrays with bg included, plot bg
             plot_data = data_vals 
             plot_model = model_fit
-            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=2)
+            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=2, color=bg_color)
+        med_bg = np.median(plot_bg)
+        mainax.text(0, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes)
         
     # Plot the data and fit and a guideline for the central wavelength
-    mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, label="data", linewidth=1, zorder=3, alpha=0.7)
-    mainax.plot(data_wavelengths, plot_model, label="model", linewidth=2, zorder=2)
-    mainax.axvline(fit_params_for_printing['lambdac'], color="gray", zorder=1, linewidth=0.5, )
+    mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
+    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
+
+    # VERTICAL LINES......................
+    guideline_color = "xkcd:cool gray"
+    
+    # Optional plot bin edges, can be helpful
+    if wavelength_bin_edges:
+        for e in wavelength_bin_edges:
+            mainax.axvline(e, color="xkcd:dark gray", linestyle="--", linewidth=0.5, zorder=1)
+
+    # Plot the fit line centers on both residual and main axes
+    mainax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
 
     # get index of lambda for D so we can find the value there
     if fit_params_for_printing["lambdac_D"] is not np.nan:
-        D_i = find_nearest(data_wavelengths, fit_params_for_printing['lambdac_D'])[0]
-        mainax.axvline(fit_params_for_printing['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
-    
+        mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
+
     # Print text
     printme = []
-    printme.append(f"H: {fit_params_for_printing['area']} ± {round(fit_params_for_printing['uncert_H'], 2)} kR")
-    printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} kR")
-    textx = [0.38, 0.28]
-    texty = [0.5, 0.2]
-    talign = ["left", "right"]
+    printme.append(f"H: {fit_params_for_printing['area']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area'] / fit_params_for_printing['uncert_H'], 1)})")
+    printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
+    talign = ["left", "left"]
 
     for i in range(0, len(printme)):
-        mainax.text(textx[i], texty[i], printme[i], transform=mainax.transAxes, ha=talign[i])
+        mainax.text(fittext_x[i], fittext_y[i], printme[i], transform=mainax.transAxes, ha=talign[i])
 
     mainax.set_ylabel("Brightness (kR/nm)")
     if logview:
         mainax.set_yscale("log")
-    mainax.legend()
-    mainax.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
+    mainax.legend(bbox_to_anchor=(1,1))
     
+    mainax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    
+    # Print some extra messages
+    if extra_print_on_plot:
+        for m in range(len(extra_print_on_plot)):
+            mainax.text(0.05, 0.9-m*0.1, extra_print_on_plot[m], fontsize=14, transform=mainax.transAxes)
 
     # Residual axis
+    residual_color = "xkcd:dark lilac"
     residual = (data_vals - model_fit) 
-    residax.plot(data_wavelengths, residual, linewidth=1, color="xkcd:medium gray")
+    residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color)
+    residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     residax.set_ylabel(f"Residuals\n (data-model)")
     residax.set_xlabel("Wavelength (nm)")
+    residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
     bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
     residax.set_ylim(-bound, bound)
     
@@ -793,13 +835,25 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     printme_BU = []
     
     # Now subtract the background entirely from the fit and then integrate to see the total brightness
-    printme_new.append(f"H: {fit_params_new['area']}\n± {round(fit_params_new['uncert_H'], 2)} kR")
-    printme_new.append(f"D: {fit_params_new['area_D']}\n± {round(fit_params_new['uncert_D'], 2)} kR")
-    printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
-    printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
-    textx = [0.38, 0.28]
-    texty = [0.5, 0.17]
-    talign = ["left", "right"]
+    # printme_new.append(f"H: {fit_params_new['area']}\n± {round(fit_params_new['uncert_H'], 2)} kR")
+    # printme_new.append(f"D: {fit_params_new['area_D']}\n± {round(fit_params_new['uncert_D'], 2)} kR")
+
+    printme_new.append(f"H: {fit_params_new['area']} ± {round(fit_params_new['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area'] / fit_params_new['uncert_H'], 1)})")
+    printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['uncert_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['uncert_D'], 1)})")
+
+    # printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
+    # printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
+
+    printme_BU.append(f"H: {fit_params_BU['peakH']} ± {round(fit_params_BU['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['peakH'] / fit_params_BU['uncert_H'], 1)})")
+    printme_BU.append(f"D: {fit_params_BU['peakD']} ± {round(fit_params_BU['uncert_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['peakD'] / fit_params_BU['uncert_D'], 1)})")
+
+    textx = [0.45, 0.45]#[0.38, 0.28]
+    texty = [0.5, 0.4]#[0.5, 0.2]
+    talign = ["left", "left"]
 
     for i in range(0, len(printme_new)):
         mainax_new.text(textx[i], texty[i], printme_new[i], transform=mainax_new.transAxes, ha=talign[i])
