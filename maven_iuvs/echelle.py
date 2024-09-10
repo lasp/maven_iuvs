@@ -1139,7 +1139,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         # Generate the CLSF from the LSF
         # ============================================================================================
-        theCLSF = CLSF_from_LSF(lsf_f, LSFx=lsfx_nm)
+        theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 
         # PERFORM FIT
         # ============================================================================================
@@ -1800,7 +1800,7 @@ def interpolate_CLSF(lambda_c, binedges, CLSF): #
     return interp_CLSF
     
 
-def CLSF_from_LSF(LSFy, LSFx=None, dx=None):
+def CLSF_from_LSF(LSFx, LSFy):
     """
     Compute the empirical CLSF, given some LSF defined by xdata and ydata.
     
@@ -1819,21 +1819,29 @@ def CLSF_from_LSF(LSFy, LSFx=None, dx=None):
 
     # The LSF usually comes in angstroms, and covers ± ~3 Å; put it in nm.
     if 1 <= np.max(LSFx)<= 4:
-        LSFx = LSFx / 10
+        m = (1/10)
+    elif np.max(LSFx) < 1:
+        m = 1
 
-    if dx is None:
-        if LSFx is None:
-            raise Exception("Please specify xdata or dx")
-        else:
-            dx = dx_array(LSFx) # Generate the dx array, since wavelengths are not equally spaced.
-        
+
     cumulative = np.zeros((len(LSFx), 2))
     
-    cumulative[:, 0] = LSFx
-    cumulative[:, 1] = np.cumsum(LSFy) * dx
+    # Fill the wavelengths...
+    cumulative[:, 0] = LSFx * m
 
-    # Normalize it so it asymptotes to 1.
+    # Now fill the cumulative flux at each wavelength. Bceause the value is specified
+    # in the middle of the wavelength bin, the cumulative amount at each bin center is
+    # half the value at the previous bin center plus half the value at the present bin center.
+    incr_array = 0.5 * (LSFy[:-1] + LSFy[1:])
+    incr_array = np.insert(incr_array, 0, LSFy[0]/2) # At the first entry, the cumulative amount is 0.
+    cumulative[:, 1] = np.cumsum(incr_array)
+
+    # Normalize to the last value in the cumulative sum, so that it asymptotes to 1.
     cumulative[:, 1] = cumulative[:, 1] / cumulative[cumulative.shape[0]-1, 1]
+
+    # Check that there are no values larger than 1.
+    if (cumulative[:, 1] > 1).any():
+        raise ValueError("A value in the cumulative LSF (CLSF) is > 1, which is unphysical")
 
     return cumulative
 
