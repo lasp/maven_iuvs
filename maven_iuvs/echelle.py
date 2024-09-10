@@ -990,8 +990,9 @@ def get_ech_slit_indices(light_fits):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", 
-                       livepts=500, clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, remove_rays=True, remove_hotpix=True,
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
+                       clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False, 
+                       remove_rays=True, remove_hotpix=True,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
@@ -1021,6 +1022,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     approach : string
                "static" to use Dynesty's NestedSampler
                "dynamic" to use DynamicNestedSampler
+    livepts : integer
+              number of live points to use within the Dynesty solver
     clean_data : boolean
                  Whether to perform cosmic ray removal and hot pixel adjustment.
     clean_method : string
@@ -1034,6 +1037,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                        minus the background fit there are comparable to zero.
     plot_subtract_bg : boolean
                        if True, subtracts background from model and data before plotting them.
+    plot_bg_separately : boolean
+                         if True, the background will be plotted as a separate line on the fit plots
+    remove_rays : boolean
+                  if True, the remove_cosmic_rays() routine will be run.
+    remove_hotpix : boolean
+                    if True, the remove_hot_pixels() routine will be run.
+    idl_pipeline_folder : string
+                          Local path of the IDL pipeline software, to which certain files will be written out 
+                          to allow for the final l1c product creation via IDL called from subprocess.
 
     Returns
     ----------
