@@ -1308,7 +1308,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             # Above slit
             empty_spec_above_slit = np.sum(data[i, new_aprow1:new_aprow2+1 :], axis=0) # similar to IDL line: off_slit = total(img[*,new_aprow1:new_aprow2,*], 2)
             # Dark frame
-            empty_spec_dark_frame = np.sum(dark_fits['Primary'].data[abs(np.sign(i)), si1:si2, :], axis=0) # abs(np.sign()) returns 0 if i = 0, 1 else.
+            empty_spec_dark_frame = np.sum(dark_fits['Primary'].data[abs(np.sign(i)), si1:si2+1, :], axis=0) # abs(np.sign()) returns 0 if i = 0, 1 else.
+            # +1 because of the way python does indices.
 
             # Fit background, subtract, and plot
             for (fake_spec, lbl, t) in zip([empty_spec_above_slit, empty_spec_dark_frame],
@@ -1925,11 +1926,11 @@ def get_spectrum(data, light_fits, average=False, coadded=False, integration=0):
     si1, si2 = get_ech_slit_indices(light_fits)
 
     if coadded:
-        spectrum = np.sum(data[si1:si2, :], axis=0)
+        spectrum = np.sum(data[si1:si2+1, :], axis=0) # +1 because of the way python does indices.
     else:
         # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
         # This spectrum is thus in DN
-        spectrum = np.sum(data[integration, si1:si2, :], axis=0)
+        spectrum = np.sum(data[integration, si1:si2+1, :], axis=0)
         
     if average:
         spectrum = spectrum / (si2 - si1)
@@ -1962,8 +1963,8 @@ def add_in_quadrature(uncertainties, light_fits, integration=0):
     # Collect pixel range which we need to find the slit start and end 
     si1, si2 = get_ech_slit_indices(light_fits)
 
-    total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2, :])**2, axis=0) )
-
+    total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2+1, :])**2, axis=0) )
+    # +1 because of the way python does indices.
     return total_uncert
 
 
@@ -2053,7 +2054,7 @@ def get_lya_mask(datacube, light_fits):
     mask = np.zeros_like(datacube[0, :, :]) # only needs to be 2D.
     si1, si2 = get_ech_slit_indices(light_fits) # slit
     wi = np.asarray(np.where(np.logical_and(get_wavelengths(light_fits)>=121.53, get_wavelengths(light_fits)<=121.58)))[0]
-    mask[si1:si2+1, wi] = 1 
+    mask[si1:si2+1, wi] = 1  # +1 because of the way python does indices.
     return mask
 
 
