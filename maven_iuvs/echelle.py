@@ -1131,8 +1131,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     D_brightnesses = np.empty(n_int)
     H_bright_1sig = np.empty(n_int)
     D_bright_1sig = np.empty(n_int)
-    H_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
-    D_brightnesses_peak_method_BUbg = np.empty(n_int) # for BU background
+    H_brightnesses_BUbg = np.empty(n_int) # for BU background
+    D_brightnesses_BUbg = np.empty(n_int) # for BU background
     bright_data_ph_per_s = np.ndarray((n_int, get_wavelengths(light_fits).size))
 
     # Wavelengths and binwidths (which typically don't change)
@@ -1370,7 +1370,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         print("Finished writing to IDL, I hope")
 
     return H_brightnesses, D_brightnesses,\
-           H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg
+           H_brightnesses_BUbg, D_brightnesses_BUbg
 
 
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
