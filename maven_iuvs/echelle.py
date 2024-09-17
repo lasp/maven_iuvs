@@ -1377,17 +1377,17 @@ def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
     Identify and return the appropriate conversion factors for the data.
     """
-    Aeff =  32.327455  # Acquired by testing on one file, 16910 outdisk. TODO: Check if this needs to change with each file. 
+    Aeff =  32.327455  # Acquired by testing on one file in the IDL pipeline, 16910 outdisk. 
+                       # Does not seem to change with different files.
 
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
-    elif calibration=="old": # Currently set to be the same because trying to implement what they actually did in the old versoin
-                             # causes errors...
-        # Ph_pers_perkR = 29.8
-        # Adj_Factor = 100/88  
-        # conv_to_kR_brightness = Adj_Factor / (t_int * Ph_pers_perkR) # There's some extra factors in the old cal...
-        # conv_to_kR_spectrum = 1 / (t_int)
-        conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
+    elif calibration=="old":
+        Ph_pers_perkR = 29.8 # There's some extra factors in the old cal...
+        Adj_Factor = 1# 100/88  # This factor is used in IDL, but it accounts for the fact that the method used is not flux-conservative.
+                                # We are using a conservative fit method so we don't need it, but I'm placing it here just in case
+                                # we need to refer to it in future / in case I did something wrong.
+        conv_to_kR_with_LSFunit = Adj_Factor / (t_int * Ph_pers_perkR)
 
     conv_to_kR_per_nm = 1 / (t_int * binwidth_nm * Aeff)
     conv_to_kR = 1 / (t_int * Aeff)
