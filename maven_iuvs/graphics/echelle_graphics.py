@@ -602,6 +602,32 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 # LINE FITTING ========================================================
 
+def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit):
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
+
+    fig, ax = plt.subplots(figsize=(5,3))
+        
+    # Plot the data and fit and a guideline for the central wavelength
+    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
+    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="model fit", linewidth=2, zorder=2)
+
+    ax.set_ylabel("Brightness (kR/nm)")
+    ax.legend()
+    
+    ax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    
+
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
                   t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
@@ -776,6 +802,10 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     mpl.rcParams['axes.labelsize'] = 18
     mpl.rcParams['axes.titlesize'] = 22
 
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
+
     fig = plt.figure(figsize=(16,6))
     mygrid = gs.GridSpec(4, 2, figure=fig, hspace=0.1, wspace=0.1)
     mainax_new = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
@@ -802,33 +832,31 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
             plot_model_new = model_fit_new - pybackground
             plot_data_BU = data_vals_BU - BUbackground
             plot_model_BU = model_fit_BU - BUbackground
-            mainax_new.plot(data_wavelengths, pybackground-50, label="background (offset=-50)", linewidth=2, zorder=2)
-            mainax_BU.plot(data_wavelengths, BUbackground-1, label="background  (offset=-1)", linewidth=2, zorder=2)
+            mainax_new.plot(data_wavelengths, pybackground-50, label="background (offset=-50)", linewidth=2, zorder=2, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground-1, label="background  (offset=-1)", linewidth=2, zorder=2, color=bg_color)
         else: # show arrays with bg included, plot bg
             plot_data_new = data_vals_new 
             plot_model_new = model_fit_new
             plot_data_BU = data_vals_BU
             plot_model_BU = model_fit_BU
-            mainax_new.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=2)
-            mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=2)
+            mainax_new.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=2, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=2, color=bg_color)
         
     # Plot the data and fit and a guideline for the central wavelength
-    mainax_new.errorbar(data_wavelengths, plot_data_new, yerr=data_unc_new, label="data", linewidth=1, zorder=3, alpha=0.7)
-    mainax_new.plot(data_wavelengths, plot_model_new, label="model", linewidth=2, zorder=2)
-    mainax_new.axvline(fit_params_new['lambdac'], color="gray", zorder=1, linewidth=0.5, )
+    mainax_new.errorbar(data_wavelengths, plot_data_new, yerr=data_unc_new, linewidth=0, zorder=3, alpha=0.7, color=data_color)
+    mainax_new.step(data_wavelengths, plot_data_new, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax_new.step(data_wavelengths, plot_model_new, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
 
-    mainax_BU.errorbar(data_wavelengths, plot_data_BU, yerr=data_unc_BU, label="data", linewidth=1, zorder=3, alpha=0.7)
-    mainax_BU.plot(data_wavelengths, plot_model_BU, label="model", linewidth=2, zorder=2)
-    mainax_BU.axvline(fit_params_BU['lambdac'], color="gray", zorder=1, linewidth=0.5, )
+    mainax_BU.errorbar(data_wavelengths, plot_data_BU, yerr=data_unc_BU, linewidth=0, zorder=3, alpha=0.7, color=data_color)
+    mainax_BU.step(data_wavelengths, plot_data_BU, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax_BU.step(data_wavelengths, plot_model_BU, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
 
-    # get index of lambda for D so we can find the value there
-    if fit_params_new["lambdac_D"] is not np.nan:
-        D_i = find_nearest(data_wavelengths, fit_params_new['lambdac_D'])[0]
-        mainax_new.axvline(fit_params_new['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
-
-    if fit_params_BU["lambdac_D"] is not np.nan:
-        D_i = find_nearest(data_wavelengths, fit_params_BU['lambdac_D'])[0]
-        mainax_BU.axvline(fit_params_BU['lambdac_D'], color="gray", linewidth=0.5, zorder=1)
+    #  Plot the fit line centers on both residual and main axes
+    guideline_color = "xkcd:cool gray"
+    mainax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
+    mainax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
     
     # Print text
     printme_new = []
@@ -846,10 +874,10 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     # printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
     # printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
 
-    printme_BU.append(f"H: {fit_params_BU['peakH']} ± {round(fit_params_BU['uncert_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['peakH'] / fit_params_BU['uncert_H'], 1)})")
-    printme_BU.append(f"D: {fit_params_BU['peakD']} ± {round(fit_params_BU['uncert_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['peakD'] / fit_params_BU['uncert_D'], 1)})")
+    printme_BU.append(f"H: {fit_params_BU['area']} ± {round(fit_params_BU['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area'] / fit_params_BU['uncert_H'], 1)})")
+    printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['uncert_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['uncert_D'], 1)})")
 
     textx = [0.45, 0.45]#[0.38, 0.28]
     texty = [0.5, 0.4]#[0.5, 0.2]
@@ -868,18 +896,21 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     mainax_BU.legend()
 
     # Residual axis
-    sign_new = np.sign(data_vals_new - model_fit_new)
-    residual_new = sign_new * np.abs(data_vals_new - model_fit_new)
-    residax_new.plot(data_wavelengths, residual_new, linewidth=1, color="xkcd:medium gray")
+    residual_color = "xkcd:dark lilac"
+    residual_new = (data_vals_new - model_fit_new)
+    residax_new.step(data_wavelengths, residual_new, where="mid", linewidth=1, color=residual_color)
+    residax_new.errorbar(data_wavelengths, residual_new, yerr=data_unc_new, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     bound = np.max([abs(np.min(residual_new)), np.max(residual_new)]) * 1.10
     residax_new.set_ylim(-bound, bound)
+    residax_new.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
 
-    sign_BU = np.sign(data_vals_BU - model_fit_BU)
-    residual_BU = sign_BU * np.abs(data_vals_BU - model_fit_BU)
+    residual_BU = (data_vals_BU - model_fit_BU)
     bound = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
     bound = bound * 1.10
-    residax_BU.plot(data_wavelengths, residual_BU, linewidth=1, color="xkcd:medium gray")
+    residax_BU.step(data_wavelengths, residual_BU, where="mid", linewidth=1, color="xkcd:medium gray")
+    residax_BU.errorbar(data_wavelengths, residual_BU, yerr=data_unc_BU, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     residax_BU.set_ylim(-bound, bound)
+    residax_BU.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
     plt.show()
 
     pass

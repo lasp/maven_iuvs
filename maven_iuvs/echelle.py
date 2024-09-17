@@ -991,8 +991,8 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
-                       clean_data=True, clean_method="new", run_writeout=True, check_background=False, plot_subtract_bg=True, plot_bg_separately=False,
-                       print_algorithm_details_on_plot=False, 
+                       clean_data=True, clean_method="new", run_writeout=True, 
+                       check_background=False, plot_subtract_bg=True, plot_bg_separately=False, print_algorithm_details_on_plot=False, plot_comparison=False,
                        remove_rays=True, remove_hotpix=True,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
@@ -1040,13 +1040,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                        if True, subtracts background from model and data before plotting them.
     plot_bg_separately : boolean
                          if True, the background will be plotted as a separate line on the fit plots
+    print_algorithm_details_on_plot : boolean
+                                      if True, details about the solver algorithm and clean up will
+                                      be shown on the plots.
+    plot_comparison : boolean
+                      Make a two-panel plot comparing the fit results using a linear vs. IDL style background.
     remove_rays : boolean
                   if True, the remove_cosmic_rays() routine will be run.
     remove_hotpix : boolean
                     if True, the remove_hot_pixels() routine will be run.
-    print_algorithm_details_on_plot : boolean
-                                      if True, details about the solver algorithm and clean up will
-                                      be shown on the plots.
     idl_pipeline_folder : string
                           Local path of the IDL pipeline software, to which certain files will be written out 
                           to allow for the final l1c product creation via IDL called from subprocess.
@@ -1182,13 +1184,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
         # since we didn't do integrated brightness in this method.
-        fit_params_for_printing_BUbg = {'peakH': np.nan, # Will be filled in further down.
-                                        'peakD': np.nan, # Will be filled in further down.
-                                        'lambdac': round(fit_params_BUbg[2], 3), 
-                                        'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3), 
-                                        'uncert_H': np.nan, # Will be filled in further down.
-                                        'uncert_D': np.nan # Will be filled in further down.
-                                       }
+        fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
+                                        'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
         # COLLECT BRIGHTNESSES
@@ -1207,27 +1204,23 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         # Convert to physical units
-        I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_with_LSFunit
-        spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_with_LSFunit
-        data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_with_LSFunit
-        bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_with_LSFunit
+        I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_per_nm
+        spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
+        data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
+        bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_per_nm
 
-        # Subtract the background - we have to do this becuase in this method we need the peak value, but the fit works
-        # # by finding H + D + background.
-        I_fit_kR_BUbg_subtracted = I_fit_kR_BUbg - bg_array_kR 
-        
-        # Store info for plotting
-        for (brightarr, lamda, peakentry) in zip([H_brightnesses_peak_method_BUbg, D_brightnesses_peak_method_BUbg], 
-                                                 ["lambdac", "lambdac_D"],
-                                                 ["peakH", "peakD"]):
-            linectr_i, linectr = find_nearest(wavelengths, fit_params_for_printing_BUbg[lamda])
-            brightarr[i] = np.max(I_fit_kR_BUbg_subtracted[linectr_i-3:linectr_i+3])
-            fit_params_for_printing_BUbg[peakentry] = round(brightarr[i], 2)
+        # Now convert the total brightness and their uncertainties to physical units. Because the model
+        # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
+        H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[0]) * conv_to_kR 
+        D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[1]) * conv_to_kR 
+        H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
+        D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR 
 
-        # add in the uncertainties - use conv_to_kR here, not the conversion with LSF unit, because the fit routine is done in 
-        # kR/nm space despite the use of the original IDL methods.
-        fit_params_for_printing_BUbg['uncert_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
-        fit_params_for_printing_BUbg['uncert_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR
+        # Update fit params
+        fit_params_for_printing_BUbg['area'] = round(H_kR_BUbg, 2)
+        fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
+        fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
+        fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1258,15 +1251,18 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         D_brightnesses[i] = D_kR
         H_bright_1sig[i] = H_kR_1sig
         D_bright_1sig[i] = D_kR_1sig
-        
-        # Plot fit
-        # ============================================================================================
-        titletext = f"Python fit: Integration {i}, {re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)}"
 
+        # Update fit params
         fit_params_for_printing['area'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
         fit_params_for_printing['uncert_H'] = H_kR_1sig
         fit_params_for_printing['uncert_D'] = D_kR_1sig
+        
+        # Plot fit
+        # ============================================================================================
+        titletext = f"Orbit {re.search(orbno_RE, light_fits['Primary'].header['Filename'] ).group(0)} - Integration {i} - Python fit"
+
+        # re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)
 
         # Plot in kR/nm
         if print_algorithm_details_on_plot:
@@ -1285,11 +1281,12 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                             plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately, extra_print_on_plot=extra_print_on_plot)
         
         # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
-                                 fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
-                                 titles=["Linear background", "Background ~Mayyasi+2023"], 
-                                 plot_subtract_bg=plot_subtract_bg, unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, 
-                                 data_unc_BU=data_unc_kR, suptitle=titletext)
+        if plot_comparison:
+            echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
+                                           fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
+                                           titles=["Linear background", "Background ~Mayyasi+2023"], 
+                                           plot_subtract_bg=plot_subtract_bg, unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, 
+                                           data_unc_BU=data_unc_kR, suptitle=titletext)
         
         # Background comparison
         # ============================================================================================
