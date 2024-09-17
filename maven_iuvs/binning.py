@@ -23,18 +23,17 @@ def get_bin_edges(light_fits):
     # Grab the wavelengths 
     wavelengths = get_wavelengths(light_fits)
 
-    # First calculate the differences between all points x
+    # First calculate the differences between wavelengths
     dlambda = np.diff(wavelengths)
     
-    # There will be one more bin edge than x points
+    # There will be one more bin edge than wavelengths
     edges = np.zeros(len(wavelengths) + 1)
 
     # Handle the left edge
     edges[0] = wavelengths[0] - (dlambda[0] / 2) 
 
-    # inner elements
-    for i in range(1, len(edges)-1):
-        edges[i] = wavelengths[i] - dlambda[i-1] / 2
+    # inner elements - end element excluded
+    edges[1:-1] = wavelengths[1:] - (dlambda / 2)
 
     # And the right edge
     edges[-1] = wavelengths[-1] + dlambda[-1] / 2

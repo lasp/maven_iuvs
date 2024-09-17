@@ -1136,7 +1136,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     # Wavelengths and binwidths (which typically don't change)
     # ==============================================================================================
     wavelengths = get_wavelengths(light_fits)
-    binwidth_nm = dx_array(wavelengths)
+    binwidth_nm = np.diff(get_bin_edges(light_fits))
 
     # Conversion factors
     # ============================================================================================
@@ -1164,7 +1164,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         H_i = [20, 170] # Range for integrating H and D. 
         D_i = [80, 100]
         initial_guess = line_fit_initial_guess(wavelengths, spec, H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1]) 
-        fit_params, I_fit, fit_1sigma = fit_line(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
+        fit_params, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
                                                  fitter=fitpackage, approach=approach, livepts=livepts) 
 
         # Create a convenient dictionary which can be used with a plotting routine
@@ -1177,7 +1177,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         IDL_style_background = backgrounds_BU[i, :]
-        fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_line(initial_guess, wavelengths, spec, light_fits, theCLSF, 
+        fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, 
                                                                 unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
 
         # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
@@ -1440,53 +1440,7 @@ def get_binning_df(calibration="new"):
 
 # Line fitting =============================================================
     
-def uniform(x, xmin, xmax):
-    """
-    Transforms x in the interval [0, 1] onto the interval [xmin, xmax].
-    
-    Parameters
-    ----------
-    x : float
-        Any float from 0 to 1.
-    xmin, xmax : floats or ints
-                 Any real-valued floats.
-
-    Returns
-    ----------
-    x transformed onto the interval [xmin, xmax]
-    """
-    return (xmax-xmin)*(x-0.5)+(xmax+xmin)/2.0
-
-
-def prior_transform(u, param_bounds):
-    """
-    Transforms the uniform random variable `u ~ Unif[0., 1.)`
-    to the parameter of interest.
-
-    Parameters
-    ----------
-    u : float
-        Uniform random variable on the interval [0, 1]
-    param_bounds : list
-                   List of bounds for the parameters being fit with fit_line().
-                   Format is [[lower bound, upper bound]_i] for i'th parameter.
-    Returns
-    ----------
-    x : array
-        u transformed into the appropriate space for each parameter. 
-        
-    """
-    x = np.array(u)
-    
-    x[0] = uniform(u[0], param_bounds[0][0], param_bounds[0][1]) # DN for H line: Probably integrates between 1 and 10000 DN? 400 is a "good guess"
-    x[1] = uniform(u[1], param_bounds[1][0], param_bounds[1][1]) # DN for D line: set to the same.
-    x[2] = uniform(u[2], param_bounds[2][0], param_bounds[2][1]) # Line center for ly alpha of H
-    x[3] = uniform(u[3], param_bounds[3][0], param_bounds[3][1]) # bg_m_guess
-    x[4] = uniform(u[4], param_bounds[4][0], param_bounds[4][1]) # bg_b_guess; usually the median of the spectrum, could be anywhere from 0 (no background) to maybe 3000 (higher than emissions)
-    return x
-
-
-def fit_line(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver=None, fitter="scipy", approach="dynamic", livepts=500, BU_bg=None):
+def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver=None, fitter="scipy", approach="dynamic", livepts=500, BU_bg=None):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
     and minimizes the "badness".
@@ -1560,6 +1514,53 @@ def fit_line(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, so
         return modeled_params, I_bin, fit_uncert
 
     elif fitter=="dynesty":
+
+        # Set up some helper functions
+        def uniform(x, xmin, xmax):
+            """
+            Transforms x in the interval [0, 1] onto the interval [xmin, xmax].
+            
+            Parameters
+            ----------
+            x : float
+                Any float from 0 to 1.
+            xmin, xmax : floats or ints
+                        Any real-valued floats.
+
+            Returns
+            ----------
+            x transformed onto the interval [xmin, xmax]
+            """
+            return (xmax-xmin)*(x-0.5)+(xmax+xmin)/2.0
+
+
+        def prior_transform(u, param_bounds):
+            """
+            Transforms the uniform random variable `u ~ Unif[0., 1.)`
+            to the parameter of interest.
+
+            Parameters
+            ----------
+            u : float
+                Uniform random variable on the interval [0, 1]
+            param_bounds : list
+                        List of bounds for the parameters being fit with fit_H_and_D().
+                        Format is [[lower bound, upper bound]_i] for i'th parameter.
+            Returns
+            ----------
+            x : array
+                u transformed into the appropriate space for each parameter. 
+                
+            """
+            x = np.array(u)
+            
+            x[0] = uniform(u[0], param_bounds[0][0], param_bounds[0][1]) # DN for H line: Probably integrates between 1 and 10000 DN? 400 is a "good guess"
+            x[1] = uniform(u[1], param_bounds[1][0], param_bounds[1][1]) # DN for D line: set to the same.
+            x[2] = uniform(u[2], param_bounds[2][0], param_bounds[2][1]) # Line center for ly alpha of H
+            x[3] = uniform(u[3], param_bounds[3][0], param_bounds[3][1]) # bg_m_guess
+            x[4] = uniform(u[4], param_bounds[4][0], param_bounds[4][1]) # bg_b_guess; usually the median of the spectrum, could be anywhere from 0 (no background) to maybe 3000 (higher than emissions)
+            return x
+
         # List of arguments for loglikelihood
         loglike_args = [wavelengths, edges, CLSF, spec, unc, 1, BU_bg]
 
@@ -1845,24 +1846,21 @@ def CLSF_from_LSF(LSFx, LSFy):
     cumulative : array
                  The CLSF, valid at the same xdata.
     """
+    cumulative = np.zeros((len(LSFx), 2))
 
     # The LSF usually comes in angstroms, and covers ± ~3 Å; put it in nm.
     if 1 <= np.max(LSFx)<= 4:
-        m = (1/10)
+        cumulative[:, 0] = LSFx * (1/10)
     elif np.max(LSFx) < 1:
-        m = 1
-
-
-    cumulative = np.zeros((len(LSFx), 2))
-    
-    # Fill the wavelengths...
-    cumulative[:, 0] = LSFx * m
+        cumulative[:, 0] = LSFx * 1
 
     # Now fill the cumulative flux at each wavelength. Bceause the value is specified
     # in the middle of the wavelength bin, the cumulative amount at each bin center is
     # half the value at the previous bin center plus half the value at the present bin center.
+    # At the first entry (halfway through the first bin), cumulative brightness is half the 
+    # brightness of the first bin.
     incr_array = 0.5 * (LSFy[:-1] + LSFy[1:])
-    incr_array = np.insert(incr_array, 0, LSFy[0]/2) # At the first entry, the cumulative amount is 0.
+    incr_array = np.insert(incr_array, 0, LSFy[0]/2)
     cumulative[:, 1] = np.cumsum(incr_array)
 
     # Normalize to the last value in the cumulative sum, so that it asymptotes to 1.
@@ -1968,41 +1966,6 @@ def add_in_quadrature(uncertainties, light_fits, integration=0):
     return total_uncert
 
 
-def dx_array(x):
-    """
-    Given an array x of non-evenly-spaced x values, this will calculate the 
-    dx for all of them, i.e. the value to use for dx at each point within x
-    if you want to integrate over the domain defined by x.
-
-    Parameters
-    ----------
-    x : array
-        an array of non-evenly-spaced floats.
-
-    Returns
-    ----------
-    dx : array
-         an array of the same length as x, giving the dx to use for each x_i for integration purposes.
-    """
-    # First calculate the differences between all points x
-    x_diffs = np.diff(x)
-    dx = np.zeros_like(x)
-    
-    # At left edge, we only have the difference between the x_0 and x_1 to work with, so we assume dx for x0 is symmetric about x0 and equal to x_1-x_0.
-    dx[0] = x_diffs[0]
-
-    # For other points within the domain, we adjust the bin width based on the difference of point x_i with point x_i-1 and point x_i+1.
-    for i in range(1, len(dx)-1):
-        dx[i] = 0.5*x_diffs[i-1] + 0.5*x_diffs[i]
-
-    # At the right edge, it's a similar situation to the left edge, but mirrored.
-    dx[-1] = x_diffs[-1]
-    
-    if len(x)!=len(dx):
-        raise Exception("Lengths are wrong")
-    return dx
-
-
 def line_fit_initial_guess(wavelengths, spectrum, H_a=95, H_b=135, D_a=80, D_b=100):
     """
     Parameters
@@ -2082,7 +2045,11 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
     
     # this section looks across frames for any pixels that are outside the median+Ns*sigma. 
     # pixels that are outside that range are set to the median value. 
-    medval = np.median(data, axis=0) # TODO: If this can be a vectorized form of median_high, it would match better with IDL pipeline.  
+    medval = np.median(data, axis=0)
+    # The following line rejiggers the process to use the higher value of the two middle numbers
+    # used to calculate the median, to better match the IDL pipeline's use of median_high.
+    medhighval = np.min(np.ma.masked_array(data, mask=(data<medval)), axis=0).data
+
     if std_or_mad=="std":
         sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1
     else:
@@ -2094,14 +2061,14 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
         if mask is not None:
             no_rays = np.ma.masked_array(data[f, :, :], mask=mask) # Ignore roughly the region around Lyman alph. This is really kludgy and doesn't work great
         
-        ray_pixels = np.ma.where((no_rays[:, :] > medval+Ns*sigma) | (no_rays[:, :] < medval-Ns*sigma))
+        ray_pixels = np.ma.where((no_rays[:, :] > medhighval+Ns*sigma) | (no_rays[:, :] < medhighval-Ns*sigma))
 
         # Create coordinate lists for where the rays exist
         coord = list(zip(ray_pixels[0], ray_pixels[1]))
 
         # Set any pixels matching the ray coordinates to median
         for c in coord:
-            no_rays[f, c[0], c[1]] = medval[c[0], c[1]]
+            no_rays[f, c[0], c[1]] = medhighval[c[0], c[1]]
 
     return no_rays
 
