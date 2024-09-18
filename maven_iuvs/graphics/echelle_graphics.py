@@ -3,6 +3,7 @@ import numpy as np
 from astropy.io import fits
 import os 
 import copy
+import matplotlib as mpl
 import matplotlib.gridspec as gs
 import matplotlib.pyplot as plt
 import matplotlib.transforms as transforms
@@ -14,7 +15,7 @@ from maven_iuvs.binning import get_pix_range
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
 from maven_iuvs.echelle import make_dark_index, downselect_data, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
-    subtract_darks
+    subtract_darks, remove_cosmic_rays, remove_hot_pixels
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
@@ -332,12 +333,16 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     # Dark subtraction
     dark_subtracted, n_good_frames, bad_inds =  subtract_darks(light_fits, dark_fits)
-
-    # determine plottable image
-    coadded_lights = coadd_lights(dark_subtracted, n_good_frames)
-    detector_image_to_plot = np.nanmedian(dark_subtracted, axis=0) if useframe=="median" else coadded_lights
-
     nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = bad_inds  # unpack indices of problematic frames
+    all_bad_lights = list(set(nan_light_inds + bad_light_inds + light_frames_with_nan_dark))
+    
+    # Clean up the data
+    data = remove_cosmic_rays(dark_subtracted)
+    data = remove_hot_pixels(data, all_bad_lights)
+    
+    # determine plottable image
+    coadded_lights = coadd_lights(data, n_good_frames)
+    detector_image_to_plot = np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
 
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
@@ -543,7 +548,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         elif i in light_frames_with_nan_dark:
             ThumbAxes[i].text(0.1, 1.1, "Bad dark frame", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
 
-        this_frame = light_fits['Primary'].data[i]
+        this_frame = data[i, :, :]#light_fits['Primary'].data[i]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         
@@ -595,3 +600,350 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     return "Success" 
 
 
+# LINE FITTING ========================================================
+
+def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit):
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
+
+    fig, ax = plt.subplots(figsize=(5,3))
+        
+    # Plot the data and fit and a guideline for the central wavelength
+    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
+    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="model fit", linewidth=2, zorder=2)
+
+    ax.set_ylabel("Brightness (kR/nm)")
+    ax.legend()
+    
+    ax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    
+
+def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
+                  t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], 
+                  logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
+                  extra_print_on_plot=None):
+    """
+    Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
+
+    Parameters
+    ----------
+    data_wavelengths : array
+                       Wavelengths in nm for the recorded data
+    data_vals : array
+                Values on the detector at a given wavelength, either in DN or kR after conversion.
+    model_fit : array
+                Fit of the LSF to the H and D emissions
+    fit_params_for_printing : dictionary
+                 A custom dictionary object for easily accessing the parameter fits by name.
+                 Keys: area, area_d, lambdac, lambdac_D, M, B.
+    wavelength_bin_edges : array or None
+                           If provided, this array of values will be plotted as vertical lines on the plot.
+    data_unc : array
+               uncertainty on data points in DN
+    t : string
+        title to use for the plot.
+    fittext_x, fittext_y : arrays
+                           x and y locations for text on plots printing the H and D brightness fits. Assumes
+                           transform=ax.transAxes.
+    logview : boolean
+              if True, y axis will be log scaled.
+    plot_bg : array or None
+              if provided, this is the background from the fit.
+    plot_subtract_bg : boolean
+                       if True, the background will be subtracted from the fits and the result will be plotted.
+    plot_bg_separately : boolean
+                         if True, the background array will be plotted as its own line.
+    extra_print_on_plot : array or None
+                          if provided, this extra text will be printed on the plot to the left of the fit lines.
+    unit : string
+           description of the unit to write on the y-axis label. Typically "DN" or "kR" with a /s/nm possibly appended.
+         
+    """
+
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
+
+    fig = plt.figure(figsize=(12,6))
+    mygrid = gs.GridSpec(4, 1, figure=fig, hspace=0.1)
+    mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
+    residax = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax) 
+
+    mainax.tick_params(labelbottom=False)
+    residax.tick_params(labelbottom=True)
+    mainax.set_title(t)
+
+    # Plot background fit
+    if plot_bg is not None:
+        if plot_subtract_bg: # show subtracted arrays, don't plot background
+            plot_data = data_vals - plot_bg
+            plot_model = model_fit - plot_bg
+        else: # show arrays with bg included, plot bg
+            plot_data = data_vals 
+            plot_model = model_fit
+            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=2, color=bg_color)
+        med_bg = np.median(plot_bg)
+        mainax.text(0, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes)
+        
+    # Plot the data and fit and a guideline for the central wavelength
+    mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
+    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
+
+    # VERTICAL LINES......................
+    guideline_color = "xkcd:cool gray"
+    
+    # Optional plot bin edges, can be helpful
+    if wavelength_bin_edges:
+        for e in wavelength_bin_edges:
+            mainax.axvline(e, color="xkcd:dark gray", linestyle="--", linewidth=0.5, zorder=1)
+
+    # Plot the fit line centers on both residual and main axes
+    mainax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
+
+    # get index of lambda for D so we can find the value there
+    if fit_params_for_printing["lambdac_D"] is not np.nan:
+        mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
+
+    # Print text
+    printme = []
+    printme.append(f"H: {fit_params_for_printing['area']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area'] / fit_params_for_printing['uncert_H'], 1)})")
+    printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
+    talign = ["left", "left"]
+
+    for i in range(0, len(printme)):
+        mainax.text(fittext_x[i], fittext_y[i], printme[i], transform=mainax.transAxes, ha=talign[i])
+
+    mainax.set_ylabel("Brightness (kR/nm)")
+    if logview:
+        mainax.set_yscale("log")
+    mainax.legend(bbox_to_anchor=(1,1))
+    
+    mainax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    
+    # Print some extra messages
+    if extra_print_on_plot:
+        for m in range(len(extra_print_on_plot)):
+            mainax.text(0.05, 0.9-m*0.1, extra_print_on_plot[m], fontsize=14, transform=mainax.transAxes)
+
+    # Residual axis
+    residual_color = "xkcd:dark lilac"
+    residual = (data_vals - model_fit) 
+    residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color)
+    residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
+    residax.set_ylabel(f"Residuals\n (data-model)")
+    residax.set_xlabel("Wavelength (nm)")
+    residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
+    bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
+    residax.set_ylim(-bound, bound)
+    
+    plt.show()
+    
+    if plot_bg_separately:
+        fig2, ax2 = plt.subplots()
+        ax2.plot(data_wavelengths, plot_bg)
+        plt.show()
+    pass
+
+def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, model_fit_new, model_fit_BU, fit_params_new, fit_params_BU, BUbackground, pybackground,
+                             data_unc_new=None, data_unc_BU=None, titles=["Linear background/vectorized cleanup", "Mayyasi+2023 background/pixel-by-pixel cleanup"], 
+                             suptitle=None, unit=None, logview=False, plot_bg=True, plot_subtract_bg=True):
+    """
+    Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
+
+    Parameters
+    ----------
+    data_wavelengths : array
+                       Wavelengths in nm for the recorded data
+    data_vals : array
+                Values on the detector at a given wavelength, either in DN or kR after conversion.
+    model_fit : array
+                Fit of the LSF to the H and D emissions
+    fit_params_for_printing : dictionary
+                 A custom dictionary object for easily accessing the parameter fits by name.
+                 Keys: area, area_d, lambdac, lambdac_D, M, B.
+    H_a, H_b, D_a, D_b : ints
+                         indices of data_wavelengths over which the line area was integrated.
+                         Used here to call fill_betweenx in the event we want to show it on the plot.
+    t : string
+        title to use for the plot.
+    unit : string
+           description of the unit to write on the y-axis label. Typically "DN" or "kR" with a /s/nm possibly appended.
+         
+    """
+
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams['font.size'] = 18
+    mpl.rcParams['legend.fontsize'] = 16
+    mpl.rcParams['xtick.labelsize'] = 16
+    mpl.rcParams['ytick.labelsize'] = 16
+    mpl.rcParams['axes.labelsize'] = 18
+    mpl.rcParams['axes.titlesize'] = 22
+
+    model_color = "#1b9e77"
+    data_color = "#d95f02"
+    bg_color = "xkcd:cerulean"
+
+    fig = plt.figure(figsize=(16,6))
+    mygrid = gs.GridSpec(4, 2, figure=fig, hspace=0.1, wspace=0.1)
+    mainax_new = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
+    residax_new = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax_new) 
+    mainax_BU = plt.subplot(mygrid.new_subplotspec((0, 1), colspan=1, rowspan=3)) 
+    residax_BU = plt.subplot(mygrid.new_subplotspec((3, 1), colspan=1, rowspan=1), sharex=mainax_BU) 
+
+    for (t,  u, ma) in zip(titles, unit, [mainax_new, mainax_BU]):
+        ma.tick_params(labelbottom=False)
+        ma.set_title(t)
+        ma.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
+        ma.set_ylabel(f"Brightness ({u})")
+
+    for ra in [residax_new, residax_BU]:
+        ra.tick_params(labelbottom=True)
+        ra.set_xlabel("Wavelength (nm)")
+
+    plt.suptitle(suptitle, y=1.05)
+    
+    # Plot background fit
+    if plot_bg:
+        if plot_subtract_bg: # show subtracted arrays, plot background offset
+            plot_data_new = data_vals_new - pybackground
+            plot_model_new = model_fit_new - pybackground
+            plot_data_BU = data_vals_BU - BUbackground
+            plot_model_BU = model_fit_BU - BUbackground
+            mainax_new.plot(data_wavelengths, pybackground-50, label="background (offset=-50)", linewidth=2, zorder=2, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground-1, label="background  (offset=-1)", linewidth=2, zorder=2, color=bg_color)
+        else: # show arrays with bg included, plot bg
+            plot_data_new = data_vals_new 
+            plot_model_new = model_fit_new
+            plot_data_BU = data_vals_BU
+            plot_model_BU = model_fit_BU
+            mainax_new.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=2, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=2, color=bg_color)
+        
+    # Plot the data and fit and a guideline for the central wavelength
+    mainax_new.errorbar(data_wavelengths, plot_data_new, yerr=data_unc_new, linewidth=0, zorder=3, alpha=0.7, color=data_color)
+    mainax_new.step(data_wavelengths, plot_data_new, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax_new.step(data_wavelengths, plot_model_new, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
+
+    mainax_BU.errorbar(data_wavelengths, plot_data_BU, yerr=data_unc_BU, linewidth=0, zorder=3, alpha=0.7, color=data_color)
+    mainax_BU.step(data_wavelengths, plot_data_BU, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax_BU.step(data_wavelengths, plot_model_BU, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
+
+    #  Plot the fit line centers on both residual and main axes
+    guideline_color = "xkcd:cool gray"
+    mainax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
+    mainax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
+    residax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
+    
+    # Print text
+    printme_new = []
+    printme_BU = []
+    
+    # Now subtract the background entirely from the fit and then integrate to see the total brightness
+    # printme_new.append(f"H: {fit_params_new['area']}\n± {round(fit_params_new['uncert_H'], 2)} kR")
+    # printme_new.append(f"D: {fit_params_new['area_D']}\n± {round(fit_params_new['uncert_D'], 2)} kR")
+
+    printme_new.append(f"H: {fit_params_new['area']} ± {round(fit_params_new['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area'] / fit_params_new['uncert_H'], 1)})")
+    printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['uncert_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['uncert_D'], 1)})")
+
+    # printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
+    # printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
+
+    printme_BU.append(f"H: {fit_params_BU['area']} ± {round(fit_params_BU['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area'] / fit_params_BU['uncert_H'], 1)})")
+    printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['uncert_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['uncert_D'], 1)})")
+
+    textx = [0.45, 0.45]#[0.38, 0.28]
+    texty = [0.5, 0.4]#[0.5, 0.2]
+    talign = ["left", "left"]
+
+    for i in range(0, len(printme_new)):
+        mainax_new.text(textx[i], texty[i], printme_new[i], transform=mainax_new.transAxes, ha=talign[i])
+        mainax_BU.text(textx[i], texty[i], printme_BU[i], transform=mainax_BU.transAxes, ha=talign[i])
+
+    # ax.set_yscale("log")
+    residax_new.set_ylabel(f"Residuals\n (data-model)")
+    if logview:
+        mainax_new.set_yscale("log")
+        mainax_BU.set_yscale("log")
+    mainax_new.legend()
+    mainax_BU.legend()
+
+    # Residual axis
+    residual_color = "xkcd:dark lilac"
+    residual_new = (data_vals_new - model_fit_new)
+    residax_new.step(data_wavelengths, residual_new, where="mid", linewidth=1, color=residual_color)
+    residax_new.errorbar(data_wavelengths, residual_new, yerr=data_unc_new, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
+    bound = np.max([abs(np.min(residual_new)), np.max(residual_new)]) * 1.10
+    residax_new.set_ylim(-bound, bound)
+    residax_new.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
+
+    residual_BU = (data_vals_BU - model_fit_BU)
+    bound = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
+    bound = bound * 1.10
+    residax_BU.step(data_wavelengths, residual_BU, where="mid", linewidth=1, color="xkcd:medium gray")
+    residax_BU.errorbar(data_wavelengths, residual_BU, yerr=data_unc_BU, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
+    residax_BU.set_ylim(-bound, bound)
+    residax_BU.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
+    plt.show()
+
+    pass
+
+
+def plot_background_in_no_spectrum_region(wavelengths, empty_spec_minus_bg, spec_lbl="", plottitle=""):
+    """
+    Simply plot a zero line and a supplied "spectrum" which we want to be close
+    to zero. In regions of the detector where no data are taken (off-slit), or in
+    dark frames, a "spectrum" in that region minus the background fit in that region
+    should be reasonably close to zero.
+    
+    Parameters
+    ----------
+    wavelengths : array
+                  Wavelengths in nm.
+    empty_spec_minus_bg : array
+                          The difference of: a "spectrum" from a region on the detector above the slit,
+                          and the background fitted in that region.
+                          Thus, this array should be relatively close to zero.
+    spec_lbl : string 
+               Legend label for the fake "spectrum" describing where it was obtained
+    plottitle : string
+                Title for overall plot
+    Returns
+    ----------
+    A plot.
+    """
+    rms_above = np.std(empty_spec_minus_bg)
+    fig, ax = plt.subplots()
+    ax.plot(wavelengths, empty_spec_minus_bg, color="xkcd:gray", label=spec_lbl)
+    ax.plot(wavelengths, np.zeros_like(empty_spec_minus_bg), color="xkcd:electric blue", linewidth=2, label="Zero line")
+    ax.set_ylim(-1, 1)
+    ax.text(0.05, 0.05, f"RMS = {np.round(rms_above, 2)}", transform=ax.transAxes)
+    ax.set_title(plottitle)
+    plt.show()
