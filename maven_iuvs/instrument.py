@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import math
 import pkg_resources
 from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
 
@@ -51,6 +52,8 @@ detector."""
 ech_Lya_slit_start = 346  # Starting pixel of slit in echelle mode for H/D Ly alpha
 
 ech_Lya_slit_end = 535  # Ending pixel of slit in echelle mode for H/D Ly alpha
+
+ech_LSF_unit = 0.35540982 # LSF units: kR / ph / s
 
 def calculate_calibration_curve(hdul,
                                 wavelengths=None,
@@ -239,3 +242,84 @@ def mcp_volt_to_gain(volt, channel="FUV"):
         gain = A*np.exp(alpha*volt)
 
     return gain
+
+
+# TODO: Move these to appropriate places once done.
+def convert_spectrum_DN_to_photoevents(light_fits, spectrum):
+    """
+    Converts a spectrum in DN to photoevents, but doesn't fully calibrate it.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+    spectrum : array
+               A spectrum recorded in DN. May be a fitted LSF or actual data.
+
+    Returns
+    ----------
+    spectrum converted ot photoevents.
+    """
+    
+    return spectrum * DN_to_PE_conversion_factor(light_fits)
+
+
+def DN_to_PE_conversion_factor(light_fits):
+    """
+    For a given light observation file, this returns the conversion factor which, when multiplied by a spectrum in DN/sec/nm,
+    will convert the spectrum to photons.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns
+    ----------
+    conv_factor : float
+                  Multiplies a spectrum in DN to convert it to photoevents.
+    """
+    gain = light_fits['Engineering'].data['MCP_GAIN'][0] # MCP gain in DN
+    gain_v = mcp_dn_to_volt(gain)  # gives Gain in Volts
+    gain_PE  = mcp_volt_to_gain(gain_v, channel=light_fits["Engineering"].data["XUV"])  # gives Gain in PhotoElectrons    
+    conv_factor = 1 / (gain_PE)
+
+    return conv_factor
+
+
+def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
+    """
+    Figure out the random uncertainty in DN.
+
+    # Let's start by just wholesale adapting the uncertainty calculation from Matteo in the IDL pipeline and see what it looks like.
+    # In progress
+    """
+    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])   # I think it's wrong to use this. IDL is acquiring the voltage. mcp_volt_to_gain(, channel="FUV")
+    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # in a square bin of spatial x spectral. works out to 22 for recent dat
+    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) # WHERE the heck did I get this??
+    fit_function = 40 / (2**((700-volt)/50))
+    
+    # This is the correct shape, not sure if it's reasonable values though:
+    ran_DN = np.sqrt(dark_subtracted_and_cleaned_data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
+    ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
+
+    return ran_DN
+
+
+def get_wavelengths(light_fits):
+    """
+    Retrieves wavelengths for use from a given light file. This is done in more than one place,
+    so it was useful to make a dedicated function.
+
+    Parameters:
+    -----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns:
+    -----------
+    wavelength array as defined in the light_fits file.
+    """
+
+    # TODO: build in code that will account for the possible case where wavelengths shift per integration
+    return light_fits["Observation"].data["Wavelength"][0, 1, :]
