@@ -234,8 +234,6 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
                 date[1] = datetime.datetime(date[1].year, date[1].month, date[1].day, 23, 59, 59)
             elif date[1] == -1: # Use this to just go until the present time/date.
                 date[1] = datetime.datetime.utcnow()
-            
-            print(f"Returning observations between {date[0]} and {date[1]}")
 
             selected_lights = [entry for entry in selected_lights if date[0] <= entry['datetime'] <= date[1]]
 
@@ -562,7 +560,7 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
             dark_opts = find_dark_options(fidx, dark_idx) 
             chosen_dark = choose_dark(fidx, dark_opts)
             if chosen_dark == None:
-                lights_missing_darks.append(fidx["name"])  # if it's a light file missing a dark, we would like to know.
+                lights_missing_darks.append(fidx)#fidx["name"])  # if it's a light file missing a dark, we would like to know.
             else:
                 lights_and_darks[fidx['name']] = (fidx, chosen_dark)
         except ValueError:
