@@ -180,7 +180,7 @@ def identify_rogue_observations(idx):
 
 # HELPER METHODS ======================================================
 
-def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, ls=None):
+def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, ls=None, int_time=None, binning=None):
     """
     Given the light_index of files, this will select only those files which 
     match the orbit number, segment, or date. 
@@ -253,6 +253,15 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")
+
+    
+    # int time
+    if int_time is not None:
+        selected_lights = [entry for entry in selected_lights if entry['int_time'] == int_time]
+
+    # int time
+    if binning is not None:
+        selected_lights = [entry for entry in selected_lights if entry['binning'] == binning]
 
     # lat
     if lat is not None:
