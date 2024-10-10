@@ -180,15 +180,15 @@ def identify_rogue_observations(idx):
 
 # HELPER METHODS ======================================================
 
-def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, ls=None, int_time=None, binning=None):
+def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None, lat=None, ls=None, int_time=None, binning=None):
     """
-    Given the light_index of files, this will select only those files which 
+    Given the index of files, this will select only those files which 
     match the orbit number, segment, or date. 
 
     Parameters
     ----------
-    light_index : list
-                  list of dictionaries of file metadata returned by get_file_metadata
+    index : list
+            list of dictionaries of file metadata returned by get_file_metadata
     orbit : int or list
             orbit number to select; if a list of length 2 is passed, orbits within the range 
             will be selected. A -1 may be passed in the second position to indicate to run to the end.
@@ -201,26 +201,34 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
 
     Returns
     ----------
-    selected_lights : list
-                      Similar to light_index, list of dictionaries of file metadata.
+    selected : list
+               Similar to index, list of dictionaries of file metadata.
     """
-    selected_lights = copy.deepcopy(light_index)
+    selected = copy.deepcopy(index)
+
+    # Filter to lights or darks as specified 
+    if light_dark=="light":
+        selected = [entry for entry in selected if ech_islight(entry)]
+    elif light_dark=="dark":
+        selected = [entry for entry in selected if ech_isdark(entry)]
+    else: 
+        pass
 
     # First filter by segment; a given segment can occur on many dates and many orbits
     if segment is not None:
-        selected_lights = [entry for entry in selected_lights if segment in iuvs_segment_from_fname(entry['name'])]
+        selected = [entry for entry in selected if segment in iuvs_segment_from_fname(entry['name'])]
 
     # Then filter by orbit, since orbits sometimes cross over day boundaries
     if orbit is not None: 
         # If specifying orbits, first get rid of cruise data
 
         if type(orbit) is int:
-            selected_lights = [entry for entry in selected_lights if ((entry['orbit']==orbit) & (entry['orbit'] != "cruise")) ]
+            selected = [entry for entry in selected if ((entry['orbit']==orbit) & (entry['orbit'] != "cruise")) ]
         elif type(orbit) is list:
             if orbit[1] == -1: 
                 orbit[1] = 99999 # MAVEN will die before this orbit number is reached
 
-            selected_lights = [entry for entry in selected_lights if orbit[0] <= entry['orbit'] <= orbit[1]]
+            selected = [entry for entry in selected if orbit[0] <= entry['orbit'] <= orbit[1]]
 
     # Lastly, filter by date/time
     if date is not None:
@@ -235,7 +243,7 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
             elif date[1] == -1: # Use this to just go until the present time/date.
                 date[1] = datetime.datetime.utcnow()
 
-            selected_lights = [entry for entry in selected_lights if date[0] <= entry['datetime'] <= date[1]]
+            selected = [entry for entry in selected if date[0] <= entry['datetime'] <= date[1]]
 
         # To get observations at a specific day or specific day/time:
         elif type(date) is not list:  
@@ -244,10 +252,10 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
                 date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0)
                 date1 = datetime.datetime(date.year, date.month, date.day, 23, 59, 59)
 
-                selected_lights = [entry for entry in selected_lights if date0 <= entry['datetime'] <= date1]
+                selected = [entry for entry in selected if date0 <= entry['datetime'] <= date1]
 
             else: # if a full datetime.datetime object is entered, look for that exact entry.
-                selected_lights = [entry for entry in selected_lights if entry['datetime'] == date]
+                selected = [entry for entry in selected if entry['datetime'] == date]
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")
@@ -255,11 +263,11 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
     
     # int time
     if int_time is not None:
-        selected_lights = [entry for entry in selected_lights if entry['int_time'] == int_time]
+        selected = [entry for entry in selected if entry['int_time'] == int_time]
 
     # int time
     if binning is not None:
-        selected_lights = [entry for entry in selected_lights if entry['binning'] == binning]
+        selected = [entry for entry in selected if entry['binning'] == binning]
 
     # lat
     if lat is not None:
@@ -267,12 +275,12 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
             lat0 = math.floor(lat)
             lat1 = math.ceil(lat)
 
-            selected_lights = [entry for entry in selected_lights 
+            selected = [entry for entry in selected 
                                if (lat0 <= entry['minmax_lat'][0]) & (entry['minmax_lat'][1] <= lat1)
                               ]
 
         elif type(lat) is list:
-            selected_lights = [entry for entry in selected_lights 
+            selected = [entry for entry in selected 
                                if (lat[0] <= entry['minmax_lat'][0]) & (entry['minmax_lat'][1] <= lat[1])
                               ]
 
@@ -281,11 +289,11 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
         if type(ls) is not list:
             ls0 = math.floor(lat)
             ls1 = math.ceil(lat)
-            selected_lights = [entry for entry in selected_lights if (ls0 <= entry['Ls'] <= ls1)]
+            selected = [entry for entry in selected if (ls0 <= entry['Ls'] <= ls1)]
         elif type(ls) is list:
-            selected_lights = [entry for entry in selected_lights if (ls[0] <= entry['Ls'] <= ls[1])]
+            selected = [entry for entry in selected if (ls[0] <= entry['Ls'] <= ls[1])]
 
-    return selected_lights
+    return selected
 
 # Relating to dark vs. light observations -----------------------------
 def get_dark(light_filepath, idx, drkidx):
