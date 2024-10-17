@@ -2093,30 +2093,7 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=95, H_b=135, D_a=80, D_b=1
 # Cosmic ray and hot pixel removal -------------------------------------------
 
 
-def get_lya_mask(datacube, light_fits):
-    """
-    Construct a mask for the Lyman alpha region to be used when cleaning up data. 
-    This is not a particularly good approach and tends to ruin the spectra shape, so this should probably be retired.
-    This also isn't currently used because the hot pixel routine is working ok and not deleting real emissions.
-
-    Parameters
-    ----------
-    datacube : array (3D)
-               Detector image array in (integrations, spatial bins, spectral bins)
-    light_fits : astropy.io.fits instance
-                 fits object representing the light observations.
-    Returns
-    ----------
-    mask : masked array
-    """
-    mask = np.zeros_like(datacube[0, :, :]) # only needs to be 2D.
-    si1, si2 = get_ech_slit_indices(light_fits) # slit
-    wi = np.asarray(np.where(np.logical_and(get_wavelengths(light_fits)>=121.53, get_wavelengths(light_fits)<=121.58)))[0]
-    mask[si1:si2+1, wi] = 1  # +1 because of the way python does indices.
-    return mask
-
-
-def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"): 
+def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"): 
     """
     Removes cosmic rays from the detector image by stacking images and setting any pixel
     which is outside the median ± Ns*sigma to the median value.
@@ -2125,10 +2102,12 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
     ----------
     data : Array (integrations, spatial bins, spectral bins)
            All detector images for a given observation
-    themask : masked array
-              Mask shape to use for masking out lyman alpha.
     Ns : int
          number of sigma to constrain stacked-frame filtering
+    std_or_mad : string
+                 "std" or "mad", whether to use standard deviation
+                 or median absolute deviation in finding the "standard 
+                 deviation" of the pixels across integrations.
     """
     Nfr = data.shape[0]  # frames (integrations)
     Nsp = data.shape[1]  # Spatial bins
@@ -2151,24 +2130,17 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
         sigma = sp.stats.median_abs_deviation(data, axis=0)
     
     no_rays = copy.deepcopy(data)
-    
+
     for f in range(data.shape[0]):
-        if mask is not None:
-            no_rays = np.ma.masked_array(data[f, :, :], mask=mask) # Ignore roughly the region around Lyman alph. This is really kludgy and doesn't work great
+
+        # Find all points in the data cube where the value recorded is larger than median + Ns*sigma. 
+        ray_pixels = np.where((no_rays[f, :, :] > medhighval+Ns*sigma) | (no_rays[f, :, :] < medhighval-Ns*sigma))
+        no_rays[f, *ray_pixels] = medhighval[ray_pixels]
         
-        ray_pixels = np.ma.where((no_rays[:, :] > medhighval+Ns*sigma) | (no_rays[:, :] < medhighval-Ns*sigma))
-
-        # Create coordinate lists for where the rays exist
-        coord = list(zip(ray_pixels[0], ray_pixels[1]))
-
-        # Set any pixels matching the ray coordinates to median
-        for c in coord:
-            no_rays[f, c[0], c[1]] = medhighval[c[0], c[1]]
-
     return no_rays
 
 
-def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
+def remove_hot_pixels(data, all_bad_lights=None, Wdt=3, Ns=3):
     """
     Removes hot pixels from the data by calculating the median pixel value in a 7x7 surrounding box 
     at every pixel, and setting the central pixel to the median value if it is outside the median ± 3σ
@@ -2178,8 +2150,8 @@ def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
     ----------
     data : Array (integrations, spatial bins, wavelength bins)
            All detector images for a given observation
-    themask : masked array
-              Mask shape to use for masking out lyman alpha.
+    all_bad_lights : list
+                     List of light integration frames which are broken in some way.
     Wdt : int
           Width of the box used for single-frame median filtering
     Ns : int
@@ -2217,10 +2189,7 @@ def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
 
     for f in frame_list:
         # Ignore roughly the region around Lyman alpha. This is really kludgy and doesn't work great
-        if mask is not None:
-            thisdata = np.ma.masked_array(data[f, :, :], mask=mask) 
-        else:
-            thisdata = data[f, :, :]
+        thisdata = data[f, :, :]
 
         # First task is to compute the difference of every pixel from the median of a 7x7 box centered on that pixel: -------------
         # First, at every pixel, get the median value in a window_edge x window_edge sliding window centered on each pixel.
