@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.transforms as transforms
 import math 
 import idl_colorbars as idl_colorbars
+import re
 from tqdm.auto import tqdm
 from pathlib import Path
 from maven_iuvs.binning import get_pix_range
@@ -19,7 +20,7 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, \
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
-    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime
+    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE
 from maven_iuvs.search import find_files 
 from maven_iuvs.time import utc_to_sol
 from maven_iuvs.user_paths import l1a_dir
@@ -100,7 +101,9 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
         finally:
             if quicklook_status == "File exists":
                 already_done.append(light_idx['name'])
-            elif quicklook_status == "Missing critical observation data":
+            elif (quicklook_status=="Missing critical observation data: no valid lights"):
+                badfiles.append(light_idx['name'])
+            elif (quicklook_status=="Missing critical observation data: no valid darks"):
                 badfiles.append(light_idx['name'])
             elif quicklook_status == "Success":
                 processed.append(light_idx['name'])
@@ -132,14 +135,14 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
             if len(files_missing_dark)>0:
                 logfile.write(f"{len(files_missing_dark)} files were missing darks:\n")
                 for f in files_missing_dark:
-                    logfile.write(f"\t{f}\n")
+                    logfile.write(f"\t{f['name']}\n")
                 logfile.write("\n") # newline
 
             # Log files with bad data
             if len(badfiles) > 0:
                 logfile.write(f"{len(badfiles)} file(s) had no valid data:\n")
                 for f in badfiles:
-                    logfile.write(f"\t{f}\n")
+                    logfile.write(f"\t{f['name']}\n")
                 logfile.write("\n") # newline
            
             # Log files that threw a weird error
@@ -316,10 +319,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     # Load fits files
     light_fits = fits.open(light_path)
     dark_fits = fits.open(dark_path)
-    
+
     # Set up filename and check to see if file is already done
     if savefolder is not None:
-        ql_filepath = savefolder + f"{light_fits['Primary'].header['filename'][:-5]}.png"
+        ql_filepath = savefolder + f"{re.search(fn_noext_RE, light_path).group(0)}.png"
 
         if not overwrite:
             if Path(ql_filepath).is_file():
@@ -337,7 +340,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     all_bad_lights = list(set(nan_light_inds + bad_light_inds + light_frames_with_nan_dark))
     
     # Clean up the data
-    data = remove_cosmic_rays(dark_subtracted)
+    data = remove_cosmic_rays(dark_subtracted, std_or_mad="mad")
     data = remove_hot_pixels(data, all_bad_lights)
     
     # determine plottable image
@@ -510,15 +513,27 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
                            arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[0].set_title("First dark", fontsize=16+fontsizes[fs])
-
-    detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
-                           arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[1].set_title("Second dark", fontsize=16+fontsizes[fs])
-
-    # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
-    detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
-                           arange=arange, show_colorbar=False, plot_full_extent=False)
     DarkAxes[2].set_title("Average dark", fontsize=16+fontsizes[fs])
+
+    if n_ints_dark >= 2:
+        detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
+                               arange=arange, show_colorbar=False, plot_full_extent=False)
+        # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
+        detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
+                               arange=arange, show_colorbar=False, plot_full_extent=False)
+        
+    elif n_ints_dark==1:
+        template = np.empty_like(second_dark)
+        template[:] = np.nan
+
+        detector_image_echelle(dark_fits, template, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
+                               arange=arange, show_colorbar=False, plot_full_extent=False)
+        detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
+                               arange=arange, show_colorbar=False, plot_full_extent=False)
+        # Dark frame error messages 
+        DarkAxes[1].text(0.1, 0.5, "No second dark frame", color="white", fontsize=16+fontsizes[fs], transform=DarkAxes[1].transAxes)
+        DarkAxes[2].text(0.1, 0.5, "Average = only frame", color="white", fontsize=16+fontsizes[fs], transform=DarkAxes[2].transAxes)
 
     # If dark had a nan, show it but print a message.
     if len(nan_dark_inds) != 0:
@@ -548,7 +563,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         elif i in light_frames_with_nan_dark:
             ThumbAxes[i].text(0.1, 1.1, "Bad dark frame", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
 
-        this_frame = data[i, :, :]#light_fits['Primary'].data[i]
+        this_frame = data[i, :, :]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         
