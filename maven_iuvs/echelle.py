@@ -515,18 +515,24 @@ def get_dark_frames(dark_fits, average=False):
     n_ints_dark = get_n_int(dark_fits)
 
     # Make a grand array to store the darks
-    darks = np.empty((n_ints_dark, *dark_fits['Primary'].data[0].shape))
+    darks = np.empty((2, *dark_fits["Primary"].data.shape[-2:]))
 
-    if n_ints_dark <= 1: 
-        raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
-
-    # The first and second dark integrations have different noise patterns
-    if n_ints_dark == 2:
+    if n_ints_dark == 0:
+        raise Exception(f"{dark_fits['Primary'].header['FILENAME']} has no darks at all")
+    elif n_ints_dark == 1: 
+        # Early mission, only one dark frame was taken.
+        darks[0, :, :] = dark_fits['Primary'].data[0]
+        darks[1, :, :] = dark_fits['Primary'].data[0] # Best option for observations with 1 dark, which is mostly early mission. 
+                                                      # Don't want to set to nan because we would still like to see the light 
+                                                      # frames. Not a better way to adjust the quicklooks atm. 
+    elif n_ints_dark == 2:
+        # Noise pattern of the first and every other frame is different. Eventually, we realized this
+        # and started taking two darks
         darks[0, :, :] = dark_fits['Primary'].data[0]
         darks[1, :, :] = dark_fits['Primary'].data[1]
-    else:
+    elif n_ints_dark > 2:
+        # If there's more than 2, we can just take the element-wise mean of frames 2:end. Ignore nans.
         darks[0, :, :] = dark_fits['Primary'].data[0]
-        # If more than 2 additional darks, get the element-wise mean to use as second dark. Ignore nans.
         darks[1, :, :] = np.nanmean(dark_fits['Primary'].data[1:, :, :], axis=0)
 
     # Check that we don't have both frames full of NaN
