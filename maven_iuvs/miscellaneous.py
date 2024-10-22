@@ -8,7 +8,8 @@ from maven_iuvs.user_paths import l1a_dir
 orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
 orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)"
 datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}"
-fn_RE = r"(?<=00/).+"
+fn_RE = r"mvn.+" #r"(?<=00/).+"
+fn_noext_RE = r"mvn.+[r|s]\d{2}"
 folder_RE = r".+(?=mvn)"
 uniqueID_RE = r"(?<=l[0-2][a-c]\_).+(?=_v[\d]{0,2})"
 
