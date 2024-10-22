@@ -190,7 +190,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     # Set up the gridspec
     TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=1.5)
     TopGrid.update(bottom=0.5)
-    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.01, wspace=0.05) 
+    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.05, wspace=0.05) 
     BottomGrid.update(top=0.45) # Don't change these! Figure size changes depending on number of thumbnails
                                 # and if you make it too tight, stuff will overlap for files with lots of
                                 # light integrations.
