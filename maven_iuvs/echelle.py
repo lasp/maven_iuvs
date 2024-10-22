@@ -2037,33 +2037,36 @@ def get_spectrum(data, light_fits, average=False, coadded=False, integration=0):
     return spectrum
 
 
-def add_in_quadrature(uncertainties, light_fits, integration=0): 
+def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=0): 
     """
     Similar to get_spectrum, but adds up the uncertainties in what is hopefully 
     the correct manner. 
 
     Parameters:
     ----------
-    data : array
+    uncertainties : array
            3D numpy array of image detector data, dark subtracted and cleaned. 
     light_fits : astropy.io.fits instance
                  File with light observation
+    coadded : boolean
+              whether the supplied 'uncertainties' array has already been coadded across integrations.
+              if True, the dimensionality of 'uncertainties' should be (spatial, spectral).
     integration : int
                   Integration frame to use for the specrum. Used if coadded=False.
-    clean_data : boolean 
-                 whether to perform the data cleaning routines
-
     Returns:
     ----------
-    spectrum : array
+    total_uncert : array
                Spectrum in total DN summed over the spatial dimension
     
     """
     # Collect pixel range which we need to find the slit start and end 
     si1, si2 = get_ech_slit_indices(light_fits)
 
-    total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2+1, :])**2, axis=0) )
-    # +1 because of the way python does indices.
+    if coadded:
+        total_uncert = np.sqrt( np.sum( (uncertainties[si1:si2+1, :])**2, axis=0) )
+    else:
+        total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2+1, :])**2, axis=0) )
+
     return total_uncert
 
 
