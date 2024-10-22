@@ -1364,7 +1364,7 @@ def make_sza_plot(fitfile, ax=None, linecolor="cornflowerblue"):
         intnum += 1
     
     ax.tick_params(axis="both", labelsize=16)
-    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_xlabel("Integration", fontsize=20)
     ax.set_ylabel("SZA (°)", fontsize=20)
     # ax.set_ylim(0,180)
     ax.set_title("Solar zenith angle", fontsize=20)
@@ -1403,7 +1403,7 @@ def make_SCalt_plot(fitfile, ax=None, t=""):
     
     ax.scatter(range(0, arr_shape[0]), arr, color="cornflowerblue", s=25)
     ax.tick_params(axis="both", labelsize=16)
-    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_xlabel("Integration", fontsize=20)
     ax.set_ylabel("Alt (km)", fontsize=20)
     ax.set_title(f"Spacecraft altitude{t}", fontsize=20)
 

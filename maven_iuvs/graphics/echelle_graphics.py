@@ -12,23 +12,28 @@ import idl_colorbars as idl_colorbars
 import re
 from tqdm.auto import tqdm
 from pathlib import Path
-from maven_iuvs.binning import get_pix_range
-from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end
-from maven_iuvs.echelle import make_dark_index, downselect_data, \
+from maven_iuvs.binning import get_pix_range, get_bin_edges
+from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end, convert_spectrum_DN_to_photoevents
+from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadrature, background, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
-    subtract_darks, remove_cosmic_rays, remove_hot_pixels
+    subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
+    get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
-from maven_iuvs.miscellaneous import find_nearest, iuvs_orbno_from_fname, \
-    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE
+from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
+    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE, fn_RE
 from maven_iuvs.search import find_files 
 from maven_iuvs.time import utc_to_sol
 from maven_iuvs.user_paths import l1a_dir
 
-# QUICKLOOK CODE ======================================================
+# COMMON COLORS ==========================================================================================
+model_color = "#1b9e77"
+data_color = "#d95f02"
+bg_color = "xkcd:cerulean"
 
+# QUICKLOOK CODE =========================================================================================
 
-def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, savefolder=None, **kwargs): # show_D_inset=True, show_D_guideline=True,prange=None, arange=None, img_dpi=300, overwrite=False verbose=False, figsz=(36,26), show=True, savefolder=None,  
+def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, savefolder=None, **kwargs):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either date, orbit, or segment.
     
@@ -178,13 +183,17 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
     # Calculate a new fig height based on thumbnail rows
     figsz = (figsz[0], figsz[1] + 2*THUMBNAIL_ROWS)
-
     fig = plt.figure(figsize=figsz)
     COLS = 16
-    ROWS = 6
-    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.45, wspace=1.3)
+    ROWS = 8
 
+    # Set up the gridspec
+    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=1.5)
     TopGrid.update(bottom=0.5)
+    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.01, wspace=0.05) 
+    BottomGrid.update(top=0.45) # Don't change these! Figure size changes depending on number of thumbnails
+                                # and if you make it too tight, stuff will overlap for files with lots of
+                                # light integrations.
 
     # Define some sizes
     d_main = 5  # colspan of main detector plot
@@ -194,24 +203,27 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     
     # Detector images and geometry ------------------------------------------------------------
     # Spectrum axis
-    SpectrumAx = plt.subplot(TopGrid.new_subplotspec((0, 0), colspan=d_main, rowspan=1)) 
+    SpectrumAx = plt.subplot(TopGrid.new_subplotspec((0, 0), colspan=d_main, rowspan=2)) 
 
     for s in ["top", "right"]:
         SpectrumAx.spines[s].set_visible(False)
 
+    # A spacing axis between spectrum axis and detector image axis
+    HorizSpacer = plt.subplot(TopGrid.new_subplotspec((2, d_main), rowspan=1, colspan=1)) 
+    HorizSpacer.axis("off")
+
     # Main plot: top left of figure (for detector image)
-    MainAx = plt.subplot(TopGrid.new_subplotspec((1, 0), colspan=d_main, rowspan=d_main)) 
+    MainAx = plt.subplot(TopGrid.new_subplotspec((3, 0), colspan=d_main, rowspan=d_main)) 
     MainAx.axes.set_aspect(aspect, adjustable="box")
-    MainAx.sharex(SpectrumAx)
-    
+
     # A spacing axis between detector image and geometry axes
     VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
     VerticalSpacer.axis("off")
     
     # 3 small subplots in a row to the right of main plot
-    R1Ax1 = plt.subplot(TopGrid.new_subplotspec((1, start_sm), colspan=d_dk, rowspan=d_dk))
-    R1Ax2 = plt.subplot(TopGrid.new_subplotspec((1, start_sm+d_dk), colspan=d_dk, rowspan=d_dk))
-    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((1, start_sm+2*d_dk), colspan=d_dk, rowspan=d_dk))
+    R1Ax1 = plt.subplot(TopGrid.new_subplotspec((3, start_sm), colspan=d_dk, rowspan=d_dk))
+    R1Ax2 = plt.subplot(TopGrid.new_subplotspec((3, start_sm+d_dk), colspan=d_dk, rowspan=d_dk))
+    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((3, start_sm+2*d_dk), colspan=d_dk, rowspan=d_dk))
 
     R1Axes = [R1Ax1, R1Ax2, R1Ax3]
     for a in R1Axes:
@@ -220,15 +232,13 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
         a.axes.set_aspect(aspect, adjustable="box")
 
     # Another row of 3 small subplots
-    R2Ax1 = plt.subplot(TopGrid.new_subplotspec((1+d_dk, start_sm), colspan=d_dk, rowspan=d_geo))
-    R2Ax2 = plt.subplot(TopGrid.new_subplotspec((1+d_dk, start_sm+d_dk), colspan=d_dk, rowspan=d_geo))
-    R2Ax3 = plt.subplot(TopGrid.new_subplotspec((1+d_dk, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo))
+    R2Ax1 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm), colspan=d_dk, rowspan=d_geo))
+    R2Ax2 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm+d_dk), colspan=d_dk, rowspan=d_geo))
+    R2Ax3 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo))
     R2Axes = [R2Ax1, R2Ax2, R2Ax3]
     
     # Thumbnail area -------------------------------------------------------------------------
-    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.05, wspace=0.05) 
-    BottomGrid.update(top=0.45)
-    
+
     row_count = 0
     col_count = 0
     ThumbAxes = []
@@ -248,6 +258,8 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
         temp_ax.axes.set_aspect(aspect, adjustable="box")
 
         ThumbAxes.append(temp_ax)
+
+    plt.subplots_adjust(hspace=0.2)
     
     return fig, [SpectrumAx, MainAx], R1Axes, R2Axes, ThumbAxes 
 
@@ -307,6 +319,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
           May also return an unhandled exception to allow for flexible error catching.
           If the status is "Success", the completed figure is also saved to savefolder.
     """
+    # Adjust font face
+    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
 
     # Create the folder if it isn't there
     if savefolder is not None:
@@ -328,11 +342,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
             if Path(ql_filepath).is_file():
                 return "File exists"
     
+    # PROCESS THE DATA =================================================================================
     # Find number of light integrations
     n_ints = get_n_int(light_fits)
     n_ints_dark = get_n_int(dark_fits)
-
-    # PROCESS THE DATA ---------------------------------------------------------------------------------
 
     # Dark subtraction
     dark_subtracted, n_good_frames, bad_inds =  subtract_darks(light_fits, dark_fits)
@@ -343,10 +356,42 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     data = remove_cosmic_rays(dark_subtracted, std_or_mad="mad")
     data = remove_hot_pixels(data, all_bad_lights)
     
+    # get the uncertainties
+    dn_unc = ran_DN_uncertainty(light_fits, data)
+
     # determine plottable image
     coadded_lights = coadd_lights(data, n_good_frames)
     detector_image_to_plot = np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
 
+    # uncertainties ... these look a little too large
+    coadded_unc = np.sqrt( np.sum( dn_unc**2, axis=0) / n_good_frames)
+    coadded_unc_spec = add_in_quadrature(coadded_unc, light_fits, coadded=True)  # added over spatial for a spectrum uncertainty
+
+    # Do a fit to the coadded imae -------------------------------------------------------------------
+    conv_to_kR_per_nm, unused, conv_to_kR = get_conversion_factors(light_fits["Primary"].header["INT_TIME"], 
+                                                                                    np.diff(get_bin_edges(light_fits)), 
+                                                                                    calibration="new")
+    wl = get_wavelengths(light_fits) 
+    coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
+    initial_guess = line_fit_initial_guess(wl, coadded_spec) 
+    lsfx_nm, lsf_f = load_lsf(calibration="new")
+    theCLSF = theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
+    
+    fit_params, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, unc=coadded_unc_spec, 
+                                                solver="Powell", fitter="scipy", hush_warning=True) 
+    bg_fit = background(wl, fit_params[3], fit_params[2], fit_params[4])
+        
+    # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
+    I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
+    spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_spec) * conv_to_kR_per_nm
+    data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_unc_spec) * conv_to_kR_per_nm
+    bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
+    H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
+    D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
+    H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
+    D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
+
+    # DARK PROCESSING ===================================================================================
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
     first_dark = darks[0, :, :]
@@ -357,6 +402,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     # get all the data values so we can make one common colorbar
     all_data = np.concatenate((detector_image_to_plot, first_dark, second_dark, avg_dark), axis=None) 
+
+    # PLOT SETUP =======================================================================================
 
     # Set the plotting ranges --------------------------------------------------------------------------
     # By allowing prange and arange to be a mix of 'None' and actual values,
@@ -380,7 +427,6 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         if arange[a] is None:
             arange[a] = np.nanpercentile(all_data, prange[a])
             
-    # Other plot preparations --------------------------------------------------------------------------
     if show_DN_histogram:
         pctles = [50, 75, 99, 99.9]
         pctle_vals = np.percentile(all_data, pctles)
@@ -414,73 +460,27 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         aspect_ratio = spatial_extent / spectral_extent
 
     # Define how many pts to add to various fonts given the qualitative font description supplied
-    fontsizes = {"small": 0, "medium": 4, "large": 8, "huge": 12}
+    fontsizes = {"small": 0, "medium": 4, "large": 8, "huge": 12, "enormous": 16}
 
-    # Now start to bulid the quicklook image   -----------------------------------------------------------------------
+    # MAKE THE QUICKLOOK ============================================================================================
     QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=figsz, aspect=aspect_ratio)
     
     # Plot Lyman alpha spectrum --------------------------------------------------------------------------------------
-    # Find slit location; slit is typically between pixels 346--535
-    slit_i1 = find_nearest(light_spapixrng, ech_Lya_slit_start)[0]  # start of slit
-    slit_i2 = find_nearest(light_spapixrng, ech_Lya_slit_end)[0]  # end of slit
+    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=12+fontsizes[fs])
+    DetAxes[0].errorbar(wl, spec_kR_pernm, yerr=data_unc_kR_pernm, color=data_color, linewidth=0,elinewidth=1, zorder=3)
+    DetAxes[0].step(wl, spec_kR_pernm, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    DetAxes[0].step(wl, I_fit_kR_pernm, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
+    DetAxes[0].step(wl, bg_array_kR_pernm, where="mid", color=bg_color, label="background", linewidth=2, zorder=2)
+    DetAxes[0].text(1.1, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
+    DetAxes[0].text(1.1, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+    DetAxes[0].text(1.1, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
 
-    # Get an array of bin centers from the arrays of bin edges. Easier for plotting spectrum.
-    spec_x = [(light_spepixrng[i] + light_spepixrng[i + 1]) / 2 for i in range(len(light_spepixrng) - 1)]  
-    # Sum up the spectra over the range in which Ly alpha is visible on the slit (not outside it)
-    spectrum = np.sum(detector_image_to_plot[slit_i1:slit_i2, :], axis=0) / (slit_i2 - slit_i1)
-    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=8+fontsizes[fs])
-    DetAxes[0].set_ylabel("Avg. DN/sec/px", fontsize=8+fontsizes[fs])
-    DetAxes[0].plot(spec_x, spectrum)
-    DetAxes[0].set_xlim(spec_x[0], spec_x[-1])
     DetAxes[0].set_ylim(bottom=0)
-    DetAxes[0].axes.get_xaxis().set_visible(True) # try in vain to turn off x-axis.     
-    DetAxes[0].tick_params(axis="x", bottom=False, labelbottom=False, labelcolor="white", color="white") 
-        
-    # Find where the Lyman alpha emission should be
-    wvs = light_fits['Observation'].data['WAVELENGTH'][0][0]  # We only need one row since all are the same.
-    Hlya_i_guess, Hlya_val = find_nearest(wvs, 121.567)  # This is a guess for where it should be--this helps rule out rogue cosmic rays that might sometimes dominate
-    peak_in_lya_window = np.max(spectrum[Hlya_i_guess-5:Hlya_i_guess+5])
-    Hlya_i = np.where(spectrum == peak_in_lya_window)[0][0]  # find index where spectrum has the most power (that'll be Lyman alpha)
-    Hlya = wvs[Hlya_i]  # this is the recorded wavelength in the FITS file which goes with the highest power in the spectrum, i.e. effective location of lyman alpha.
-    Dlya_i, Dlya = find_nearest(wvs, Hlya - 0.033)  # calculate the index of where D lyman alpha should be based on H lyman alpha. 0.033 is the difference in wavelength in nm.
-
-    # Another way to find Lyman alpha line center was to take the best wavelength value for it and add the Lyman alpha centroid from fits, 
-    # but it tends to misplace the center:
-    # Lya_shift = int(np.mean(light_fits['Integration'].data['LYA_CENTROID']))
-
-    DetAxes[0].axvline(spec_x[Hlya_i], color="xkcd:gunmetal", zorder=0)
-
-    # Determine whether D inset should automatically be turned off (e.g. for space observations)
-    if segment in ["outspace", "inspace", "comm"]:
-        show_D_guideline = False 
-        show_D_inset = False 
-
-    if show_D_guideline:
-        DetAxes[0].axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0)  # If using centroid, should add Lya_shift
-    
-    # Make an inset to zoom in on the D Lyman alpha line
-    if show_D_inset: 
-        # Determine where to start drawing inset based on location of Lyman alpha so we don't draw over it
-        rel_loc_Lya = Hlya_i / len(wvs)
-        if rel_loc_Lya < 0.5:
-            x0 = 0.5
-        elif rel_loc_Lya == 0.5:
-            x0 = 0.7
-        elif rel_loc_Lya > 0.5:
-            x0 = 0.05
-
-        # Draw inset
-        inset = DetAxes[0].inset_axes([x0, 0.5, 0.4, 0.5], transform=DetAxes[0].transAxes) # inset (x0, y0, width, height)
-        D_i = Dlya_i - 19 
-        D_f = Dlya_i + 19
-        inset.plot(spec_x[D_i:D_f], spectrum[D_i:D_f])
-        inset.axes.get_xaxis().set_visible(True)
-        inset.tick_params(axis="x", bottom=True, top=False, labelbottom=True)
-        inset.axvline(spec_x[Dlya_i], color="xkcd:blood orange", zorder=0) 
-
-        # If we had to move the inset to the left, move the ticks to the right
-        inset.yaxis.set_label_position("right")
-        inset.yaxis.tick_right()
+    DetAxes[0].axes.get_xaxis().set_visible(True)   
+    DetAxes[0].tick_params(axis="both", labelsize=10+fontsizes[fs], bottom=True, labelbottom=True)
+    DetAxes[0].set_xlabel("Wavelength (nm)", fontsize=12+fontsizes[fs])
+    DetAxes[0].set_ylabel("kR/nm", fontsize=12+fontsizes[fs]) 
+    DetAxes[0].legend(loc="upper left", fontsize=8+fontsizes[fs])
     
     # Plot the main detector image -------------------------------------------------------------------------
     detector_image_echelle(light_fits, detector_image_to_plot, light_spapixrng, light_spepixrng,
@@ -494,10 +494,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     trans = transforms.blended_transform_factory(DetAxes[1].transAxes, DetAxes[1].transData)
     DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
     DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
-    DetAxes[1].set_xlabel("Spectral", fontsize=10+fontsizes[fs])
-    DetAxes[1].set_ylabel("Spatial", fontsize=10+fontsizes[fs])
+    DetAxes[1].set_xlabel("Spectral", fontsize=12+fontsizes[fs])
+    DetAxes[1].set_ylabel("Spatial", fontsize=12+fontsizes[fs])
     DetAxes[1].set_title(f"{'Median' if useframe=='median' else 'Coadded'} detector image (dark subtracted)", fontsize=16+fontsizes[fs])
-    DetAxes[1].tick_params(which="both", labelsize=9+fontsizes[fs])
+    DetAxes[1].tick_params(which="both", labelsize=10+fontsizes[fs])
 
     # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
     # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
@@ -567,41 +567,42 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         
-    ThumbAxes[0].text(0, 1.3, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
+    ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Explanatory text printing ----------------------------------------------------------------------------------
     utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
     sol, My = utc_to_sol(utc_obj)
 
-    t1 = "Integrations"
-    t2 = "Integration time"
+    t1 = "Integration time"
 
     print_me = [f"Orbit {iuvs_orbno_from_fname(light_fits['Primary'].header['filename'])}:  {segment}",
                 f"Mars date: MY {My}, Sol {round(sol, 1)}, Ls {int(round(light_fits['Observation'].data['SOLAR_LONGITUDE'][0], ndigits=0))}°", 
                 f"UTC date/time: {utc_obj.strftime('%Y-%m-%d')}, {utc_obj.strftime('%H:%M:%S')}", 
-                f"{t1:<24}Light: {n_good_frames:<14}Dark: {n_ints_dark}",
-                f"{t2:<22}Light: {index_data_pair[0]['int_time']} s{'':<6}Dark: {index_data_pair[1]['int_time']} s",
-                f"Total light integrations: {(index_data_pair[0]['int_time'] * n_good_frames)} s",
+                f"{t1:<22}Light: {index_data_pair[0]['int_time']} s{'':<6}Dark: {index_data_pair[1]['int_time']} s",
                 #
-                f"Light file: {light_fits['Primary'].header['filename']}", 
-                f"Dark file: {dark_fits['Primary'].header['filename']}"]
+                f"Light file: {re.search(fn_RE, light_path).group(0)}", 
+                f"Dark file: {re.search(fn_RE, dark_path).group(0)}",
+                ]
     
     # List of fontsizes to use as we print stuff on the quicklook
     total_lines_to_print = len(print_me) + 1
-    f = [36] + [26] * total_lines_to_print
+    f = [44] + [30]*2 + [26] * (total_lines_to_print - 3)
     # Color list to loop through
     c = ["black"] * 3 + ["gray"] * (total_lines_to_print - 3)
     
     # Now print title texts on the figure
-    for i in range(6):
-        plt.text(0.1, 1.02 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
+    for i in range(4):
+        plt.text(0.12, 0.98 - 0.02 * i, print_me[i], fontsize=f[i], color=c[i], transform=QLfig.transFigure)
 
-    for i in range(6, len(print_me)):
-        plt.text(0.85, 1 - 0.02 * (i-5), print_me[i], fontsize=f[i], color=c[i], ha="right", transform=QLfig.transFigure)
+    for i in range(4, len(print_me)):
+        plt.text(0.845, 0.96 - 0.02 * (i-4), print_me[i], fontsize=f[i], color=c[i], ha="right", transform=QLfig.transFigure)
 
     # Clean up and save ---------------------------------------------------------------------------------
     light_fits.close()
     dark_fits.close()
+
+    if show==True:
+        plt.show()
 
     if savefolder is not None:
         if not os.path.isdir(savefolder):
@@ -609,15 +610,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         plt.savefig(ql_filepath, dpi=img_dpi, bbox_inches="tight")
         plt.close(QLfig)
 
-    if show==True:
-        plt.show()
-
     return "Success" 
 
 
-# LINE FITTING ========================================================
+# LINE FITTING PLOTS ========================================================
 
-def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit):
+def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, H_fit=None, D_fit=None):
     mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
     mpl.rcParams['font.size'] = 18
     mpl.rcParams['legend.fontsize'] = 16
@@ -626,25 +624,32 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit):
     mpl.rcParams['axes.labelsize'] = 18
     mpl.rcParams['axes.titlesize'] = 22
 
-    model_color = "#1b9e77"
-    data_color = "#d95f02"
-    bg_color = "xkcd:cerulean"
-
-    fig, ax = plt.subplots(figsize=(5,3))
+    fig, ax = plt.subplots(figsize=(6,4))
         
     # Plot the data and fit and a guideline for the central wavelength
-    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
-    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
-    ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="model fit", linewidth=2, zorder=2)
+    # if bg is not None:
+    #     ax.plot(data_wavelengths, bg, label="background", color=bg_color, zorder=0)
+
+    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=1)
+    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data",alpha=0.7, zorder=1)
+    
+    
+    # if H_fit is not None:
+    #     ax.plot(data_wavelengths, H_fit, color="xkcd:darkish green", label="H fit", zorder=3)
+    # if D_fit is not None:
+    #     ax.plot(data_wavelengths, D_fit, color="xkcd:tea", label="D fit", zorder=3)
+
+    # ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="Full model\n(H + D + background)", linewidth=2, zorder=4)
 
     ax.set_ylabel("Brightness (kR/nm)")
-    ax.legend()
+    ax.set_xlabel("Wavelength (nm)")
+    ax.legend(bbox_to_anchor=[0.5,1], fontsize=14)
     
     ax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
     
 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
-                  t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], 
+                  t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], fn_for_subtitle="", 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
                   extra_print_on_plot=None):
     """
@@ -693,10 +698,6 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mpl.rcParams['axes.labelsize'] = 18
     mpl.rcParams['axes.titlesize'] = 22
 
-    model_color = "#1b9e77"
-    data_color = "#d95f02"
-    bg_color = "xkcd:cerulean"
-
     fig = plt.figure(figsize=(12,6))
     mygrid = gs.GridSpec(4, 1, figure=fig, hspace=0.1)
     mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
@@ -704,7 +705,12 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     mainax.tick_params(labelbottom=False)
     residax.tick_params(labelbottom=True)
-    mainax.set_title(t)
+
+    if fn_for_subtitle=="":
+        mainax.set_title(t)
+    else: 
+        plt.suptitle(t)
+        mainax.set_title(fn_for_subtitle, color="#888", fontsize=16)
 
     # Plot background fit
     if plot_bg is not None:
@@ -782,6 +788,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         plt.show()
     pass
 
+
 def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, model_fit_new, model_fit_BU, fit_params_new, fit_params_BU, BUbackground, pybackground,
                              data_unc_new=None, data_unc_BU=None, titles=["Linear background/vectorized cleanup", "Mayyasi+2023 background/pixel-by-pixel cleanup"], 
                              suptitle=None, unit=None, logview=False, plot_bg=True, plot_subtract_bg=True):
@@ -817,26 +824,25 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     mpl.rcParams['axes.labelsize'] = 18
     mpl.rcParams['axes.titlesize'] = 22
 
-    model_color = "#1b9e77"
-    data_color = "#d95f02"
-    bg_color = "xkcd:cerulean"
-
     fig = plt.figure(figsize=(16,6))
-    mygrid = gs.GridSpec(4, 2, figure=fig, hspace=0.1, wspace=0.1)
+    mygrid = gs.GridSpec(4, 2, figure=fig, hspace=0.1, wspace=0.05)
     mainax_new = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
     residax_new = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax_new) 
     mainax_BU = plt.subplot(mygrid.new_subplotspec((0, 1), colspan=1, rowspan=3)) 
     residax_BU = plt.subplot(mygrid.new_subplotspec((3, 1), colspan=1, rowspan=1), sharex=mainax_BU) 
 
-    for (t,  u, ma) in zip(titles, unit, [mainax_new, mainax_BU]):
+    for (t, ma) in zip(titles, [mainax_new, mainax_BU]):
         ma.tick_params(labelbottom=False)
         ma.set_title(t)
         ma.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
-        ma.set_ylabel(f"Brightness ({u})")
 
     for ra in [residax_new, residax_BU]:
         ra.tick_params(labelbottom=True)
         ra.set_xlabel("Wavelength (nm)")
+
+    mainax_new.set_ylabel(f"Brightness (kR/nm)")
+    mainax_BU.tick_params(axis="y", which="both", labelleft=False)
+    residax_BU.tick_params(axis="y", which="both", labelleft=False)
 
     plt.suptitle(suptitle, y=1.05)
     
