@@ -1281,9 +1281,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                                                     fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning) 
 
         # Create a convenient dictionary which can be used with a plotting routine
-        fit_params_for_printing = {'area': round(fit_params[0]), 'area_D': round(fit_params[1]), 
-                                    'lambdac': round(fit_params[2], 3), 'lambdac_D': round(fit_params[2]-D_offset, 3), 
-                                    'M': round(fit_params[3]), 'B': round(fit_params[4])}
+
+        if np.isnan(fit_params).all():
+            fit_params_for_printing = {'area': fit_params[0], 'area_D': fit_params[1], 
+                                        'lambdac': fit_params[2], 'lambdac_D': fit_params[2]-D_offset, 
+                                        'M': fit_params[3], 'B': fit_params[4]}
+        else:
+            fit_params_for_printing = {'area': round(fit_params[0]), 'area_D': round(fit_params[1]), 
+                                        'lambdac': round(fit_params[2], 3), 'lambdac_D': round(fit_params[2]-D_offset, 3), 
+                                        'M': round(fit_params[3]), 'B': round(fit_params[4])}
         
         # Construct a background array from the fit which can then be converted like the spectrum
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
@@ -1295,7 +1301,11 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
         # since we didn't do integrated brightness in this method.
-        fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
+        if np.isnan(fit_params_BUbg).all():
+            fit_params_for_printing_BUbg = {'area': fit_params_BUbg[0], 'area_D': fit_params_BUbg[1], 
+                                        'lambdac': fit_params_BUbg[2], 'lambdac_D': fit_params_BUbg[2]-D_offset}
+        else:
+            fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
                                         'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
@@ -1306,10 +1316,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # so we have to also.
         spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spec) / (t_int)
         background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) / (t_int)
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
-                                           bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-        bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac'], popt[2])
-        spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
+        if ~np.isnan(fit_params).all():
+            popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
+                                            bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
+            bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac'], popt[2])
+        
+            spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
+        else:
+            spec_ph_s_bg_sub[:] = np.nan # TODO: Update this if needed to handle problem files.
+        
         bright_data_ph_per_s[i, :] = spec_ph_s_bg_sub
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1360,10 +1375,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
           
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
-                                           bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
-        fit_params_for_printing['M'] = popt[0]
-        fit_params_for_printing['B'] = popt[2]
+        if ~np.isnan(fit_params).all():
+            popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
+                                               bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
+            fit_params_for_printing['M'] = popt[0]
+            fit_params_for_printing['B'] = popt[2]
+        else:
+            fit_params_for_printing['M'] = np.nan
+            fit_params_for_printing['B'] = np.nan
+
 
         # Add brightnesses and uncertainty to arrays so they can be written out to the l1c 
         H_brightnesses[i] = H_kR
