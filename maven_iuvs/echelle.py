@@ -1401,8 +1401,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # ============================================================================================
         titletext = f"Orbit {re.search(orbno_RE, light_fits['Primary'].header['Filename'] ).group(0)} - Integration {i} - Python fit"
 
-        # re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)
-
         # Plot in kR/nm
         if print_algorithm_details_on_plot:
             extra_print_on_plot = [f"Algorithm: {fitpackage}", 
