@@ -364,7 +364,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     detector_image_to_plot = np.nanmedian(data, axis=0) if useframe=="median" else coadded_lights
 
     # uncertainties ... these look a little too large
-    coadded_unc = np.sqrt( np.sum( dn_unc**2, axis=0) / n_good_frames)
+    coadded_unc = np.sqrt( np.sum( dn_unc**2, axis=0) ) / n_good_frames
     coadded_unc_spec = add_in_quadrature(coadded_unc, light_fits, coadded=True)  # added over spatial for a spectrum uncertainty
 
     # Do a fit to the coadded imae -------------------------------------------------------------------
