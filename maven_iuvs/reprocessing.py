@@ -1,0 +1,472 @@
+from astropy.io import fits
+import re
+import os
+import glob
+from maven_iuvs.miscellaneous import orbit_folder, fn_RE, orbno_RE, gen_error_RE
+
+
+def get_all_errors(all_logs, orbit_folder_list):
+    """
+    Given a list of lists of logfiles (all_logs), this function will collect all the error messages out of all of them.
+
+    Parameters
+    ----------
+    all_logs : list of lists of strings
+               each sublist contains all the logfiles generated for a particular orbit folder.
+    orbit_folder_list : list of strings
+                        Each string is an orbit folder which contains data products and logfiles.
+    Returns
+    ----------
+    error_lists : list of lists of strings
+                  Each sublist contains all the error messages for files in the orbit folder in the
+                  same position within orbit_folder_list.
+    """
+
+    # This list will contain several sublists which give the collected error messages for each orbit folder 
+    error_lists = []
+
+    # loop over orbit_folder_list, each of which has its own loglist
+    for (loglist, of) in zip(all_logs, orbit_folder_list): 
+        all_errors = []
+
+        # Get total lights from first file
+        total_lights = 0
+        with open(loglist[0]) as f:
+            first_file = f.read()
+            total_lights = int(re.search(r"(?<=Total original light fits files: )\d+", first_file).group(0))
+
+        total_errors = 0
+        total_success = 0
+        all_err_msgs = []
+
+        for log in loglist: 
+            with open(log) as f:
+                thisfile = f.read()
+     
+                # Get attempts
+                attempts = int(re.search(r"(?<=Total files to process on this run: )\d+", thisfile).group(0))
+                # Get problem files
+                numprob = int(re.search(r"(?<=Total problem files: )\d+", thisfile).group(0))
+                # Get success
+                numsuccess = int(re.search(r"(?<=Successfully processed: )\d+", thisfile).group(0))
+        
+                # Find all error codes: Some of them have an annoying linebreak so we need two RE's
+            
+                #non_linebreak_results = re.findall(r"(?<=: ).+fits\.gz", thisfile) # this one works for non-line breaking
+                # this works for linebreaking, but doesn't accidentally grab lines caught by previous RE.
+                #linebreak_results = re.findall(r"(?<=ERROR: ).+[^gz][\r\n].+fits\.gz", thisfile)
+        
+                error_messages = re.findall(gen_error_RE, thisfile) #non_linebreak_results + linebreak_results
+                all_err_msgs += error_messages
+                total_errors += numprob
+                total_success += numsuccess
+
+        error_lists.append(all_err_msgs)
+
+    return error_lists
+
+
+def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True, verbose=False):
+    """
+    Compare the common HDUs between two fits files to find differences. 
+    Typical use case is to compare the same file in two versions; in that scenario,
+    there should be no or minimal differences because you are trying to preserve information. 
+    (Differences may exist for things like the filename and such).
+
+    Parameters
+    ----------
+    fits1 : astropy fits instance 
+            fits for first file
+    fits2 : astropy fits instance 
+            fits for second
+    labels : list of strings
+             Shorthand for how to refer to the two files, so you can see the content of 
+             a given HDU in each file when a difference is found.
+    skip_kernels : boolean
+                   Whether to ignore the kernel HDU in checking for differences. 
+                   Defaults to true because the kernels changed earlier in the 
+                   pipelines between versions v13 and v14.
+    verbose : boolean
+              If true, will print a message when the HDUs are equal
+    
+    Returns
+    ---------
+    nothing - just prints out a report.
+    """
+    # Get common HDU names
+    f1_hdus = [hdu.name.upper() for hdu in fits1]
+    f2_hdus = [hdu.name.upper() for hdu in fits2]
+    common_hdus = list(set(f1_hdus) & set(f2_hdus))
+    
+    for hduname in common_hdus:
+        if hduname != "PRIMARY": # The primary will usually be different between different versions.
+            print(f"{hduname} HDU")
+            print("============================================")
+            for n in fits1[hduname].data.names:
+                # print(f"Now checking {n}:")
+                if (n=="KERNELS") & (skip_kernels):
+                    print("Skipping kernels because they're definitely different due to pipeline changes upstream")
+                    continue
+                elif (n=="ORBIT_SEGMENT"):
+                    print("the orbit segment is:")
+                    print(f"{labels[0]}: {fits1[hduname].data[n]}")
+                    print(f"{labels[1]}: {fits2[hduname].data[n]}")
+                    print()
+                else:
+                    if (fits1[hduname].data[n] != fits2[hduname].data[n]).all():
+                        print(f"{n} discrepancy")
+                        print(f"{labels[0]}: {fits1[hduname].data[n]}")
+                        print(f"{labels[1]}: {fits2[hduname].data[n]}")
+                        print()
+                    else:
+                        if verbose:
+                            print(f"{n} entry is equal")
+                        else:
+                            pass 
+    print("Finished")
+
+
+def compare_PDS_with_reprocess(l1c_root, pds_filelist, maxorbit=50000):
+    """
+    Parameters
+    ----------
+    l1c_root : string
+               folder in which the l1cs were placed.
+    pds_filelist : string
+                   a csv containing list of files found on the PDS. 
+    maxorbit : int
+               No files after this orbit will be compared. This is because some files are not on the PDS and reprocess only goes so far.
+
+    Returns
+    ----------
+    MASTERLIST : dict
+                 Dictionary containing the status of every file available for reprocessing,
+                 as well as whether it originally appeared on PDS. Note that the column for 
+                 whether it was originally on PDS will always fill with Yes in this function,
+                 but in external functions MASTERLIST will be appended to with files that
+                 may not have appeared on PDS.
+    not_reprocessed : list
+                      files that were on PDS but not reprocessed for whatever reason.
+    """
+
+    # Create dictionary to contain all information 
+    MASTERLIST = {"Filename": [], "Status": [], "Previously on PDS": []}
+
+    # Find the list of files archived on the PDS.
+    # TODO: Update this so the new list is downloaded live.
+    data = ascii.read(pds_filelist, data_start=2, header_start=1, 
+                       include_names=["URN", "Start Time", "Orbital Location", "Orbit No."])  
+    namesonly = data["URN"]
+    
+    # Collect the unique IDs of files on PDS--that is, filenames with repetitive or morphing information stripped out.
+    # The result contains only the stuff needed to ID the file, like orbit number, obs type, and timestamp.
+    # namesonly has already had version numbers stripped.
+    PDS_UNIQUE_FILES = [re.sub(r"(?<=[0-9])t(?=[0-9])", "T", re.search(r"mvn.+", str(n)).group(0)) for n in namesonly] # 
+
+    # Make a list of all files that were generated in the recent reprocess effort on the local computer.
+    reprocessed_files = []
+    
+    for path, subdirs, files in os.walk(l1c_root):
+        for f in files:
+            if "fits.gz" in f: # Only look for fits files, ignore the xml labels and .txt log files.
+                reprocessed_files.append(re.sub(r"\_v.+", "", f)) # Remove the version number, since that will be different from PDS. 
+                                                                  # Check unique ID only
+
+    # Set up lists for each result.
+    ok = 0 # files which were successfully reprocessed
+    isdark = 0 # For some reason there are some dark files on the PDS - including some that are actually truly darks, not mislabeled lights.
+    orbit_too_high = 0 # the l1as were only reprocessed through ~19960 (Aug 2024), so we will not reprocess files for later orbits.
+    not_reprocessed = [] # Files which should have been reprocessed but weren't.
+    
+    for PDSFILE in PDS_UNIQUE_FILES:
+        if PDSFILE in reprocessed_files:
+            ok += 1
+            MASTERLIST["Filename"].append(PDSFILE)
+            MASTERLIST["Status"].append("OK: Reprocess successful")
+            MASTERLIST["Previously on PDS"].append("Yes")
+            pass
+        else:
+            orbit = int(re.search(orbno_RE, PDSFILE).group(0))
+            
+            if ("echdark" not in PDSFILE) and (orbit < maxorbit):
+                not_reprocessed.append(PDSFILE)
+            elif orbit >=maxorbit:
+                orbit_too_high += 1
+                MASTERLIST["Filename"].append(PDSFILE)
+                MASTERLIST["Status"].append(f"Orbit number > {maxorbit}, not part of reprocess")
+                MASTERLIST["Previously on PDS"].append("Yes")
+            elif "echdark" in PDSFILE:
+                isdark += 1
+                MASTERLIST["Filename"].append(PDSFILE)
+                MASTERLIST["Status"].append("File is a dark file")
+                MASTERLIST["Previously on PDS"].append("Yes")
+            else: 
+                raise Exception("This should never be printed")
+                pass
+
+    print(f"Total PDS files: {len(PDS_UNIQUE_FILES)}" )
+    print(f"Total PDS files for which a reprocess succeeded: {ok}")
+    print(f"TOTAL NOT REPROCESSED: {len(PDS_UNIQUE_FILES) - ok}")
+    print("--------------------------------------------------------")
+    print(f"Orbit number is higher than the files included in the l1a FMR: {orbit_too_high}")
+    print(f"Total PDS l1c files which are labeled as dark files: {isdark}")
+    print(f"Total files present on PDS that should have been reprocessed, but were not ('MISSING'): {len(not_reprocessed)}")
+
+    return MASTERLIST, not_reprocessed
+
+
+def determine_if_l1a_is_missing(missed_files, l1a_folder):
+    """
+    Given a list of files which have been archived on the PDS, and thus should have been processed 
+    but were not, this function checks to see if the reason they weren't reprocessed is because of 
+    a missing l1a file. This could happen sometimes if the upstream data pipeline has an error. 
+    If this occurs, it should be reported to Randy Meisner.
+
+    Parameters
+    ----------
+    missed_files : list
+                   A list of filenames
+    l1a_folder : string
+                 Location of the l1a mission data
+
+    Returns
+    ----------
+    no_l1a : list
+             list of the missed files that were not reprocessed due to a missing l1a
+    l1a_found : list
+                list of missed files that were not reprocessed but do have an associated
+                l1a file.
+    """
+    special_unique_ID = r"(?<=l[0-2][a-c]\_).+" # searches for everything that occurs after l1x
+
+    # Get a list of all the l1a files that aren't dark
+    l1a_files = glob.glob(l1a_folder + '/**/*.fits.gz', recursive=True)
+    l1a_files = [l for l in l1a_files if "echdark" not in l]
+
+    # Check that we just have the unique IDS, which we need to compare to PDS file names
+    missed_files_uids = [re.search(special_unique_ID, mf).group(0) for mf in missed_files]
+
+    # Collect a list of files which do have an l1a, and those that don't.
+    l1a_found = []
+    no_l1a = []
+    
+    for uid in missed_files_uids:
+    
+        flag = "not found"
+        for l in l1a_files:
+            if uid in l:
+                l1a_found.append(l)
+                flag = "found"
+                continue
+    
+        if flag == "not found":
+            no_l1a.append(uid)
+
+    print(f"Total missing files: {len(missed_files)}" )
+    print(f"Total missing files with an l1a: {len(l1a_found)}" )
+    print(f"Total missing files without l1a: {len(no_l1a)}" )
+    
+    return no_l1a, l1a_found
+
+
+def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data", with_this="FMR_l1av13_to_l1cv14"):
+    """
+    Generates l1c folder paths from l1a folder paths by casting replace over the whole list.
+
+    Parameters
+    ----------
+    l1a_folders : list
+                  List of l1a folder paths
+    replace_this : string
+                   a particular part of the l1a folder path that should be replaced, with...
+    with_this : string
+                The text that replaces replace_this.
+    Returns
+    ----------
+    l1c_folders : list
+                  list of l1c folder names
+    """
+    # Generate the target l1c folders that will equate to folders_with_l1a 
+    rep = {replace_this: with_this} 
+    
+    # use these three lines to do the replacement
+    rep = dict((re.escape(k), v) for k, v in rep.items()) 
+    pattern = re.compile("|".join(rep.keys()))
+    l1c_folders = [pattern.sub(lambda m: rep[re.escape(m.group(0))], f) for f in l1a_folders]
+
+    return l1c_folders
+    
+
+def make_logfile_list(l1c_folders, latest=True):
+    """
+    Gather a list of the log files in each orbit folder listedin l1c_folders.
+
+    Parameters
+    ----------
+    l1c_folders : list of strings
+                  list containing the orbit folders containing data and log files reporting processing errors
+    latest : boolean
+             if True, will only return lists of the most recent logfile. Otherwise, returns all.
+
+    Returns
+    ----------
+    latest_logfiles, all_logfiles : lists
+                                    List of logfile names. If latest_logfiles, each sublist is length 1.
+                                    Otherwise, all logfile names returned.
+    """
+    latest_logfiles = []
+    all_logfiles = []
+
+    for orbitdir in l1c_folders:
+        # print(f"Orbit: {orbitdir}")
+        loglist = glob.glob(f'{orbitdir}/*.txt') 
+        
+        # Ignore logfiles that contain information about files with multiple dark entries in the .sav file
+        loglist = [l for l in loglist if "dup_sav_entry_log.txt" not in l]
+    
+        # Find the latest file that logs problems in the folder's rep
+        latest_file = max(loglist, key=os.path.getctime)
+        latest_logfiles.append(latest_file)
+
+        all_logfiles.append(loglist)
+    
+    if latest:
+        return latest_logfiles
+    else: 
+        return all_logfiles
+
+
+def get_total_fits(l1c_folders):
+    """
+    Get a count of total fits files across all subfolders within l1c_folders
+
+    Parameters
+    ----------
+    l1c_folders : list of strings
+                  A list of orbit folder paths 
+    Returns
+    ----------
+    totalfits : int
+                Total fits files within all subfolders of l1c_folders
+    """
+    totalfits = 0
+    for orbitdir in l1c_folders:
+        # This is all fits in the problem folder
+        fitslist = glob.glob(f'{orbitdir}/*.fits.gz') 
+    
+        # Compute a total number of fits files in all the problem folders so we can determine what percent of the total the problem files make up
+        totalfits += len(fitslist)
+
+    return totalfits
+
+
+def quantify_errors(logfile_list, totalfitsfiles, l1a_fmr_folder):
+    """
+    Quantify the errors of each type across folders found to have files that didn't successfully process,
+    based on logfile_list, which is a list of most recent logfiles. 
+
+    NOTE: This function may be supersedable by get_all_errors. Need to test at next FMR/PDS comparison.
+
+    Parameters
+    ----------
+    logfile_list : list of strings
+                   List of logfiles 
+    totalfitsfiles : int
+                     total fits files within the affected folders
+    l1a_fmr_folder : string
+                     path to the l1a source files 
+    Returns
+    ----------
+    files_by_error : list of lists of strings
+                     sublists of filenames which had a particular type of error
+    dictionary of errors per each orbit, for closer inspection
+    """
+    # Things to keep track of
+    problem_files = 0
+    error_by_orbit = {}
+    
+    # Regex patterns
+    orbpattern = r"(?<=orbit)[0-9]+"
+    errpat = r"(?<=Total problem files: )[0-9]{1,}"
+
+    # More specific...
+    binpat = r"(?<=binning scheme not handled with file )mvn.+\.gz"
+    noisepat = r"(?<=too noisy with file )mvn.+\.gz\n?"
+
+    # The dark problem error messages sometimes break over lines, need two RE's for 'em
+    darkpat = r"(?<=size as source expression).+?"#  for IMG must have same size as source\n   expression. with file )mvn.+\.gz"
+    darkpat2 = r"(?<=Array subscript for IMG must have same size as\n   source expression)"
+    illegalpat = r"(?<=Illegal subscript range: IMG. with file )mvn.+\.gz"
+    conflict_struct = r"(?<=Array\[[0-9]{2}\]\>. with file)mvn.+\.gz"
+    
+    # Lists of files with problems
+    noisy_files = []
+    bin_prob_files = []
+    maybe_missing_dark = []
+    conflicting_struct_files = []
+    illegal_ind_files = []
+    other_errs = []
+    
+    for lf in logfile_list:      
+        # Get orbit and folder
+        orbit = int(re.search(orbpattern, lf).group(0))
+        basefold = l1a_fmr_folder + f"{orbit_folder(orbit)}/"
+    
+        # Load log file for parsing
+        with open(lf) as f: filetxt = f.read()
+    
+        # Build up a dict of errors by orbit folder and count total problem files
+        errnum = re.search(errpat, filetxt).group(0)
+        error_by_orbit[orbit] = int(errnum)
+        problem_files += int(errnum)
+
+        # Catch general error message
+        if re.search(gen_error_RE, filetxt):
+            gen_errs = re.findall(gen_error_RE, filetxt)
+
+            for err in gen_errs:
+                # look for binning issues
+                if re.search(binpat, err):
+                    bin_prob_files.append(basefold + re.search(binpat, err).group(0))
+                    continue
+            
+                # Look for files designated as too noisy by pipeline
+                if re.search(noisepat, err):
+                    noisy_files.append(basefold + re.search(noisepat, err).group(0))
+                    continue
+            
+                # Look for error "Array subscript for IMG must have same size as source expression. " which probably means not enough dark frames.
+                if isinstance(re.search(darkpat, err), re.Match) | isinstance(re.search(darkpat2, err), re.Match):
+                    file_with_problem = re.search(fn_RE, err).group(0)
+                    maybe_missing_dark.append(basefold + file_with_problem)
+                    continue
+
+                # Error: Conflicting data structures: structure tag,<STRING    Array[25]>. 
+                if re.search(conflict_struct, err):
+                    conflicting_struct_files.append(basefold + re.search(conflict_struct, err).group(0))
+                    continue
+        
+                # look for "illegal index" issues
+                if re.search(illegalpat, err):
+                    illegal_ind_files.append(basefold + re.search(illegalpat, err).group(0))
+                    continue
+
+                # If all else fails just report whatever the error is
+                other_errs.append(err)
+                
+    print("Problem files: ", problem_files)
+    print(f"Percent of total: {round((100*problem_files) / totalfitsfiles)}%", )
+    
+    print(f"Noisy files: {len(noisy_files)}")
+    print(f"Binning problems: {len(bin_prob_files)}")
+    print(f"Dark is binned differently than observation: {len(maybe_missing_dark)}")
+    print(f"Conflicting structure error: {len(conflicting_struct_files)}")
+    print(f"Illegal index: {len(illegal_ind_files)}")
+    print(f"Other: {len(other_errs)}")
+    print(f"Sum of each type equals total problems found: {len(noisy_files) + len(bin_prob_files) + len(maybe_missing_dark) + len(conflicting_struct_files) + len(illegal_ind_files) + len(other_errs) == problem_files}")
+
+    files_by_error = [noisy_files, bin_prob_files, maybe_missing_dark, conflicting_struct_files, illegal_ind_files, other_errs]
+
+    return files_by_error, dict(sorted(error_by_orbit.items()))
+
+
