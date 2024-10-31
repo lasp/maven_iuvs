@@ -1,4 +1,4 @@
-from astropy.io import fits
+from astropy.io import fits, ascii
 import re
 import os
 import glob
@@ -20,6 +20,13 @@ def get_all_errors(all_logs, orbit_folder_list):
     error_lists : list of lists of strings
                   Each sublist contains all the error messages for files in the orbit folder in the
                   same position within orbit_folder_list.
+                  NOTE that if there are error messages that show up in more than one log file,
+                  they will all be reported. It's recommended to call set() on the results of this
+                  function to get the unique errors.
+    total_errors : int 
+                   count of total error messages found across all logs. 
+    total_success : int
+                    count of total files that succeeded in reprocess across all logs.
     """
 
     # This list will contain several sublists which give the collected error messages for each orbit folder 
@@ -27,13 +34,6 @@ def get_all_errors(all_logs, orbit_folder_list):
 
     # loop over orbit_folder_list, each of which has its own loglist
     for (loglist, of) in zip(all_logs, orbit_folder_list): 
-        all_errors = []
-
-        # Get total lights from first file
-        total_lights = 0
-        with open(loglist[0]) as f:
-            first_file = f.read()
-            total_lights = int(re.search(r"(?<=Total original light fits files: )\d+", first_file).group(0))
 
         total_errors = 0
         total_success = 0
@@ -42,28 +42,23 @@ def get_all_errors(all_logs, orbit_folder_list):
         for log in loglist: 
             with open(log) as f:
                 thisfile = f.read()
-     
-                # Get attempts
-                attempts = int(re.search(r"(?<=Total files to process on this run: )\d+", thisfile).group(0))
+
                 # Get problem files
                 numprob = int(re.search(r"(?<=Total problem files: )\d+", thisfile).group(0))
                 # Get success
                 numsuccess = int(re.search(r"(?<=Successfully processed: )\d+", thisfile).group(0))
-        
-                # Find all error codes: Some of them have an annoying linebreak so we need two RE's
-            
-                #non_linebreak_results = re.findall(r"(?<=: ).+fits\.gz", thisfile) # this one works for non-line breaking
-                # this works for linebreaking, but doesn't accidentally grab lines caught by previous RE.
-                #linebreak_results = re.findall(r"(?<=ERROR: ).+[^gz][\r\n].+fits\.gz", thisfile)
-        
-                error_messages = re.findall(gen_error_RE, thisfile) #non_linebreak_results + linebreak_results
+
+                # Get all error messages
+                error_messages = re.findall(gen_error_RE, thisfile)
+
+                # Cumulative sum of errors and successes
                 all_err_msgs += error_messages
                 total_errors += numprob
                 total_success += numsuccess
 
         error_lists.append(all_err_msgs)
 
-    return error_lists
+    return error_lists, total_errors, total_success
 
 
 def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True, verbose=False):
@@ -250,7 +245,7 @@ def determine_if_l1a_is_missing(missed_files, l1a_folder):
     l1a_found = []
     no_l1a = []
     
-    for uid in missed_files_uids:
+    for (uid, fullfile) in zip(missed_files_uids, missed_files):
     
         flag = "not found"
         for l in l1a_files:
@@ -260,7 +255,7 @@ def determine_if_l1a_is_missing(missed_files, l1a_folder):
                 continue
     
         if flag == "not found":
-            no_l1a.append(uid)
+            no_l1a.append(fullfile)
 
     print(f"Total missing files: {len(missed_files)}" )
     print(f"Total missing files with an l1a: {len(l1a_found)}" )
@@ -339,6 +334,8 @@ def make_logfile_list(l1c_folders, latest=True):
 def get_total_fits(l1c_folders):
     """
     Get a count of total fits files across all subfolders within l1c_folders
+    TODO: This is not really useful for vetting reprocesses anymore and should be moved somewhere
+    else since it could still be useful in other scenarios.
 
     Parameters
     ----------
@@ -360,113 +357,45 @@ def get_total_fits(l1c_folders):
     return totalfits
 
 
-def quantify_errors(logfile_list, totalfitsfiles, l1a_fmr_folder):
+def sort_files_by_error(error_lines):
     """
-    Quantify the errors of each type across folders found to have files that didn't successfully process,
-    based on logfile_list, which is a list of most recent logfiles. 
-
-    NOTE: This function may be supersedable by get_all_errors. Need to test at next FMR/PDS comparison.
+    Quantify the errors of each type within a single orbit folder.
 
     Parameters
     ----------
-    logfile_list : list of strings
-                   List of logfiles 
-    totalfitsfiles : int
-                     total fits files within the affected folders
-    l1a_fmr_folder : string
-                     path to the l1a source files 
+    error_lines : list of strings
+                  Unique errors generated within a single orbital folder. They should
+                  be sourced from all log files within the folder; that is, this variable
+                  is the output of get_all_errors().
+
     Returns
     ----------
-    files_by_error : list of lists of strings
-                     sublists of filenames which had a particular type of error
-    dictionary of errors per each orbit, for closer inspection
+    error_dict : list of lists of strings
+                 sublists of filenames which had a particular type of error
     """
     # Things to keep track of
-    problem_files = 0
-    error_by_orbit = {}
+    error_dict = {"noisy": [],
+                  "array subscript": [],
+                  "illegal subscript": [], 
+                  "conflicting structure": [],
+                  "binning": [],
+                  "other": []}
     
-    # Regex patterns
-    orbpattern = r"(?<=orbit)[0-9]+"
-    errpat = r"(?<=Total problem files: )[0-9]{1,}"
+    for eline in error_lines:      
+        # Find the filename
+        fn = re.search(r"(?<=with file )mvn.+", eline).group(0)
 
-    # More specific...
-    binpat = r"(?<=binning scheme not handled with file )mvn.+\.gz"
-    noisepat = r"(?<=too noisy with file )mvn.+\.gz\n?"
+        # Identify which error it is
+        if "too noisy" in eline:
+            error_dict["noisy"].append(fn)
+        elif "Array subscript for IMG" in eline:
+            error_dict["array subscript"].append(fn)
+        elif "binning scheme" in eline:
+            error_dict["binning"].append(fn)
+        elif "Illegal subscript range" in eline:
+            error_dict["illegal subscript"].append(fn)
+        else: 
+            print(f"Found other on {eline} with file {fn}")
+            error_dict["other"].append(fn)
 
-    # The dark problem error messages sometimes break over lines, need two RE's for 'em
-    darkpat = r"(?<=size as source expression).+?"#  for IMG must have same size as source\n   expression. with file )mvn.+\.gz"
-    darkpat2 = r"(?<=Array subscript for IMG must have same size as\n   source expression)"
-    illegalpat = r"(?<=Illegal subscript range: IMG. with file )mvn.+\.gz"
-    conflict_struct = r"(?<=Array\[[0-9]{2}\]\>. with file)mvn.+\.gz"
-    
-    # Lists of files with problems
-    noisy_files = []
-    bin_prob_files = []
-    maybe_missing_dark = []
-    conflicting_struct_files = []
-    illegal_ind_files = []
-    other_errs = []
-    
-    for lf in logfile_list:      
-        # Get orbit and folder
-        orbit = int(re.search(orbpattern, lf).group(0))
-        basefold = l1a_fmr_folder + f"{orbit_folder(orbit)}/"
-    
-        # Load log file for parsing
-        with open(lf) as f: filetxt = f.read()
-    
-        # Build up a dict of errors by orbit folder and count total problem files
-        errnum = re.search(errpat, filetxt).group(0)
-        error_by_orbit[orbit] = int(errnum)
-        problem_files += int(errnum)
-
-        # Catch general error message
-        if re.search(gen_error_RE, filetxt):
-            gen_errs = re.findall(gen_error_RE, filetxt)
-
-            for err in gen_errs:
-                # look for binning issues
-                if re.search(binpat, err):
-                    bin_prob_files.append(basefold + re.search(binpat, err).group(0))
-                    continue
-            
-                # Look for files designated as too noisy by pipeline
-                if re.search(noisepat, err):
-                    noisy_files.append(basefold + re.search(noisepat, err).group(0))
-                    continue
-            
-                # Look for error "Array subscript for IMG must have same size as source expression. " which probably means not enough dark frames.
-                if isinstance(re.search(darkpat, err), re.Match) | isinstance(re.search(darkpat2, err), re.Match):
-                    file_with_problem = re.search(fn_RE, err).group(0)
-                    maybe_missing_dark.append(basefold + file_with_problem)
-                    continue
-
-                # Error: Conflicting data structures: structure tag,<STRING    Array[25]>. 
-                if re.search(conflict_struct, err):
-                    conflicting_struct_files.append(basefold + re.search(conflict_struct, err).group(0))
-                    continue
-        
-                # look for "illegal index" issues
-                if re.search(illegalpat, err):
-                    illegal_ind_files.append(basefold + re.search(illegalpat, err).group(0))
-                    continue
-
-                # If all else fails just report whatever the error is
-                other_errs.append(err)
-                
-    print("Problem files: ", problem_files)
-    print(f"Percent of total: {round((100*problem_files) / totalfitsfiles)}%", )
-    
-    print(f"Noisy files: {len(noisy_files)}")
-    print(f"Binning problems: {len(bin_prob_files)}")
-    print(f"Dark is binned differently than observation: {len(maybe_missing_dark)}")
-    print(f"Conflicting structure error: {len(conflicting_struct_files)}")
-    print(f"Illegal index: {len(illegal_ind_files)}")
-    print(f"Other: {len(other_errs)}")
-    print(f"Sum of each type equals total problems found: {len(noisy_files) + len(bin_prob_files) + len(maybe_missing_dark) + len(conflicting_struct_files) + len(illegal_ind_files) + len(other_errs) == problem_files}")
-
-    files_by_error = [noisy_files, bin_prob_files, maybe_missing_dark, conflicting_struct_files, illegal_ind_files, other_errs]
-
-    return files_by_error, dict(sorted(error_by_orbit.items()))
-
-
+    return error_dict
