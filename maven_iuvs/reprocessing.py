@@ -4,63 +4,7 @@ import os
 import glob
 from maven_iuvs.miscellaneous import orbit_folder, fn_RE, orbno_RE, gen_error_RE
 
-
-def get_all_errors(all_logs, orbit_folder_list):
-    """
-    Given a list of lists of logfiles (all_logs), this function will collect all the error messages out of all of them.
-
-    Parameters
-    ----------
-    all_logs : list of lists of strings
-               each sublist contains all the logfiles generated for a particular orbit folder.
-    orbit_folder_list : list of strings
-                        Each string is an orbit folder which contains data products and logfiles.
-    Returns
-    ----------
-    error_lists : list of lists of strings
-                  Each sublist contains all the error messages for files in the orbit folder in the
-                  same position within orbit_folder_list.
-                  NOTE that if there are error messages that show up in more than one log file,
-                  they will all be reported. It's recommended to call set() on the results of this
-                  function to get the unique errors.
-    total_errors : int 
-                   count of total error messages found across all logs. 
-    total_success : int
-                    count of total files that succeeded in reprocess across all logs.
-    """
-
-    # This list will contain several sublists which give the collected error messages for each orbit folder 
-    error_lists = []
-
-    # loop over orbit_folder_list, each of which has its own loglist
-    for (loglist, of) in zip(all_logs, orbit_folder_list): 
-
-        total_errors = 0
-        total_success = 0
-        all_err_msgs = []
-
-        for log in loglist: 
-            with open(log) as f:
-                thisfile = f.read()
-
-                # Get problem files
-                numprob = int(re.search(r"(?<=Total problem files: )\d+", thisfile).group(0))
-                # Get success
-                numsuccess = int(re.search(r"(?<=Successfully processed: )\d+", thisfile).group(0))
-
-                # Get all error messages
-                error_messages = re.findall(gen_error_RE, thisfile)
-
-                # Cumulative sum of errors and successes
-                all_err_msgs += error_messages
-                total_errors += numprob
-                total_success += numsuccess
-
-        error_lists.append(all_err_msgs)
-
-    return error_lists, total_errors, total_success
-
-
+# Function to validate the results of a reprocess, checking for header continuity -----
 def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True, verbose=False):
     """
     Compare the common HDUs between two fits files to find differences. 
@@ -121,6 +65,7 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
     print("Finished")
 
 
+# Function to compare full results of the reprocess wit PDS files ---------------------
 def compare_PDS_with_reprocess(l1c_root, pds_filelist, maxorbit=50000):
     """
     Parameters
@@ -355,6 +300,63 @@ def get_total_fits(l1c_folders):
         totalfits += len(fitslist)
 
     return totalfits
+
+
+# Functions for analyzing error messages in log files --------------------------------
+def get_all_errors(all_logs, orbit_folder_list):
+    """
+    Given a list of lists of logfiles (all_logs), this function will collect all the error messages out of all of them.
+
+    Parameters
+    ----------
+    all_logs : list of lists of strings
+               each sublist contains all the logfiles generated for a particular orbit folder.
+    orbit_folder_list : list of strings
+                        Each string is an orbit folder which contains data products and logfiles.
+    Returns
+    ----------
+    error_lists : list of lists of strings
+                  Each sublist contains all the error messages for files in the orbit folder in the
+                  same position within orbit_folder_list.
+                  NOTE that if there are error messages that show up in more than one log file,
+                  they will all be reported. It's recommended to call set() on the results of this
+                  function to get the unique errors.
+    total_errors : int 
+                   count of total error messages found across all logs. 
+    total_success : int
+                    count of total files that succeeded in reprocess across all logs.
+    """
+
+    # This list will contain several sublists which give the collected error messages for each orbit folder 
+    error_lists = []
+
+    # loop over orbit_folder_list, each of which has its own loglist
+    for (loglist, of) in zip(all_logs, orbit_folder_list): 
+
+        total_errors = 0
+        total_success = 0
+        all_err_msgs = []
+
+        for log in loglist: 
+            with open(log) as f:
+                thisfile = f.read()
+
+                # Get problem files
+                numprob = int(re.search(r"(?<=Total problem files: )\d+", thisfile).group(0))
+                # Get success
+                numsuccess = int(re.search(r"(?<=Successfully processed: )\d+", thisfile).group(0))
+
+                # Get all error messages
+                error_messages = re.findall(gen_error_RE, thisfile)
+
+                # Cumulative sum of errors and successes
+                all_err_msgs += error_messages
+                total_errors += numprob
+                total_success += numsuccess
+
+        error_lists.append(all_err_msgs)
+
+    return error_lists, total_errors, total_success
 
 
 def sort_files_by_error(error_lines):
