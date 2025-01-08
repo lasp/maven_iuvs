@@ -8,8 +8,8 @@ import matplotlib.gridspec as gs
 import matplotlib.pyplot as plt
 import matplotlib.transforms as transforms
 import math 
-import idl_colorbars as idl_colorbars
 import re
+import gc
 from tqdm.auto import tqdm
 from pathlib import Path
 from maven_iuvs.binning import get_pix_range, get_bin_edges
@@ -165,6 +165,8 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
             logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark)}\n")
 
             print(f"\nLog written for orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n")
+
+    gc.collect()
 
 
 def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1):
@@ -615,6 +617,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         plt.savefig(ql_filepath, dpi=img_dpi, bbox_inches="tight")
         plt.close(QLfig)
 
+    plt.close(QLfig) # make SURE it's closed
+    # turn these on if needed
+    del QLfig
+    del light_fits
+    del dark_fits
+    gc.collect()
     return "Success" 
 
 
