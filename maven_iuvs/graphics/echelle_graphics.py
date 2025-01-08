@@ -17,8 +17,9 @@ from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end, convert_
 from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadrature, background, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
     subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
-    get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors
-from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_SCalt_plot
+    get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors, \
+    get_ech_slit_indices
+from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_alt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
     iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE, fn_RE
@@ -195,7 +196,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     ROWS = 8
 
     # Set up the gridspec
-    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=1.5)
+    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=4)
     TopGrid.update(bottom=0.5)
     BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.05, wspace=0.05) 
     BottomGrid.update(top=0.45) # Don't change these! Figure size changes depending on number of thumbnails
@@ -206,7 +207,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     d_main = 5  # colspan of main detector plot
     d_dk = 3  # colspan/rowspan of darks and colspan of geometry
     d_geo = 2  # rowspan of geometry plots
-    start_sm = 6  # col to start darks and geometry
+    start_sm = d_main # +1 # col to start darks and geometry. Use the +1 if the vertical spacer below is on.
     
     # Detector images and geometry ------------------------------------------------------------
     # Spectrum axis
@@ -223,9 +224,9 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     MainAx = plt.subplot(TopGrid.new_subplotspec((3, 0), colspan=d_main, rowspan=d_main)) 
     MainAx.axes.set_aspect(aspect, adjustable="box")
 
-    # A spacing axis between detector image and geometry axes
-    VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
-    VerticalSpacer.axis("off")
+    # A spacing axis between detector image and geometry axes: May not be necessary, so currently off
+    # VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
+    # VerticalSpacer.axis("off")
     
     # 3 small subplots in a row to the right of main plot
     R1Ax1 = plt.subplot(TopGrid.new_subplotspec((3, start_sm), colspan=d_dk, rowspan=d_dk))
@@ -557,8 +558,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                 a.spines[side].set_visible(False)
     else:
         make_sza_plot(light_fits, ax=GeoAxes[0])
-        make_SCalt_plot(light_fits, ax=GeoAxes[1])
-        make_tangent_lat_lon_plot(light_fits, ax=GeoAxes[2])
+        make_alt_plot(light_fits, get_ech_slit_indices(light_fits), ax=GeoAxes[1])
+        make_tangent_lat_lon_plot(light_fits, get_ech_slit_indices(light_fits), ax=GeoAxes[2])
     
     # Plot the light integration thumbnails ---------------------------------------------------------------------
     
@@ -573,7 +574,10 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         this_frame = data[i, :, :]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
-        
+        # print the alt
+        thisalt = np.mean(light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][i, get_ech_slit_indices(light_fits)[0]:get_ech_slit_indices(light_fits)[1]+1, -1])
+        ThumbAxes[i].text(0.1, -0.05, f"{round(thisalt)} km", color=color_dict['darkgrey'], va="top", fontsize=9+fontsizes[fs], transform=ThumbAxes[i].transAxes)
+
     ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Explanatory text printing ----------------------------------------------------------------------------------
