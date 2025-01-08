@@ -828,7 +828,7 @@ def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     new_idx = [i for i in idx if i['name'] not in remove_from_idx]
 
     # NEW: UPDATE INDEXES WITH  MISSING INFO - don't run on new index, just on existing entries
-    new_idx, added_keys, added_geom = update_metadata_file(new_idx, geospatial=geospatial)
+    new_idx, added_keys, added_geom = update_metadata_file(the_dir, new_idx, geospatial=geospatial)
     print(f"Updated the metadata index:\n\tmissing keys added to {added_keys} files\n\tgeometry summary added to {added_geom} files")
 
     # add new files to index
@@ -917,7 +917,7 @@ def get_file_metadata(fname, geospatial=False):
     return metadata_dict
 
 
-def update_metadata_file(idx_file, geospatial=False):
+def update_metadata_file(the_data_dir, idx_file, geospatial=False):
     """
     Updates the index file with either missing keys or geometry information, after it has come in.
     
@@ -952,8 +952,9 @@ def update_metadata_file(idx_file, geospatial=False):
             missing_keys = list(set(correct_key_list).difference(set(e.keys())))
             if missing_keys:
                 
-                # Construct the filename
-                full_path = relative_path_from_fname(e["name"])
+                # Construct the file path
+                full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(e["name"])) + "/"
+                
 
                 # Fill in the missing geometry entries
                 this_fits = fits.open(full_path + e['name'])
@@ -976,7 +977,7 @@ def update_metadata_file(idx_file, geospatial=False):
             # Geometry may be nan, but if it's come in, update it
             if (np.isnan(e['minmax_SZA']).all()) | (np.isnan(e['med_SZA']).all()) | (np.isnan(e['minmax_lat']).all()) | (np.isnan(e['minmax_lon']).all()) \
                | (np.isnan(e['min_lt']).all()) | (np.isnan(e['max_lt']).all()):
-                full_path = relative_path_from_fname(e["name"])
+                full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(e["name"])) + "/"
                 this_fits = fits.open(full_path + e['name'])
                 if has_geometry_pvec(this_fits):
                     # if file has geometry, fill it in!
@@ -1097,7 +1098,7 @@ def get_ech_slit_indices(light_fits):
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
                        clean_data=True, clean_method="new", run_writeout=True, make_plots=True, hush_warning=False,
                        check_background=False, plot_subtract_bg=True, plot_bg_separately=False, print_algorithm_details_on_plot=False, plot_comparison=False,
-                       remove_rays=True, remove_hotpix=True, return_each_line_fit=False, make_example_plot=False, print_fn_on_plot=True,
+                       remove_rays=True, remove_hotpix=True, return_each_line_fit=False, make_example_plot=False, print_fn_on_plot=True, do_BU_background_comparison=False,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
@@ -1240,8 +1241,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     D_brightnesses = np.empty(n_int)
     H_bright_1sig = np.empty(n_int)
     D_bright_1sig = np.empty(n_int)
-    H_brightnesses_BUbg = np.empty(n_int) # for BU background
-    D_brightnesses_BUbg = np.empty(n_int) # for BU background
+    if do_BU_background_comparison:
+        H_brightnesses_BUbg = np.empty(n_int) # for BU background
+        D_brightnesses_BUbg = np.empty(n_int) # for BU background
     bright_data_ph_per_s = np.ndarray((n_int, get_wavelengths(light_fits).size))
 
     # Wavelengths and binwidths (which typically don't change)
@@ -1295,18 +1297,19 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        IDL_style_background = backgrounds_BU[i, :]
-        fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, hush_warning=hush_warning,
-                                                                unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
+        if do_BU_background_comparison: 
+            IDL_style_background = backgrounds_BU[i, :]
+            fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, hush_warning=hush_warning,
+                                                                    unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
 
-        # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
-        # since we didn't do integrated brightness in this method.
-        if np.isnan(fit_params_BUbg).all():
-            fit_params_for_printing_BUbg = {'area': fit_params_BUbg[0], 'area_D': fit_params_BUbg[1], 
-                                        'lambdac': fit_params_BUbg[2], 'lambdac_D': fit_params_BUbg[2]-D_offset}
-        else:
-            fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
-                                        'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
+            # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
+            # since we didn't do integrated brightness in this method.
+            if np.isnan(fit_params_BUbg).all():
+                fit_params_for_printing_BUbg = {'area': fit_params_BUbg[0], 'area_D': fit_params_BUbg[1], 
+                                            'lambdac': fit_params_BUbg[2], 'lambdac_D': fit_params_BUbg[2]-D_offset}
+            else:
+                fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
+                                            'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
         # COLLECT BRIGHTNESSES
@@ -1328,29 +1331,29 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         bright_data_ph_per_s[i, :] = spec_ph_s_bg_sub
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if do_BU_background_comparison:
+            # Convert to physical units
+            I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_per_nm
+            spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
+            data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
+            bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_per_nm
 
-        # Convert to physical units
-        I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_per_nm
-        spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
-        data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
-        bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_per_nm
+            # Now convert the total brightness and their uncertainties to physical units. Because the model
+            # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
+            H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[0]) * conv_to_kR 
+            D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[1]) * conv_to_kR 
+            H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
+            D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR 
 
-        # Now convert the total brightness and their uncertainties to physical units. Because the model
-        # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
-        H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[0]) * conv_to_kR 
-        D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[1]) * conv_to_kR 
-        H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
-        D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR 
+            # Add brightnesses to arrays so they can be returned for comparison
+            H_brightnesses_BUbg[i] = H_kR_BUbg
+            D_brightnesses_BUbg[i] = D_kR_BUbg
 
-        # Add brightnesses to arrays so they can be returned for comparison
-        H_brightnesses_BUbg[i] = H_kR_BUbg
-        D_brightnesses_BUbg[i] = D_kR_BUbg
-
-        # Update fit params
-        fit_params_for_printing_BUbg['area'] = round(H_kR_BUbg, 2)
-        fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
-        fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
-        fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
+            # Update fit params
+            fit_params_for_printing_BUbg['area'] = round(H_kR_BUbg, 2)
+            fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
+            fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
+            fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1428,6 +1431,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             
             # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             if plot_comparison:
+                if do_BU_background_comparison == False:
+                    raise Exception("please set do_BU_background_comparison=True to make this plot")
                 echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
                                             fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
                                             titles=["Linear background", "Background ~Mayyasi+2023"], 
@@ -1515,8 +1520,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         print("Errors: ", errs)
         print("Finished writing to IDL, I hope")
 
-    return H_brightnesses, D_brightnesses,\
-           H_brightnesses_BUbg, D_brightnesses_BUbg
+    if do_BU_background_comparison:
+        return H_brightnesses, D_brightnesses, H_brightnesses_BUbg, D_brightnesses_BUbg
+    else:
+        return H_brightnesses, D_brightnesses
 
 
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
