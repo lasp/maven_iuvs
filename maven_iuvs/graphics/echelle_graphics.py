@@ -228,23 +228,25 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     # A spacing axis between detector image and geometry axes: May not be necessary, so currently off
     # VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
     # VerticalSpacer.axis("off")
-    
-    # 3 small subplots in a row to the right of main plot
-    R1Ax1 = plt.subplot(TopGrid.new_subplotspec((3, start_sm), colspan=d_dk, rowspan=d_dk))
-    R1Ax2 = plt.subplot(TopGrid.new_subplotspec((3, start_sm+d_dk), colspan=d_dk, rowspan=d_dk))
-    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((3, start_sm+2*d_dk), colspan=d_dk, rowspan=d_dk))
+
+    # 3 small subplots in a row to the right of main plot - these are now the geo axes
+    R1Ax1 = plt.subplot(TopGrid.new_subplotspec((2, start_sm), colspan=d_dk, rowspan=d_geo))
+    R1Ax2 = plt.subplot(TopGrid.new_subplotspec((2, start_sm+d_dk), colspan=d_dk, rowspan=d_geo))
+    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((2, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo))
 
     R1Axes = [R1Ax1, R1Ax2, R1Ax3]
-    for a in R1Axes:
+
+    # Another row of 3 small subplots - these are now the dark axes
+    R2Ax1 = plt.subplot(TopGrid.new_subplotspec((3+d_geo, start_sm), colspan=d_dk, rowspan=d_dk))
+    R2Ax2 = plt.subplot(TopGrid.new_subplotspec((3+d_geo, start_sm+d_dk), colspan=d_dk, rowspan=d_dk))
+    R2Ax3 = plt.subplot(TopGrid.new_subplotspec((3+d_geo, start_sm+2*d_dk), colspan=d_dk, rowspan=d_dk))
+    R2Axes = [R2Ax1, R2Ax2, R2Ax3]
+
+    
+    for a in R2Axes:
         a.axes.get_xaxis().set_visible(False)
         a.axes.get_yaxis().set_visible(False)
         a.axes.set_aspect(aspect, adjustable="box")
-
-    # Another row of 3 small subplots
-    R2Ax1 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm), colspan=d_dk, rowspan=d_geo))
-    R2Ax2 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm+d_dk), colspan=d_dk, rowspan=d_geo))
-    R2Ax3 = plt.subplot(TopGrid.new_subplotspec((3+d_dk, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo))
-    R2Axes = [R2Ax1, R2Ax2, R2Ax3]
     
     # Thumbnail area -------------------------------------------------------------------------
 
@@ -479,41 +481,42 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     fontsizes = {"small": 0, "medium": 4, "large": 8, "huge": 12, "enormous": 16}
 
     # MAKE THE QUICKLOOK ============================================================================================
-    QLfig, DetAxes, DarkAxes, GeoAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=figsz, aspect=aspect_ratio)
-    
+    QLfig, DetAxes, GeoAxes, DarkAxes, ThumbAxes = quicklook_figure_skeleton(n_ints, figsz=figsz, aspect=aspect_ratio)
+
     # Plot Lyman alpha spectrum --------------------------------------------------------------------------------------
-    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=12+fontsizes[fs])
+    DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=14+fontsizes[fs])
     DetAxes[0].errorbar(wl, spec_kR_pernm, yerr=data_unc_kR_pernm, color=data_color, linewidth=0,elinewidth=1, zorder=3)
     DetAxes[0].step(wl, spec_kR_pernm, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
     DetAxes[0].step(wl, I_fit_kR_pernm, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
     DetAxes[0].step(wl, bg_array_kR_pernm, where="mid", color=bg_color, label="background", linewidth=2, zorder=2)
-    DetAxes[0].text(1.1, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
-    DetAxes[0].text(1.1, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-    DetAxes[0].text(1.1, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-
+    DetAxes[0].text(1.02, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
+    DetAxes[0].text(1.02, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+    DetAxes[0].text(1.02, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+    DetAxes[0].text(1.02, 0.4, "NOTE: Coadded fit is a 'quick look' at D emission.\nBest practice is to fit each integration separately.", 
+                    color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
     DetAxes[0].set_ylim(bottom=0)
     DetAxes[0].axes.get_xaxis().set_visible(True)   
-    DetAxes[0].tick_params(axis="both", labelsize=10+fontsizes[fs], bottom=True, labelbottom=True)
-    DetAxes[0].set_xlabel("Wavelength (nm)", fontsize=12+fontsizes[fs])
-    DetAxes[0].set_ylabel("kR/nm", fontsize=12+fontsizes[fs]) 
-    DetAxes[0].legend(loc="upper left", fontsize=8+fontsizes[fs])
+    DetAxes[0].tick_params(axis="both", labelsize=12+fontsizes[fs], bottom=True, labelbottom=True)
+    DetAxes[0].set_xlabel("Wavelength (nm)", fontsize=14+fontsizes[fs])
+    DetAxes[0].set_ylabel("kR/nm", fontsize=14+fontsizes[fs]) 
+    DetAxes[0].legend(fontsize=8+fontsizes[fs])  
     
     # Plot the main detector image -------------------------------------------------------------------------
     detector_image_echelle(light_fits, detector_image_to_plot, light_spapixrng, light_spepixrng,
                            fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
                            prange=prange, arange=arange, 
-                           cbar_lbl_size=10+fontsizes[fs], cbar_tick_size=9+fontsizes[fs])
+                           cbar_lbl_size=12+fontsizes[fs], cbar_tick_size=11+fontsizes[fs])
 
     # Styling for main detector image axis
     DetAxes[1].axhline(ech_Lya_slit_start, linewidth=0.5, color="gainsboro")
     DetAxes[1].axhline(ech_Lya_slit_end, linewidth=0.5, color="gainsboro")
     trans = transforms.blended_transform_factory(DetAxes[1].transAxes, DetAxes[1].transData)
-    DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
-    DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=10+fontsizes[fs], transform=trans, ha="right")
-    DetAxes[1].set_xlabel("Spectral", fontsize=12+fontsizes[fs])
-    DetAxes[1].set_ylabel("Spatial", fontsize=12+fontsizes[fs])
-    DetAxes[1].set_title(f"{'Median' if useframe=='median' else 'Coadded'} detector image (dark subtracted)", fontsize=16+fontsizes[fs])
-    DetAxes[1].tick_params(which="both", labelsize=10+fontsizes[fs])
+    DetAxes[1].text(0, ech_Lya_slit_start, ech_Lya_slit_start, color="gray", fontsize=12+fontsizes[fs], transform=trans, ha="right")
+    DetAxes[1].text(0, ech_Lya_slit_end, ech_Lya_slit_end, color="gray", fontsize=12+fontsizes[fs], transform=trans, ha="right")
+    DetAxes[1].set_xlabel("Spectral", fontsize=14+fontsizes[fs])
+    DetAxes[1].set_ylabel("Spatial", fontsize=14+fontsizes[fs])
+    DetAxes[1].set_title(f"{'Median' if useframe=='median' else 'Coadded'} detector image (dark subtracted)", fontsize=17+fontsizes[fs])
+    DetAxes[1].tick_params(which="both", labelsize=12+fontsizes[fs])
 
     # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
     # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
@@ -607,7 +610,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     total_lines_to_print = len(print_me) + 1
     f = [44] + [30]*2 + [26] * (total_lines_to_print - 3)
     # Color list to loop through
-    c = ["black"] * 3 + ["gray"] * (total_lines_to_print - 3)
+    c = ["black"] * 3 + ["#777"] * (total_lines_to_print - 3)
     
     # Now print title texts on the figure
     for i in range(4):
@@ -750,7 +753,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         
     # Plot the data and fit and a guideline for the central wavelength
     mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
-    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
+    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=3, alpha=0.7)
     mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
 
     # VERTICAL LINES......................
@@ -787,6 +790,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.legend(bbox_to_anchor=(1,1))
     
     mainax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    mainax.set_facecolor("gainsboro")
+    mainax.grid(zorder=-5, color="white", which="major")
     
     # Print some extra messages
     if extra_print_on_plot:
@@ -803,6 +808,9 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
     bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
     residax.set_ylim(-bound, bound)
+    residax.set_facecolor("gainsboro")
+    residax.grid(zorder=-5, color="white", which="major")
+
     
     plt.show()
     
