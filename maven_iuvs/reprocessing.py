@@ -239,7 +239,7 @@ def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data",
 
 def make_logfile_list(l1c_folders, latest=True):
     """
-    Gather a list of the log files in each orbit folder listedin l1c_folders.
+    Gather a list of the log files in each orbit folder listed in l1c_folders.
 
     Parameters
     ----------
@@ -263,13 +263,12 @@ def make_logfile_list(l1c_folders, latest=True):
         
         # Ignore logfiles that contain information about files with multiple dark entries in the .sav file
         loglist = [l for l in loglist if "dup_sav_entry_log.txt" not in l]
-    
+
         # Find the latest file that logs problems in the folder's rep
         latest_file = max(loglist, key=os.path.getctime)
         latest_logfiles.append(latest_file)
 
         all_logfiles.append(loglist)
-    
     if latest:
         return latest_logfiles
     else: 
@@ -329,6 +328,9 @@ def get_all_errors(all_logs, orbit_folder_list):
 
     # This list will contain several sublists which give the collected error messages for each orbit folder 
     error_lists = []
+    total_errs_by_folder = []
+    total_success_by_folder = []
+    affected_orbits = []
 
     # loop over orbit_folder_list, each of which has its own loglist
     for (loglist, of) in zip(all_logs, orbit_folder_list): 
@@ -339,12 +341,15 @@ def get_all_errors(all_logs, orbit_folder_list):
 
         for log in loglist: 
             with open(log) as f:
+                print(f"FILE {log}:")
                 thisfile = f.read()
 
                 # Get problem files
                 numprob = int(re.search(r"(?<=Total problem files: )\d+", thisfile).group(0))
+                print(f"\t{numprob} problems")
                 # Get success
                 numsuccess = int(re.search(r"(?<=Successfully processed: )\d+", thisfile).group(0))
+                print(f"\t{numsuccess} success")
 
                 # Get all error messages
                 error_messages = re.findall(gen_error_RE, thisfile)
@@ -355,8 +360,11 @@ def get_all_errors(all_logs, orbit_folder_list):
                 total_success += numsuccess
 
         error_lists.append(all_err_msgs)
+        total_errs_by_folder.append(total_errors)
+        total_success_by_folder.append(total_success)
+        affected_orbits.append(of)
 
-    return error_lists, total_errors, total_success
+    return affected_orbits, error_lists, total_errs_by_folder, total_success_by_folder
 
 
 def sort_files_by_error(error_lines):
