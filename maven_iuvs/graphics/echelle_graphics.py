@@ -61,6 +61,11 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
     
     dark_idx = make_dark_index(ech_l1a_idx)
     selected_l1a = copy.deepcopy(ech_l1a_idx)
+
+    # Make the quicklook folder if it's not there
+    if savefolder is not None:
+        if not os.path.exists(savefolder):
+            os.makedirs(savefolder)
     
     # Downselect the metadata
     selected_l1a = downselect_data(ech_l1a_idx, date=date, orbit=orbit, segment=segment)
