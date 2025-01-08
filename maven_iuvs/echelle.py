@@ -24,7 +24,7 @@ from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoeven
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
-    orbno_RE, find_nearest, fn_RE, orbit_folder, relative_path_from_fname
+    orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
@@ -827,9 +827,13 @@ def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     remove_from_idx = np.setdiff1d(idx_fnames, most_recent_fnames)
     new_idx = [i for i in idx if i['name'] not in remove_from_idx]
 
-    # NEW: UPDATE INDEXES WITH  MISSING INFO - don't run on new index, just on existing entries
+    # NEW: UPDATE WITH MISSING INFO - don't run on new index, just on existing entries
+    print(f"Now updating existing entries...")  
     new_idx, added_keys, added_geom = update_metadata_file(the_dir, new_idx, geospatial=geospatial)
-    print(f"Updated the metadata index:\n\tmissing keys added to {added_keys} files\n\tgeometry summary added to {added_geom} files")
+    if added_keys != 0 or added_geom != 0:
+        print(f"Updated the metadata index:\n\tmissing keys added to {added_keys} files\n\tgeometry summary added to {added_geom} files")
+    else:
+        print("No entry updates needed")
 
     # add new files to index
     new_idx = np.concatenate([new_idx, add_to_idx])
@@ -888,32 +892,30 @@ def get_file_metadata(fname, geospatial=False):
                      'Ls': this_fits['Observation'].data['SOLAR_LONGITUDE']
     }
 
-    if geospatial:
-        try: 
-            metadata_dict['minmax_SZA'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']), 
-                                           np.nanmax(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])]
-            metadata_dict['med_SZA'] = np.nanmedian(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
-        except KeyError:
-            metadata_dict['minmax_SZA'] = "['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'] does not exist"
-            metadata_dict['med_SZA'] = "['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'] does not exist"
+    if geospatial and has_geometry_pvec(this_fits):
+        metadata_dict['minmax_SZA'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])]
+        metadata_dict['med_SZA'] = np.nanmedian(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
+        metadata_dict['minmax_lat'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT'])]
+        metadata_dict['minmax_lon'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON'])]
+        flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
+        metadata_dict['min_lt'] = np.nanmin(flat_LT)
+        metadata_dict['max_lt'] = np.nanmax(flat_LT)
+    elif geospatial and not has_geometry_pvec(this_fits):
+        metadata_dict['minmax_SZA'] = None 
+        metadata_dict['med_SZA'] =  None 
+        metadata_dict['minmax_lat'] = None 
+        metadata_dict['minmax_lon'] = None
+        metadata_dict['min_lt'] = None
+        metadata_dict['max_lt'] = None 
+    else: 
+        pass
 
-        try: 
-            metadata_dict['minmax_lat'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']), 
-                                           np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT'])]
-            metadata_dict['minmax_lon'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']), 
-                                           np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON'])]
-        except KeyError:
-            metadata_dict['minmax_lat'] = "['PixelGeometry'].data['PIXEL_CORNER_LAT'] does not exist"
-            metadata_dict['minmax_lon'] = "['PixelGeometry'].data['PIXEL_CORNER_LON'] does not exist"
+    # Close fits
+    this_fits.close()
 
-        try: 
-            flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
-            metadata_dict['min_lt'] = np.nanmin(flat_LT)
-            metadata_dict['max_lt'] = np.nanmax(flat_LT)
-        except KeyError:
-            metadata_dict['min_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
-            metadata_dict['max_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
-        
     return metadata_dict
 
 
@@ -943,57 +945,82 @@ def update_metadata_file(the_data_dir, idx_file, geospatial=False):
     else:
         correct_key_list = ['name', 'orbit', 'segment', 'shape', 'n_int', 'datetime', 'binning', 'int_time', 'mcp_gain', 'geom', 
                             'missing_frames', 'countrate_diagnostics', 'Ls']
-    
-    for (i,e) in enumerate(idx_file):
-        # Skip cruise data
+        
+    entries_missing_keys = [] # of ints 
+    entries_missing_geom = []
+
+    # FIRST: Find entries with missing metadata keys and entries which are missing geom.
+    for (i, e) in enumerate(idx_file):
+
+        # Skip weird early mission stuff
         if ("IPH" not in e['name']) & ("cruisecal" not in e['name']) & ("ISON" not in e['name']):
 
-            # Find the missing keys from this index entry
+            # Missing keys
             missing_keys = list(set(correct_key_list).difference(set(e.keys())))
             if missing_keys:
-                
-                # Construct the file path
-                full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(e["name"])) + "/"
-                
+                entries_missing_keys.append(i) # idx_file, is a list of dicts so we can just keep track of indices.
 
-                # Fill in the missing geometry entries
-                this_fits = fits.open(full_path + e['name'])
-                if ("med_SZA" in missing_keys) | ("minmax_SZA" in missing_keys):
-                    e["minmax_SZA"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])]
-                    e["med_SZA"] = np.nanmedian(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
-                if ("minmax_lat" in missing_keys) | ("minmax_lon" in missing_keys):
-                    e["minmax_lat"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT'])]
-                    e["minmax_lon"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON'])]
-                if ("min_lt" in missing_keys) | ("max_lt" in missing_keys):
-                    flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
-                    e["min_lt"] = np.nanmin(flat_LT)
-                    e["max_lt"] = np.nanmax(flat_LT)
+            # Missing geom
+            if geospatial:
+                if file_metadata_is_missing_geom(e):
+                    entries_missing_geom.append(i)
+   
 
-                updated_missing_keys += 1
+    # SECOND:  Update entries with missing metadata keys 
+    for missingkey_i in entries_missing_keys:
+        this_file_full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(idx_file[missingkey_i]["name"])) + "/" + idx_file[missingkey_i]["name"]
+        metadata_this_file = get_file_metadata(this_file_full_path, geospatial=geospatial)
+        # replace it in the list 
+        idx_file[missingkey_i] = metadata_this_file
+        updated_missing_keys += 1
+
+    # THIRD: Update geometry on entries without geometry 
+    if geospatial:
+        for geom_i in entries_missing_geom:
+            this_file_full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(idx_file[geom_i]["name"])) + "/" + idx_file[geom_i]["name"]
+            metadata_this_file = get_file_metadata(this_file_full_path, geospatial=geospatial)
             
-            # Geometry may be nan, but if it's come in, update it
-            if (np.isnan(e['minmax_SZA']).all()) | (np.isnan(e['med_SZA']).all()) | (np.isnan(e['minmax_lat']).all()) | (np.isnan(e['minmax_lon']).all()) \
-               | (np.isnan(e['min_lt']).all()) | (np.isnan(e['max_lt']).all()):
-                full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(e["name"])) + "/"
-                this_fits = fits.open(full_path + e['name'])
-                if has_geometry_pvec(this_fits):
-                    # if file has geometry, fill it in!
-                    updated_with_geometry += 1
-                    e["minmax_SZA"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])]
-                    e["med_SZA"] = np.nanmedian(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
-                    e["minmax_lat"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT'])]
-                    e["minmax_lon"] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']), 
-                                       np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON'])]
-                    flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
-                    e["min_lt"] = np.nanmin(flat_LT)
-                    e["max_lt"] = np.nanmax(flat_LT)
+            # replace it in idx_filek but only if there is a change
+            if idx_file[geom_i]['geom'] != metadata_this_file['geom']:
+                idx_file[geom_i] = metadata_this_file
+                updated_with_geometry += 1
+            else: 
+                # In this scenario, file without geometry still missing geometry after updating, must be a file which never had  any geometry.
+                pass 
+            
         
     return idx_file, updated_missing_keys, updated_with_geometry
+
+
+def file_metadata_is_missing_geom(metadata_dict):
+    """
+    Similar to has_geometry_pvec(), this function determines if the metadata entry in the .npy 
+    index file has nans entered for the geometry. This is a faster way to determine if geometry
+    is missing and needs to be filled in in the index file.
+
+    Parameters
+    ----------
+    metadata_dict : dictionary
+                    file metadata for a single fits file.
+
+    Returns
+    ----------
+    True / False
+
+    """
+    # There may be some entries where a string was stored saying something like 'This entry doesn't exist' so control for that.
+    whether_geom_is_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | (metadata_dict['minmax_SZA'] is None)),
+                                          ((type(metadata_dict['med_SZA']) is str) | (metadata_dict['med_SZA'] is None)),
+                                          ((type(metadata_dict['minmax_lat']) is str) | (metadata_dict['minmax_lat'] is None)),
+                                          ((type(metadata_dict['minmax_lon']) is str) | (metadata_dict['minmax_lon'] is None)),
+                                          ((type(metadata_dict['min_lt']) is str) | (metadata_dict['min_lt'] is None)),
+                                          ((type(metadata_dict['max_lt']) is str) | (metadata_dict['max_lt'] is None))
+                                        ])
+
+    if whether_geom_is_missing.any():
+        return True
+    else:
+        return False
 
 
 def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
@@ -1014,7 +1041,7 @@ def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     file_paths = [Path(f) for f in list_fnames]
 
     print(f'total files to index: {len(file_paths)}')
-    idx = get_dir_metadata(rootpath, new_files_limit=0)
+    idx = get_dir_metadata(rootpath, new_files_limit=0, geospatial=geospatial)
     print(f'current index total: {len(idx)}')
     new_files_to_add = len(file_paths)-len(idx)
     print(f'total files to add: {new_files_to_add}')

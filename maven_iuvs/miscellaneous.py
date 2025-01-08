@@ -221,3 +221,34 @@ def relative_path_from_fname(fname):
     # Get orbit folder
     orbfold = orbit_folder(iuvs_orbno_from_fname(fname))
     return l1a_dir + orbfold + "/"
+
+
+def findDiff(d1, d2, path=""):
+    """
+    Recursive functon to find the difference between two dictionaries, the entries in which
+    may themselves be dictionaries. 
+
+    Parameters
+    ----------
+    d1, d2 : dictionaries
+             dictionaries whose entries may also be dictionaries
+    path : string
+           Keeps track of the path in the dictionary where the difference was found.
+    
+    Returns
+    ----------
+    String      showing differences, if they are found
+    None        if no differences
+
+    Source https://stackoverflow.com/a/27266178
+    """
+    
+    for k in d1:
+        if k in d2:
+            if type(d1[k]) is dict:
+                findDiff(d1[k],d2[k], "%s -> %s" % (path, k) if path else k)
+            if d1[k] != d2[k]:
+                result = [ "%s: " % path, " - %s : %s" % (k, d1[k]) , " + %s : %s" % (k, d2[k])]
+                print("\n".join(result))
+        else:
+            print ("%s%s as key not in d2\n" % ("%s: " % path if path else "", k))
