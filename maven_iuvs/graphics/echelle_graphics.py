@@ -273,7 +273,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, figsz=(36, 26), show_D_inset=True, show_D_guideline=True, 
-                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, fs="large", useframe="coadded"):
+                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, overwrite_prior_to=datetime.datetime.now(), fs="large", useframe="coadded", cmap=None):
     """ 
     Fills in the quicklook figure for a single observation.
     
@@ -327,6 +327,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
           May also return an unhandled exception to allow for flexible error catching.
           If the status is "Success", the completed figure is also saved to savefolder.
     """
+    
     # Adjust font face
     mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
 
@@ -335,6 +336,20 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         if not os.path.isdir(savefolder):
             os.makedirs(savefolder)
 
+        ql_filepath = savefolder + f"{re.search(fn_noext_RE, light_path).group(0)}.png"
+
+        # if file already exists....
+        if Path(ql_filepath).is_file():
+            # If we are not overwriting files, then return and don't process.
+            if not overwrite:
+                return "File exists"
+            else: # if we do want to overwrite files,
+                overwrite_prior_to_sec = overwrite_prior_to.timestamp()
+                mtime_thisfile = os.path.getmtime(ql_filepath)
+                if mtime_thisfile > overwrite_prior_to_sec:
+                    print("Skipping this file because it's recently reprocessed")
+                    return "File exists"     
+
     # Used for adjusting parameters in certain segments (e.g. outspace)
     segment = iuvs_segment_from_fname(light_path)
 
@@ -342,14 +357,6 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     light_fits = fits.open(light_path)
     dark_fits = fits.open(dark_path)
 
-    # Set up filename and check to see if file is already done
-    if savefolder is not None:
-        ql_filepath = savefolder + f"{re.search(fn_noext_RE, light_path).group(0)}.png"
-
-        if not overwrite:
-            if Path(ql_filepath).is_file():
-                return "File exists"
-    
     # PROCESS THE DATA =================================================================================
     # Find number of light integrations
     n_ints = get_n_int(light_fits)
@@ -519,17 +526,17 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     d1_spepixrng = get_pix_range(dark_fits, which="spectral")
 
     detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
-                           arange=arange, show_colorbar=False, plot_full_extent=False)
+                           arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
     DarkAxes[0].set_title("First dark", fontsize=16+fontsizes[fs])
     DarkAxes[1].set_title("Second dark", fontsize=16+fontsizes[fs])
     DarkAxes[2].set_title("Average dark", fontsize=16+fontsizes[fs])
 
     if n_ints_dark >= 2:
         detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False)
+                               arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
         # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
         detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False)
+                               arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
         
     elif n_ints_dark==1:
         template = np.empty_like(second_dark)
@@ -615,9 +622,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     if show==True:
         plt.show()
 
+
     if savefolder is not None:
-        if not os.path.isdir(savefolder):
-            os.makedirs(savefolder)
         plt.savefig(ql_filepath, dpi=img_dpi, bbox_inches="tight")
         plt.close(QLfig)
 
