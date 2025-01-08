@@ -348,7 +348,8 @@ def get_dark(light_filepath, idx, drkidx):
                 print("Revision mismatch on this file. Manually adjusted")
                 
             elif len(lights_and_darks.keys()) == 0:
-                raise Exception("No pair identified but it's also not a file missing dark??")
+                return "No valid dark"
+                # raise Exception("No pair identified but it's also not a file missing dark??")
             
         thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
 

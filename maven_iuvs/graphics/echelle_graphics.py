@@ -119,8 +119,9 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
             elif quicklook_status == "Success":
                 processed.append(light_idx['name'])
             else:
-                raise Exception(f"Unhandled exception! quicklook_status={quicklook_status}")
-
+                print("Got an unhandled exception, but it should be logged.")
+                # CHEAT SHEET:
+                # "Keyword 'SPE_SIZE' not found." --> The file has non-linear binning and code hasn't been written to deal with this.
         ki += 1
 
     if savefolder is not None:
