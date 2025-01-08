@@ -259,8 +259,7 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")
-
-    
+ 
     # int time
     if int_time is not None:
         selected = [entry for entry in selected if entry['int_time'] == int_time]
@@ -299,6 +298,10 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 def get_dark(light_filepath, idx, drkidx):
     """
     Automatically find and return the appropriate dark for a specific light file. 
+
+    WARNING: this calls pair_lights_and_darks, so it's quite slow. In many cases it
+    will be a better idea to not use this higher-level function if looping over many 
+    files.
     
     Parameters
     ----------
@@ -808,8 +811,9 @@ def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     not_in_idx = np.setdiff1d(most_recent_fnames, idx_fnames)
     not_in_idx = sorted(not_in_idx, key=iuvs_filename_to_datetime)
     not_in_idx = not_in_idx[:new_files_limit]
-    
+
     add_to_idx = []
+    
     if len(not_in_idx) > 0:
         print(f'adding {len(not_in_idx)} files to index...')
         
@@ -1559,7 +1563,8 @@ def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     Identify and return the appropriate conversion factors for the data.
     """
     Aeff =  32.327455  # Acquired by testing on one file in the IDL pipeline, 16910 outdisk. 
-                       # Does not seem to change with different files.
+                       # DOES change with different files but is small.
+                       # TODO: account for this changing
 
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)

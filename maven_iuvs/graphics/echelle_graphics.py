@@ -385,7 +385,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     coadded_unc = np.sqrt( np.sum( dn_unc**2, axis=0) ) / n_good_frames
     coadded_unc_spec = add_in_quadrature(coadded_unc, light_fits, coadded=True)  # added over spatial for a spectrum uncertainty
 
-    # Do a fit to the coadded imae -------------------------------------------------------------------
+    # Do a fit to the coadded image -------------------------------------------------------------------
     conv_to_kR_per_nm, unused, conv_to_kR = get_conversion_factors(light_fits["Primary"].header["INT_TIME"], 
                                                                                     np.diff(get_bin_edges(light_fits)), 
                                                                                     calibration="new")
