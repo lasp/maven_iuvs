@@ -295,6 +295,131 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
     return selected
 
 # Relating to dark vs. light observations -----------------------------
+def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lights_and_darks.csv", process_based_on="PDS", PDS=0, 
+                                 orbit_range=None, date_range=None, disallow_processing_past=True):
+    """
+    Parameters
+    ----------
+    ech_l1a_idx : dictionary
+                  includes metadata for all observations throughout mission.
+    dark_index : dictionary
+                 similar to ech_l1a_index but only includes dark files.
+    l1a_dir : string
+              Root directory for l1a files; may differ based on file versions.
+    csv_path : string
+               Full path at which to write out the CSV file.
+    process_based_on : string
+                       "PDS", "orbits", or "dates". Will determine how to select the files that will be included.
+    PDS : int
+          PDS number if processing by PDS.
+    orbit_range : list
+                  Format [start_orbit, end_orbit] (where the entries are integers).
+    date_range : list
+                 Format [start_date, end_date] where each entry is a datetime object of format datetime.datetime(Y, M, D, h, m, s).
+    disallow_processing_past : boolean
+                               if True, the code will throw an error if you are processing a PDS that is already past.
+                               Can be set to False to allow for reprocessing older lists (for example, if being used in a mission-long
+                               reprocess effort)
+    Returns
+    ---------
+    None
+    
+    writes out a CSV file with lights and matching darks. 
+    """
+    # For PDS, do the date/time setup checking
+    if process_based_on=="PDS": 
+        print(f"Processing lights/darks for PDS {PDS}")
+        # TODO: Store these in a spreadsheet and read them in. Plus that way it'll be a nice record of when everythign was done.
+        deadlines = {39: {"start_datetime": datetime.datetime(2024, 5, 15, 0, 0, 0),
+                          "end_datetime": datetime.datetime(2024, 8, 14, 23, 59, 0),
+                          "due_VM": datetime.datetime(2024, 10, 15, 0, 0, 0)},
+                    40: {"start_datetime": datetime.datetime(2024, 8, 15, 0, 0, 0),
+                         "end_datetime": datetime.datetime(2024, 11, 14, 23, 59, 0),
+                         "due_VM": datetime.datetime(2025, 1, 15, 0, 0, 0)}
+                    }
+
+        # Set the delivery due date, start date for the data range, and end date for data range.
+        # Currently these have to be adjusted manually but there may be a way to be smart about it?
+        due_datetime = deadlines[PDS]["due_VM"] # Date it is due to the VM (1 month before due date to PDS) 
+        start_datetime = deadlines[PDS]["start_datetime"] # Starting date of the data window 
+        end_datetime = deadlines[PDS]["end_datetime"] # Ending date of the data window 
+
+        # Check that the due date is in the future - this will obviously fail if I haven't updated the duedate.
+        if disallow_processing_past:
+            if due_datetime < datetime.datetime.now():
+                raise Exception("ERROR! Due date is in the past, please update the dates")
+            else: 
+                print("Running before due date - OK")
+
+            # Check for errors in start and end date entries
+            if (due_datetime-start_datetime).days / 7 > 22: # 22 will account for longer months 
+                raise Exception(f"Error: Start date seems wrong. Due date is {due_datetime} so " 
+                                f"the start date should be 5 months before that, which is {due_datetime - datetime.timedelta(weeks=5*4)}"
+                                " or the 15th in the same month, if previous date is not the 15th")
+            else:
+                print("Start date seems OK")
+
+            if (due_datetime-end_datetime).days / 7 > 9: 
+                raise Exception(f"Error: End date seems wrong. Due date is {due_datetime} so " 
+                                f"the start date should be 2 months before that, which is {due_datetime - datetime.timedelta(weeks=2*4)}"
+                                " or the 15th in the same month, if previous date is not the 15th")
+            else:
+                print("End date seems OK")
+
+        # Downselect to the right dates 
+        print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
+        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
+        
+    elif process_based_on=="orbits":
+        print(f"Downselecting to orbits {orbit_range[0]}--{orbit_range[1]}")
+        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", orbit=orbit_range)
+    elif process_based_on=="dates":
+        print(f"Downselecting to orbits {date_range[0]}--{date_range[1]}")
+        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", date=date_range)
+
+    # NPair lights and darks
+    print("Finding darks for the lights")
+    lights_and_darks, files_missing_dark = iuvs.echelle.pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
+
+    # The following prefixes "limb" and "disk" files but for some reason the light/dark pair files
+    # have a column that just lists "limb" or "disk" without the prefix. So we remove it for that column.
+    prefixes = ["in", "out"]
+    errors = []
+
+    print("Writing out light/dark pair file")
+    with open(csv_path, 'w', newline='') as csvfile:
+        wr = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        wr.writerow(["Folder", "Light", "Dark", "Segment"])
+        for k in lights_and_darks.keys():
+            lightfn = k
+            label = iuvs.miscellaneous.iuvs_segment_from_fname(lightfn)
+
+            # remove in/out from disk and limb because they're not in the IDL code.
+            for p in prefixes:
+                if p in label:
+                    label = label.replace(p, "", 1)
+                
+            orbit_num = iuvs.miscellaneous.iuvs_orbno_from_fname(lightfn)
+            try: 
+                darkfn = lights_and_darks[k][1]["name"]
+                wr.writerow([l1a_dir + iuvs.miscellaneous.orbit_folder(orbit_num) + "/",
+                                lightfn, 
+                                darkfn,
+                                label])
+            except TypeError as e:
+                errors.append(k)
+                wr.writerow([lightfn, "ERROR!", label])
+                print(f"Caught error {e} for file {lightfn}")
+                continue
+
+    if files_missing_dark:
+        print("Warning: Some files didn't have a valid dark. Here they are:")
+        print(files_missing_dark)
+
+    print("Done!")
+    pass
+
+
 def get_dark(light_filepath, idx, drkidx):
     """
     Automatically find and return the appropriate dark for a specific light file. 
