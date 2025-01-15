@@ -654,27 +654,34 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
     mpl.rcParams['axes.titlesize'] = 22
 
     fig, ax = plt.subplots(figsize=(6,4))
-        
+
+    # Axis styling
+    for side in ["left", "right", "top", "bottom"]:
+        ax.spines[side].set_visible(False)
+
+    ax.set_facecolor("gainsboro")
+    ax.grid(zorder=1, color="white", which="major")
+
     # Plot the data and fit and a guideline for the central wavelength
-    # if bg is not None:
-    #     ax.plot(data_wavelengths, bg, label="background", color=bg_color, zorder=0)
+    if bg is not None:
+        ax.plot(data_wavelengths, bg, label="background", color=bg_color, zorder=3)
 
-    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=1)
-    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data",alpha=0.7, zorder=1)
-    
-    
-    # if H_fit is not None:
-    #     ax.plot(data_wavelengths, H_fit, color="xkcd:darkish green", label="H fit", zorder=3)
-    # if D_fit is not None:
-    #     ax.plot(data_wavelengths, D_fit, color="xkcd:tea", label="D fit", zorder=3)
+    ax.errorbar(data_wavelengths, data_vals, yerr=data_unc, color=data_color, linewidth=0, elinewidth=1, zorder=3)
+    ax.step(data_wavelengths, data_vals, where="mid", color=data_color, label="data",alpha=0.7, zorder=3)
+        
+    if H_fit is not None:
+        ax.step(data_wavelengths, H_fit, where="mid", color="xkcd:darkish green", label="H fit", zorder=3)
+    if D_fit is not None:
+        ax.step(data_wavelengths, D_fit, where="mid",color="xkcd:tea", label="D fit", zorder=3)
 
-    # ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="Full model\n(H + D + background)", linewidth=2, zorder=4)
+    ax.step(data_wavelengths, model_fit, where="mid", color=model_color, label="Full model\n(H + D + background)", linewidth=2, zorder=4)
 
     ax.set_ylabel("Brightness (kR/nm)")
     ax.set_xlabel("Wavelength (nm)")
     ax.legend(bbox_to_anchor=[0.5,1], fontsize=14)
     
     ax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    pass
     
 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
@@ -732,8 +739,16 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
     residax = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax) 
 
+    # Axis styling
+    for side in ["left", "right", "top", "bottom"]:
+        mainax.spines[side].set_visible(False)
+        residax.spines[side].set_visible(False)
     mainax.tick_params(labelbottom=False)
     residax.tick_params(labelbottom=True)
+    mainax.set_facecolor("gainsboro")
+    mainax.grid(zorder=1, color="white", which="major")
+    residax.set_facecolor("gainsboro")
+    residax.grid(zorder=1, color="white", which="major")
 
     if fn_for_subtitle=="":
         mainax.set_title(t)
@@ -749,14 +764,14 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         else: # show arrays with bg included, plot bg
             plot_data = data_vals 
             plot_model = model_fit
-            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=2, color=bg_color)
+            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=4, color=bg_color)
         med_bg = np.median(plot_bg)
         mainax.text(0, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes)
         
     # Plot the data and fit and a guideline for the central wavelength
-    mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0,elinewidth=1, zorder=3)
-    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=3, alpha=0.7)
-    mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
+    mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0, elinewidth=1, zorder=3)
+    mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=4, alpha=0.7)
+    mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=4)
 
     # VERTICAL LINES......................
     guideline_color = "xkcd:cool gray"
@@ -764,7 +779,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     # Optional plot bin edges, can be helpful
     if wavelength_bin_edges:
         for e in wavelength_bin_edges:
-            mainax.axvline(e, color="xkcd:dark gray", linestyle="--", linewidth=0.5, zorder=1)
+            mainax.axvline(e, color="xkcd:dark gray", linestyle="--", linewidth=0.5, zorder=2)
 
     # Plot the fit line centers on both residual and main axes
     mainax.axvline(fit_params_for_printing['lambdac_H'], color=guideline_color, zorder=2, lw=1)
@@ -792,8 +807,6 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.legend(bbox_to_anchor=(1,1))
     
     mainax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
-    mainax.set_facecolor("gainsboro")
-    mainax.grid(zorder=-5, color="white", which="major")
     
     # Print some extra messages
     if extra_print_on_plot:
@@ -803,16 +816,13 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     # Residual axis
     residual_color = "xkcd:dark lilac"
     residual = (data_vals - model_fit) 
-    residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color)
+    residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color, zorder=3)
     residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     residax.set_ylabel(f"Residuals\n (data-model)")
     residax.set_xlabel("Wavelength (nm)")
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
     bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
     residax.set_ylim(-bound, bound)
-    residax.set_facecolor("gainsboro")
-    residax.grid(zorder=-5, color="white", which="major")
-
     
     plt.show()
     
@@ -825,7 +835,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
 def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, model_fit_new, model_fit_BU, fit_params_new, fit_params_BU, BUbackground, pybackground,
                              data_unc_new=None, data_unc_BU=None, titles=["Linear background/vectorized cleanup", "Mayyasi+2023 background/pixel-by-pixel cleanup"], 
-                             suptitle=None, unit=None, logview=False, plot_bg=True, plot_subtract_bg=True):
+                             suptitle=None, unit=None, logview=False, plot_bg=True, plot_subtract_bg=False):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -860,21 +870,36 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
 
     fig = plt.figure(figsize=(16,6))
     mygrid = gs.GridSpec(4, 2, figure=fig, hspace=0.1, wspace=0.05)
-    mainax_new = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
-    residax_new = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax_new) 
+    mainax = plt.subplot(mygrid.new_subplotspec((0, 0), colspan=1, rowspan=3)) 
+    residax = plt.subplot(mygrid.new_subplotspec((3, 0), colspan=1, rowspan=1), sharex=mainax) 
     mainax_BU = plt.subplot(mygrid.new_subplotspec((0, 1), colspan=1, rowspan=3)) 
     residax_BU = plt.subplot(mygrid.new_subplotspec((3, 1), colspan=1, rowspan=1), sharex=mainax_BU) 
 
-    for (t, ma) in zip(titles, [mainax_new, mainax_BU]):
+    # Axis styling
+    for side in ["left", "right", "top", "bottom"]:
+        mainax.spines[side].set_visible(False)
+        residax.spines[side].set_visible(False)
+        mainax_BU.spines[side].set_visible(False)
+        residax_BU.spines[side].set_visible(False)
+    
+    for m_ax in [mainax, mainax_BU]:
+        m_ax.tick_params(labelbottom=False)
+        m_ax.set_facecolor("gainsboro")
+        m_ax.grid(zorder=1, color="white", which="major")
+
+    for r_ax in [residax, residax_BU]:
+        r_ax.tick_params(labelbottom=True)
+        r_ax.set_facecolor("gainsboro")
+        r_ax.grid(zorder=1, color="white", which="major")
+        r_ax.set_xlabel("Wavelength (nm)")
+
+    for (t, ma) in zip(titles, [mainax, mainax_BU]):
         ma.tick_params(labelbottom=False)
         ma.set_title(t)
-        ma.set_xlim(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
+        ma.set_xlim(121.5, 121.65)# (min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)
 
-    for ra in [residax_new, residax_BU]:
-        ra.tick_params(labelbottom=True)
-        ra.set_xlabel("Wavelength (nm)")
 
-    mainax_new.set_ylabel(f"Brightness (kR/nm)")
+    mainax.set_ylabel(f"Brightness (kR/nm)")
     mainax_BU.tick_params(axis="y", which="both", labelleft=False)
     residax_BU.tick_params(axis="y", which="both", labelleft=False)
 
@@ -887,30 +912,30 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
             plot_model_new = model_fit_new - pybackground
             plot_data_BU = data_vals_BU - BUbackground
             plot_model_BU = model_fit_BU - BUbackground
-            mainax_new.plot(data_wavelengths, pybackground-50, label="background (offset=-50)", linewidth=2, zorder=2, color=bg_color)
-            mainax_BU.plot(data_wavelengths, BUbackground-1, label="background  (offset=-1)", linewidth=2, zorder=2, color=bg_color)
+            mainax.plot(data_wavelengths, pybackground-50, label="background (offset=-50)", linewidth=2, zorder=3, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground-1, label="background  (offset=-1)", linewidth=2, zorder=3, color=bg_color)
         else: # show arrays with bg included, plot bg
             plot_data_new = data_vals_new 
             plot_model_new = model_fit_new
             plot_data_BU = data_vals_BU
             plot_model_BU = model_fit_BU
-            mainax_new.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=2, color=bg_color)
-            mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=2, color=bg_color)
+            mainax.plot(data_wavelengths, pybackground, label="background", linewidth=2, zorder=3, color=bg_color)
+            mainax_BU.plot(data_wavelengths, BUbackground, label="background", linewidth=2, zorder=3, color=bg_color)
         
     # Plot the data and fit and a guideline for the central wavelength
-    mainax_new.errorbar(data_wavelengths, plot_data_new, yerr=data_unc_new, linewidth=0, zorder=3, alpha=0.7, color=data_color)
-    mainax_new.step(data_wavelengths, plot_data_new, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
-    mainax_new.step(data_wavelengths, plot_model_new, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
+    mainax.errorbar(data_wavelengths, plot_data_new, yerr=data_unc_new, linewidth=0, elinewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax.step(data_wavelengths, plot_data_new, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
+    mainax.step(data_wavelengths, plot_model_new, where="mid", label="model", linewidth=2, zorder=4, color=model_color)
 
-    mainax_BU.errorbar(data_wavelengths, plot_data_BU, yerr=data_unc_BU, linewidth=0, zorder=3, alpha=0.7, color=data_color)
+    mainax_BU.errorbar(data_wavelengths, plot_data_BU, yerr=data_unc_BU, linewidth=0, elinewidth=1, zorder=3, alpha=0.7, color=data_color)
     mainax_BU.step(data_wavelengths, plot_data_BU, where="mid", label="data", linewidth=1, zorder=3, alpha=0.7, color=data_color)
-    mainax_BU.step(data_wavelengths, plot_model_BU, where="mid", label="model", linewidth=2, zorder=2, color=model_color)
+    mainax_BU.step(data_wavelengths, plot_model_BU, where="mid", label="model", linewidth=2, zorder=4, color=model_color)
 
     #  Plot the fit line centers on both residual and main axes
     guideline_color = "xkcd:cool gray"
-    mainax_new.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    mainax.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
     mainax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    residax_new.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    residax.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
     residax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
     
     # Print text
@@ -927,35 +952,35 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['uncert_D'], 2)} "+
                        f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['uncert_D'], 1)})")
 
-    textx = [0.45, 0.45]#[0.38, 0.28]
+    textx = [0.53, 0.53]#[0.38, 0.28]
     texty = [0.5, 0.4]#[0.5, 0.2]
     talign = ["left", "left"]
 
     for i in range(0, len(printme_new)):
-        mainax_new.text(textx[i], texty[i], printme_new[i], transform=mainax_new.transAxes, ha=talign[i])
+        mainax.text(textx[i], texty[i], printme_new[i], transform=mainax.transAxes, ha=talign[i])
         mainax_BU.text(textx[i], texty[i], printme_BU[i], transform=mainax_BU.transAxes, ha=talign[i])
 
     # ax.set_yscale("log")
-    residax_new.set_ylabel(f"Residuals\n (data-model)")
+    residax.set_ylabel(f"Residuals\n (data-model)")
     if logview:
-        mainax_new.set_yscale("log")
+        mainax.set_yscale("log")
         mainax_BU.set_yscale("log")
-    mainax_new.legend()
+    mainax.legend()
     mainax_BU.legend()
 
     # Residual axis
     residual_color = "xkcd:dark lilac"
     residual_new = (data_vals_new - model_fit_new)
-    residax_new.step(data_wavelengths, residual_new, where="mid", linewidth=1, color=residual_color)
-    residax_new.errorbar(data_wavelengths, residual_new, yerr=data_unc_new, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
+    residax.step(data_wavelengths, residual_new, where="mid", linewidth=1, color=residual_color, zorder=3)
+    residax.errorbar(data_wavelengths, residual_new, yerr=data_unc_new, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     bound = np.max([abs(np.min(residual_new)), np.max(residual_new)]) * 1.10
-    residax_new.set_ylim(-bound, bound)
-    residax_new.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
+    residax.set_ylim(-bound, bound)
+    residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
 
     residual_BU = (data_vals_BU - model_fit_BU)
     bound = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
     bound = bound * 1.10
-    residax_BU.step(data_wavelengths, residual_BU, where="mid", linewidth=1, color="xkcd:medium gray")
+    residax_BU.step(data_wavelengths, residual_BU, where="mid", linewidth=1, color=residual_color, zorder=3)
     residax_BU.errorbar(data_wavelengths, residual_BU, yerr=data_unc_BU, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     residax_BU.set_ylim(-bound, bound)
     residax_BU.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
