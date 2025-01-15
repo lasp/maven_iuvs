@@ -1433,40 +1433,61 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
         initial_guess = line_fit_initial_guess(wavelengths, spec) 
         if return_each_line_fit:
-            fit_params, I_fit, fit_1sigma, H_fit, D_fit = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
+            fit_params_list, I_fit, fit_1sigma, H_fit, D_fit = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
                                                     fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning, return_each_line_fit=True) 
         else:
-            fit_params, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
+            fit_params_list, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
                                                     fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning) 
 
-        # Create a convenient dictionary which can be used with a plotting routine
+        # Convert fit_params to a dictionary so it's easier to use.
+        fit_params = {"area_H": fit_params_list[0], "area_D": fit_params_list[1], 
+                       "lambdac_H": fit_params_list[2], "lambdac_D": fit_params_list[2]-D_offset, 
+                       "M":fit_params_list[3], "B": fit_params_list[4]}
+        fit_unc = {"uncert_H": fit_1sigma[0], "uncert_D": fit_1sigma[1], "uncert_lambdac_H": fit_1sigma[2], 
+                   "uncert_M": fit_1sigma[3], "uncert_B": fit_1sigma[4]}
 
-        if np.isnan(fit_params).all():
-            fit_params_for_printing = {'area': fit_params[0], 'area_D': fit_params[1], 
-                                        'lambdac': fit_params[2], 'lambdac_D': fit_params[2]-D_offset, 
-                                        'M': fit_params[3], 'B': fit_params[4]}
+        if fit_IPH:
+            fit_params["area_IPH"] = fit_params_list[-2]
+            fit_params["lambdac_IPH"] = fit_params_list[-1]         
+            fit_unc["uncert_IPH"] = fit_1sigma[-2]
+            fit_unc["uncert_lambdac_IPH"] = fit_1sigma[-1]  
+
+        
+        # Create a convenient dictionary which can be used with a plotting routine
+        if np.isnan(fit_params_list).all():
+            fit_params_for_printing = fit_params
         else:
-            fit_params_for_printing = {'area': round(fit_params[0]), 'area_D': round(fit_params[1]), 
-                                        'lambdac': round(fit_params[2], 3), 'lambdac_D': round(fit_params[2]-D_offset, 3), 
-                                        'M': round(fit_params[3]), 'B': round(fit_params[4])}
+            fit_params_for_printing = {'area_H': round(fit_params["area_H"]), 'area_D': round(fit_params["area_D"]), 
+                                        'lambdac_H': round(fit_params["lambdac_H"], 3), 'lambdac_D': round(fit_params["lambdac_H"]-D_offset, 3),
+                                        "M": round(fit_params["M"]), "B": round(fit_params["B"])}
+            
+        if fit_IPH:
+            fit_params_for_printing["area_IPH"] = fit_params["area_IPH"]
+            fit_params_for_printing["lambdac_IPH"] = fit_params["lambdac_IPH"]
         
         # Construct a background array from the fit which can then be converted like the spectrum
-        bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
+        bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac_H'], fit_params_for_printing['B'])
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if do_BU_background_comparison: 
             IDL_style_background = backgrounds_BU[i, :]
-            fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, hush_warning=hush_warning,
+            fit_params_BUbg_list, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, hush_warning=hush_warning,
                                                                     unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
+            
+            # Convert fit_params to a dictionary so it's easier to use.
+            fit_params_BUbg = {"area_H": fit_params_BUbg_list[0], "area_D": fit_params_BUbg_list[1], 
+                        "lambdac_H": fit_params_BUbg_list[2], "lambdac_D": fit_params_BUbg_list[2]-D_offset}
+            fit_unc_BUbg = {"uncert_H": fit_1sigma_BUbg[0], "uncert_D": fit_1sigma_BUbg[1], "uncert_lambdac_H": fit_1sigma_BUbg[2]}
+
 
             # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
             # since we didn't do integrated brightness in this method.
-            if np.isnan(fit_params_BUbg).all():
-                fit_params_for_printing_BUbg = {'area': fit_params_BUbg[0], 'area_D': fit_params_BUbg[1], 
-                                            'lambdac': fit_params_BUbg[2], 'lambdac_D': fit_params_BUbg[2]-D_offset}
+            if np.isnan(fit_params_BUbg_list).all():
+                fit_params_for_printing_BUbg = {'area_H': fit_params_BUbg["area_H"], 'area_D': fit_params_BUbg["area_D"], 
+                                            'lambdac_H': fit_params_BUbg["lambdac_H"], 'lambdac_D': fit_params_BUbg["lambdac_H"]-D_offset}
             else:
-                fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
-                                            'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
+                fit_params_for_printing_BUbg = {'area_H': round(fit_params_BUbg["area_H"]), 'area_D': round(fit_params_BUbg["area_D"]), 
+                                            'lambdac_H': round(fit_params_BUbg["lambdac_H"], 3), 'lambdac_D': round(fit_params_BUbg["lambdac_H"]-D_offset, 3)}
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
         # COLLECT BRIGHTNESSES
@@ -1476,10 +1497,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # so we have to also.
         spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spec) / (t_int)
         background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) / (t_int)
-        if ~np.isnan(fit_params).all():
+        if ~np.isnan(fit_params_list).all():
             popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
                                             bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-            bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac'], popt[2])
+            bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac_H'], popt[2])
         
             spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
         else:
@@ -1497,17 +1518,17 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
             # Now convert the total brightness and their uncertainties to physical units. Because the model
             # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
-            H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[0]) * conv_to_kR 
-            D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[1]) * conv_to_kR 
-            H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
-            D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR 
+            H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg["area_H"]) * conv_to_kR 
+            D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg["area_D"]) * conv_to_kR 
+            H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_BUbg["uncert_H"]) * conv_to_kR
+            D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_BUbg["uncert_D"]) * conv_to_kR 
 
             # Add brightnesses to arrays so they can be returned for comparison
             H_brightnesses_BUbg[i] = H_kR_BUbg
             D_brightnesses_BUbg[i] = D_kR_BUbg
 
             # Update fit params
-            fit_params_for_printing_BUbg['area'] = round(H_kR_BUbg, 2)
+            fit_params_for_printing_BUbg['area_H'] = round(H_kR_BUbg, 2)
             fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
             fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
             fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
@@ -1528,14 +1549,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
 
         # Now convert the total brightness and their uncertainties to physical units. Because the model
         # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_H"]) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_D"]) * conv_to_kR 
         H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
         D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
           
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
-        if ~np.isnan(fit_params).all():
+        if ~np.isnan(fit_params_list).all():
             popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
                                                bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
             fit_params_for_printing['M'] = popt[0]
@@ -1552,7 +1573,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         D_bright_1sig[i] = D_kR_1sig
 
         # Update fit params
-        fit_params_for_printing['area'] = round(H_kR, 2)
+        fit_params_for_printing['area_H'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
         fit_params_for_printing['uncert_H'] = H_kR_1sig
         fit_params_for_printing['uncert_D'] = D_kR_1sig

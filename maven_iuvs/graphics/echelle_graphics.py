@@ -694,7 +694,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                 Fit of the LSF to the H and D emissions
     fit_params_for_printing : dictionary
                  A custom dictionary object for easily accessing the parameter fits by name.
-                 Keys: area, area_d, lambdac, lambdac_D, M, B.
+                 Keys: area_H, area_D, lambdac_H, lambdac_D, M, B.
     wavelength_bin_edges : array or None
                            If provided, this array of values will be plotted as vertical lines on the plot.
     data_unc : array
@@ -767,18 +767,18 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
             mainax.axvline(e, color="xkcd:dark gray", linestyle="--", linewidth=0.5, zorder=1)
 
     # Plot the fit line centers on both residual and main axes
-    mainax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
-    residax.axvline(fit_params_for_printing['lambdac'], color=guideline_color, zorder=1, lw=1)
+    mainax.axvline(fit_params_for_printing['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    residax.axvline(fit_params_for_printing['lambdac_H'], color=guideline_color, zorder=2, lw=1)
 
     # get index of lambda for D so we can find the value there
     if fit_params_for_printing["lambdac_D"] is not np.nan:
-        mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
-        residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=1, lw=1)
+        mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
 
     # Print text
     printme = []
-    printme.append(f"H: {fit_params_for_printing['area']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
-                   f"kR (SNR: {round(fit_params_for_printing['area'] / fit_params_for_printing['uncert_H'], 1)})")
+    printme.append(f"H: {fit_params_for_printing['area_H']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['uncert_H'], 1)})")
     printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
     talign = ["left", "left"]
@@ -839,7 +839,7 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
                 Fit of the LSF to the H and D emissions
     fit_params_for_printing : dictionary
                  A custom dictionary object for easily accessing the parameter fits by name.
-                 Keys: area, area_d, lambdac, lambdac_D, M, B.
+                 Keys: area_H, area_D, lambdac_H, lambdac_D, M, B.
     H_a, H_b, D_a, D_b : ints
                          indices of data_wavelengths over which the line area was integrated.
                          Used here to call fill_betweenx in the event we want to show it on the plot.
@@ -908,29 +908,22 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
 
     #  Plot the fit line centers on both residual and main axes
     guideline_color = "xkcd:cool gray"
-    mainax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
-    mainax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
-    residax_new.axvline(fit_params_new['lambdac'], color=guideline_color, zorder=1, lw=1)
-    residax_BU.axvline(fit_params_BU['lambdac'], color=guideline_color, zorder=1, lw=1)
+    mainax_new.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    mainax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    residax_new.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    residax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
     
     # Print text
     printme_new = []
     printme_BU = []
-    
-    # Now subtract the background entirely from the fit and then integrate to see the total brightness
-    # printme_new.append(f"H: {fit_params_new['area']}\n± {round(fit_params_new['uncert_H'], 2)} kR")
-    # printme_new.append(f"D: {fit_params_new['area_D']}\n± {round(fit_params_new['uncert_D'], 2)} kR")
 
-    printme_new.append(f"H: {fit_params_new['area']} ± {round(fit_params_new['uncert_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_new['area'] / fit_params_new['uncert_H'], 1)})")
+    printme_new.append(f"H: {fit_params_new['area_H']} ± {round(fit_params_new['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area_H'] / fit_params_new['uncert_H'], 1)})")
     printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['uncert_D'], 2)} "+
                        f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['uncert_D'], 1)})")
 
-    # printme_BU.append(f"H: {fit_params_BU['peakH']}\n± {round(fit_params_BU['uncert_H'], 2)} kR")
-    # printme_BU.append(f"D: {fit_params_BU['peakD']}\n± {round(fit_params_BU['uncert_D'], 2)} kR")
-
-    printme_BU.append(f"H: {fit_params_BU['area']} ± {round(fit_params_BU['uncert_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['area'] / fit_params_BU['uncert_H'], 1)})")
+    printme_BU.append(f"H: {fit_params_BU['area_H']} ± {round(fit_params_BU['uncert_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area_H'] / fit_params_BU['uncert_H'], 1)})")
     printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['uncert_D'], 2)} "+
                        f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['uncert_D'], 1)})")
 
