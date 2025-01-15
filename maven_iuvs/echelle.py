@@ -1602,6 +1602,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             
         if make_plots:
             if make_example_plot:
+                if return_each_line_fit is False:
+                    raise Exception("You must pass return_each_line_plot=True in order to make an example plot, or set make_example_plot=False.")
                 echgr.example_fit_plot(wavelengths, spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bg=bg_array_kR_pernm, H_fit=H_fit_kR_pernm, D_fit=D_fit_kR_pernm)
 
             echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext, fn_for_subtitle=thefnonly, 
