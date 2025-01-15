@@ -685,7 +685,7 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
     
 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
-                  t="Fit", fittext_x=[0.6, 0.6], fittext_y=[0.5, 0.4], fn_for_subtitle="", 
+                  t="Fit", fittext_x=[0.6, 0.6, 0.6], fittext_y=[0.5, 0.4, 0.3], fn_for_subtitle="", 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
                   extra_print_on_plot=None):
     """
@@ -790,13 +790,21 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
         residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
 
+    if "lambdac_IPH" in fit_params_for_printing.keys():
+        mainax.axvline(fit_params_for_printing['lambdac_IPH'], color=guideline_color, zorder=2, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_IPH'], color=guideline_color, zorder=2, lw=1)
+
     # Print text
     printme = []
     printme.append(f"H: {fit_params_for_printing['area_H']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['uncert_H'], 1)})")
     printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
-    talign = ["left", "left"]
+    if "lambdac_IPH" in fit_params_for_printing.keys():
+        print("Adding IPH annotations to plot plan")
+        printme.append(f"IPH: {fit_params_for_printing['area_IPH']} ± {round(fit_params_for_printing['uncert_IPH'], 2)} "+
+                       f"kR (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['uncert_IPH'], 1)})")
+    talign = ["left", "left", "left"]
 
     for i in range(0, len(printme)):
         mainax.text(fittext_x[i], fittext_y[i], printme[i], transform=mainax.transAxes, ha=talign[i])

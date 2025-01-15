@@ -1253,7 +1253,7 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
-                       clean_data=True, clean_method="new", run_writeout=True, make_plots=True, hush_warning=False,
+                       clean_data=True, clean_method="new", run_writeout=True, make_plots=True, hush_warning=False, fit_IPH=False, IPH_lambda_guess=121.555,
                        check_background=False, plot_subtract_bg=True, plot_bg_separately=False, print_algorithm_details_on_plot=False, plot_comparison=False,
                        remove_rays=True, remove_hotpix=True, return_each_line_fit=False, make_example_plot=False, print_fn_on_plot=True, do_BU_background_comparison=False,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
@@ -1431,13 +1431,22 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
-        initial_guess = line_fit_initial_guess(wavelengths, spec) 
+        initial_guess = line_fit_initial_guess(wavelengths, spec)
+        if fit_IPH:
+            print("Fitting IPH")
+            initial_guess.append(initial_guess[0]*0.6) # total brightness IPH. wild guess
+            initial_guess.append(IPH_lambda_guess)
+        else:
+            pass 
+
         if return_each_line_fit:
             fit_params_list, I_fit, fit_1sigma, H_fit, D_fit = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
-                                                    fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning, return_each_line_fit=True) 
+                                                    fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning, return_each_line_fit=True,
+                                                    fit_IPH=fit_IPH) 
         else:
             fit_params_list, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
-                                                    fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning) 
+                                                    fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning,
+                                                    fit_IPH=fit_IPH) 
 
         # Convert fit_params to a dictionary so it's easier to use.
         fit_params = {"area_H": fit_params_list[0], "area_D": fit_params_list[1], 
@@ -1546,6 +1555,8 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             H_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, H_fit) * conv_to_kR_per_nm
         if 'D_fit' in vars():
             D_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, D_fit) * conv_to_kR_per_nm
+        if 'IPH_fit' in vars():
+            IPH_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, IPH_fit) * conv_to_kR_per_nm
 
         # Now convert the total brightness and their uncertainties to physical units. Because the model
         # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
@@ -1553,6 +1564,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_D"]) * conv_to_kR 
         H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
         D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
+        if fit_IPH:
+            IPH_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_IPH"]) * conv_to_kR 
+            IPH_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc["uncert_IPH"]) * conv_to_kR 
+            # print(f"IPH fit params were {fit_params[-2]} DN ({IPH_kR} kR) at {fit_params[-1]}")
           
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
@@ -1577,6 +1592,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         fit_params_for_printing['area_D'] = round(D_kR, 2)
         fit_params_for_printing['uncert_H'] = H_kR_1sig
         fit_params_for_printing['uncert_D'] = D_kR_1sig
+        if fit_IPH:
+            fit_params_for_printing['area_IPH'] = round(IPH_kR, 2)
+            fit_params_for_printing['uncert_IPH'] = IPH_kR_1sig
         
         # Plot fit
         # ============================================================================================
@@ -1772,7 +1790,7 @@ def get_binning_df(calibration="new"):
 # Line fitting =============================================================
     
 def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver=None, fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
-                return_each_line_fit=False, hush_warning=False):
+                return_each_line_fit=False, hush_warning=False, fit_IPH=False):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
     and minimizes the "badness".
@@ -1827,17 +1845,20 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
     if fitter=="scipy":
         # If doing things with the BU background
         if BU_bg is not None:
-            bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess[:-2], args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
-            I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg)
-            modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess[:-2]))] # TODO: Make this a dictionary so it's easier to figure out what's what.
+            param_initial_guess = param_initial_guess[0:3] # only use the estimated areas and central wavelength for this version. 
+
+            bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
+            I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg, fit_IPH=fit_IPH)
+            modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess))]
         # If using a linear background
         else:
             bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, None), method=solver)
 
             if return_each_line_fit:
-                I_bin, H_bin, D_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, None, return_each_line_fit=True)
+                I_bin, H_bin, D_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, None, return_each_line_fit=True, fit_IPH=fit_IPH)
             else:
-                I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, None)
+                
+                I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, None, fit_IPH=fit_IPH)
     
             modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess))]
 
@@ -1852,9 +1873,13 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
             if BU_bg is not None:
-                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg))
+                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), 
+                                                                 kwargs={"return_each_line_fit": return_each_line_fit, "fit_IPH": False})
+                print(hessian)
             else:
-                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, None))
+                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, None), 
+                                                                 kwargs={"return_each_line_fit": return_each_line_fit, "fit_IPH": fit_IPH})
+
             fit_uncert = np.sqrt(np.diag(inv(hessian)))
 
         if return_each_line_fit:
@@ -1969,7 +1994,7 @@ def badness_bg(params, wavelength_data, DN_data):
     return badness
 
 
-def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n, BU_bg):
+def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n, BU_bg, return_each_line_fit=False, fit_IPH=False,):
     """
     Retrieves the model of the lineshape to fit and the associated log likelihood, denoted 
     L (assuming a Gaussian distributed quantity). If n=-1 is passed in, then L becomes the 
@@ -2000,7 +2025,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
     """
 
     # Now do the model 
-    DN_fit = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg) 
+    DN_fit = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg, return_each_line_fit=return_each_line_fit, fit_IPH=fit_IPH) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
     L = -np.sum((DN_fit - data)**2 / (2*(uncertainty**2) ) ) # negative log-likelihood
@@ -2008,7 +2033,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
     return L * n
 
 
-def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, return_each_line_fit=False):
+def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, return_each_line_fit=False, fit_IPH=False):
     """
     Builds the line shape model of the form:
     (A_H * LSF) + (A_D * LSF) + (Background)
@@ -2025,18 +2050,20 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, return_ea
               the cumulative line spread function for the LSF
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
+    fit_IPH : boolean
+              if True, a third total brightness and central wavelength (intended for IPH) 
+              can be passed in as parameters in the last 2 positions in the order named here.
+              if False, the fitter will proceed fitting only H and D.
 
     Returns:
     ----------
     I_bin : array
             brightness per bin 
-
     """
     total_brightness_H = params[0] # Integrated - DN
     total_brightness_D = params[1] # Integrated - DN
     central_wavelength_H = params[2] # nm
     central_wavelength_D = params[2] - D_offset # nm
-    
 
     # Interpolate the CLSF for a given attempted central wavelength 
     interpolated_CLSF_H = interpolate_CLSF(central_wavelength_H, binedges, theCLSF)
@@ -2051,27 +2078,36 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, return_ea
 
     H_fit = total_brightness_H * normalized_line_shape_H
     D_fit = total_brightness_D * normalized_line_shape_D
+    fitsum = H_fit + D_fit
+
+    # Do the IPH fit, if requested
+    if fit_IPH:
+        total_brightness_IPH = params[-2]
+        central_wavelength_IPH = params[-1]
+        interpolated_CLSF_IPH = interpolate_CLSF(central_wavelength_IPH, binedges, theCLSF)
+        normalized_line_shape_IPH = np.diff(interpolated_CLSF_IPH) # Unitless
+        IPH_fit = total_brightness_IPH * normalized_line_shape_IPH
+        fitsum += IPH_fit
 
     # Return the flux per bin
     if BU_bg is not None:
-        I_bin = (H_fit + 
-                 D_fit +
+        I_bin = (fitsum + 
                  BU_bg
                 )
     else:
         background_m = params[3]
         background_b = params[4]
-        I_bin = (H_fit + 
-                 D_fit + 
+        I_bin = (fitsum +  
                  background(wavelength_data, background_m, central_wavelength_H, background_b)
                 )
         
     if return_each_line_fit:
-        return I_bin, H_fit, D_fit
+        if fit_IPH: 
+            return I_bin, H_fit, D_fit, IPH_fit
+        else: 
+            return I_bin, H_fit, D_fit
     else:
         return I_bin
-
-    return I_bin
 
 
 def background(lamda, m, lamda_c, b):
