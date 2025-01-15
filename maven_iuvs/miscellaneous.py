@@ -2,7 +2,7 @@ import numpy as np
 import datetime
 import re 
 import os
-from maven_iuvs.user_paths import l1a_dir
+from maven_iuvs.user_paths import l1a_dir, l1a_full_mission_reprocess_dir
 
 # Common regular expressions for parsing filenames
 orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
@@ -208,19 +208,40 @@ def locate_missing_frames(hdul, n_int):
     return None
    
 
-
 def iuvs_data_product_level_from_fname(fname):
     """Find the string representing the data product level, e.g. 'l1a'."""
 
     seg_pattern = "(?<=iuv_)l[0-3][a-c]*"
     return re.search(seg_pattern, fname)[0]
 
-def relative_path_from_fname(fname):
-    """Given some filename, get the relative path it lives in"""
+
+def relative_path_from_fname(l1a_fname, v="v13"):
+    """
+    Given some l1a filename (no path information), get the relative path it lives in.
+
+    Parameters
+    ----------
+    l1a_fname : string
+                filename (e.g. 'mvn_iuv_.....fits.gz')
+    v : string
+        data product version, "v13" or "v14" for now. 
+        The latter will return the full mission reprocess directory 
+        until the reprocess is the copy of record, at which point this
+        function ought to be updated.
+    
+    Returns
+    ----------
+    Parent l1a folder including orbit set folder : string
+    """
 
     # Get orbit folder
-    orbfold = orbit_folder(iuvs_orbno_from_fname(fname))
-    return l1a_dir + orbfold + "/"
+    orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
+    if v=="v13":
+        return l1a_dir + orbfold + "/"
+    elif v=="v14":
+        return l1a_full_mission_reprocess_dir + orbfold + "/"
+    else:
+        raise Exception("Invalid version number for data products! Please choose 'v13' or 'v14'")
 
 
 def findDiff(d1, d2, path=""):
