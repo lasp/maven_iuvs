@@ -1466,7 +1466,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             fit_params_for_printing["lambdac_IPH"] = fit_params["lambdac_IPH"]
         
         # Construct a background array from the fit which can then be converted like the spectrum
-        bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac_H'], fit_params_for_printing['B'])
+        bg_fit = background(wavelengths, fit_params['M'], fit_params['lambdac_H'], fit_params['B'])
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if do_BU_background_comparison: 
@@ -1500,7 +1500,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         if ~np.isnan(fit_params_list).all():
             popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
                                             bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-            bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac_H'], popt[2])
+            bg_ph_s = background(wavelengths, popt[0], fit_params['lambdac_H'], popt[2])
         
             spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
         else:
