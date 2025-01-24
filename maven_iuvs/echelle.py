@@ -368,18 +368,18 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
 
         # Downselect to the right dates 
         print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
-        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
         
     elif process_based_on=="orbits":
         print(f"Downselecting to orbits {orbit_range[0]}--{orbit_range[1]}")
-        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", orbit=orbit_range)
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", orbit=orbit_range)
     elif process_based_on=="dates":
         print(f"Downselecting to orbits {date_range[0]}--{date_range[1]}")
-        selected_l1a = iuvs.echelle.downselect_data(ech_l1a_idx, light_dark="light", date=date_range)
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=date_range)
 
     # NPair lights and darks
     print("Finding darks for the lights")
-    lights_and_darks, files_missing_dark = iuvs.echelle.pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
 
     # The following prefixes "limb" and "disk" files but for some reason the light/dark pair files
     # have a column that just lists "limb" or "disk" without the prefix. So we remove it for that column.
@@ -392,17 +392,17 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
         wr.writerow(["Folder", "Light", "Dark", "Segment"])
         for k in lights_and_darks.keys():
             lightfn = k
-            label = iuvs.miscellaneous.iuvs_segment_from_fname(lightfn)
+            label = iuvs_segment_from_fname(lightfn)
 
             # remove in/out from disk and limb because they're not in the IDL code.
             for p in prefixes:
                 if p in label:
                     label = label.replace(p, "", 1)
                 
-            orbit_num = iuvs.miscellaneous.iuvs_orbno_from_fname(lightfn)
+            orbit_num = iuvs_orbno_from_fname(lightfn)
             try: 
                 darkfn = lights_and_darks[k][1]["name"]
-                wr.writerow([l1a_dir + iuvs.miscellaneous.orbit_folder(orbit_num) + "/",
+                wr.writerow([l1a_dir + orbit_folder(orbit_num) + "/",
                                 lightfn, 
                                 darkfn,
                                 label])
