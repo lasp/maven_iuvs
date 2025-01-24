@@ -1553,8 +1553,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
             H_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, H_fit) * conv_to_kR_per_nm
         if 'D_fit' in vars():
             D_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, D_fit) * conv_to_kR_per_nm
-        if 'IPH_fit' in vars():
-            IPH_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, IPH_fit) * conv_to_kR_per_nm
 
         # Now convert the total brightness and their uncertainties to physical units. Because the model
         # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
@@ -1565,8 +1563,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         if fit_IPH:
             IPH_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_IPH"]) * conv_to_kR 
             IPH_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc["uncert_IPH"]) * conv_to_kR 
-            # print(f"IPH fit params were {fit_params[-2]} DN ({IPH_kR} kR) at {fit_params[-1]}")
-          
+
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
         if ~np.isnan(fit_params_list).all():
@@ -1632,7 +1629,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                 echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
                                             fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
                                             titles=["Linear background", "Background ~Mayyasi+2023"], 
-                                            plot_subtract_bg=plot_subtract_bg, data_unc_new=data_unc_kR_pernm, # unit=["kR/nm", "kR/nm"], 
+                                            plot_subtract_bg=plot_subtract_bg, data_unc_new=data_unc_kR_pernm, 
                                             data_unc_BU=data_unc_kR, suptitle=titletext)
         
         # Background comparison

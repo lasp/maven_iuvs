@@ -801,7 +801,6 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
     if "lambdac_IPH" in fit_params_for_printing.keys():
-        print("Adding IPH annotations to plot plan")
         printme.append(f"IPH: {fit_params_for_printing['area_IPH']} ± {round(fit_params_for_printing['uncert_IPH'], 2)} "+
                        f"kR (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['uncert_IPH'], 1)})")
     talign = ["left", "left", "left"]
