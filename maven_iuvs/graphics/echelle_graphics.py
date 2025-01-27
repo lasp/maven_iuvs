@@ -394,8 +394,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     initial_guess = line_fit_initial_guess(wl, coadded_spec) 
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
-    
-    fit_params, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, unc=coadded_unc_spec, 
+
+    fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, unc=coadded_unc_spec, 
                                                 solver="Powell", fitter="scipy", hush_warning=True) 
     bg_fit = background(wl, fit_params[3], fit_params[2], fit_params[4])
         
