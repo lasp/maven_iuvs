@@ -13,6 +13,7 @@ import gc
 from tqdm.auto import tqdm
 from pathlib import Path
 from maven_iuvs.binning import get_pix_range, get_bin_edges
+from maven_iuvs.constants import D_offset
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end, convert_spectrum_DN_to_photoevents
 from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadrature, background, \
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
@@ -22,7 +23,7 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_alt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
-    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE, fn_RE
+    iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, orbno_RE, fn_noext_RE, fn_RE
 from maven_iuvs.search import find_files 
 from maven_iuvs.time import utc_to_sol
 from maven_iuvs.user_paths import l1a_dir
@@ -644,6 +645,96 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 
 # LINE FITTING PLOTS ========================================================
+def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params, fit_unc, H_fit=None, D_fit=None,
+                   do_BU_background_comparison=False, print_fn_on_plot=True, plot_bg_separately=False, plot_subtract_bg=False, make_example_plot=False,
+                   BU_stuff=None):
+    """
+    Given data and model information in physical units this makes some nice plots.
+    Everything should be in physical units or you'll be sad.
+
+    Parameters
+    ----------
+    light_l1a_path : string
+                     path to source L1a file
+    wavelengths : array
+                  Wavelengths at which the observation is recorded.
+    arrays_for_plotting : list 
+                          Contains the data spectrum, data uncertainties, model fit array, and background fit array
+    fit_params : list of dictionaries
+                 Contains model fit parameters for each integration in light_fits, in kR per nm.
+    fit_unc : list of dictionaries
+              Contains model fit uncertainties for each integration in light_fits, in kR per nm.
+    print_fn_on_plot : boolean
+                       Whether to write the source filename as a subtitle on the plot
+    make_example_plot : boolean
+                        whether to make a small plot showing each of the individual line fits, background, model etc. useful for talks or posters
+    plot_bg_separately : boolean
+                         Whether to make an entirely separate figure showing the background (mostly for inspection purposes)
+    plot_subtract_bg : boolean
+                       Whether to make the fit plot by first subtracting the background from the data and model
+    do_BU_background_comparison : boolean
+                                  if True, will plot a two-panel figure showing the fit with a linear background and the background as per Mayyasi+2023
+    H_fit :  array
+             Individual line fit for H; should be supplied if make_example_plot is true
+    D_fit : array
+            Individual line fit for D; should be supplied if make_example_plot is true
+    BU_stuff : list
+               The same as arrays_for_plotting, plus fit_params and fit_unc for the fit done using the Mayyasi+2023 style background.
+    
+    Returns
+    ----------
+    Cool plots
+    """
+    # Unpack
+    spec, data_unc, I_fit, bg_fits = arrays_for_plotting
+    
+    if do_BU_background_comparison:
+        spec_BUbg, data_unc_BUbg, I_fit_BUbg, bg_array_BUbg, fit_params_BUbg, fit_unc_BUbg = BU_stuff
+
+    for i in range(len(fit_params)): 
+        
+        # Round fit params
+        fit_params_for_printing = {"area_H": round(fit_params[i]["area_H"], 2), "uncert_H": fit_unc[i]["unc_H"],
+                                   "area_D": round(fit_params[i]["area_D"], 2), "uncert_D": fit_unc[i]["unc_D"], 
+                                  "lambdac_H": round(fit_params[i]["lambdac_H"], 3), "lambdac_D": round(fit_params[i]["lambdac_H"]-D_offset, 3), 
+                                  "M": round(fit_params[i]["M"]), "B": round(fit_params[i]["B"])}
+        if "area_IPH" in fit_params[i].keys():
+            fit_params_for_printing["area_IPH"] = round(fit_params[i]["area_IPH"], 2)
+            fit_params_for_printing["lambdac_IPH"] = round(fit_params[i]["lambdac_IPH"], 2)
+            fit_params_for_printing["uncert_IPH"] = round(fit_unc[i]["unc_IPH"], 2)
+
+
+        # Round fit params
+        if do_BU_background_comparison:
+            fit_params_for_printing_BUbg = {"area_H": round(fit_params_BUbg[i]["area_H"], 2), "uncert_H": fit_unc_BUbg[i]["unc_H"],
+                                            "area_D": round(fit_params_BUbg[i]["area_D"], 2), "uncert_D": fit_unc_BUbg[i]["unc_D"], 
+                                            "lambdac_H": round(fit_params_BUbg[i]["lambdac_H"], 3), "lambdac_D": round(fit_params_BUbg[i]["lambdac_H"]-D_offset, 3)}
+            
+        # Plot fit
+        # ============================================================================================
+        titletext = f"Orbit {re.search(orbno_RE, light_l1a_path).group(0)} - Integration {i} - v15"
+
+        if print_fn_on_plot:
+            thefnonly =  re.search(fn_RE, light_l1a_path).group(0)
+        else:
+            thefnonly = ""
+            
+        plot_line_fit(wavelengths, spec[i, :], I_fit[i, :], fit_params_for_printing, data_unc=data_unc[i, :], 
+                            t=titletext, fn_for_subtitle=thefnonly, plot_bg=bg_fits[i, :], plot_subtract_bg=plot_subtract_bg, 
+                            plot_bg_separately=plot_bg_separately)
+
+        if do_BU_background_comparison:
+            plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :], fit_params_for_printing, fit_params_for_printing_BUbg, 
+                                     bg_array_BUbg[i, :], bg_fits[i, :], data_unc_new=data_unc[i, :], data_unc_BU=data_unc_BUbg[i, :], 
+                                     titles=["Linear background", "Mayyasi+2023 background"])
+
+        if make_example_plot:
+            if (H_fit is None) and (D_fit is None):
+                raise Exception("You must pass H fit and D fit to make example plot")
+            example_fit_plot(wavelengths, spec[i, :], data_unc[i, :], I_fit[i, :], bg=bg_fits[i, :], H_fit=H_fit[i, :], D_fit=D_fit[i, :])
+
+    return 
+
 
 def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, H_fit=None, D_fit=None):
     mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
