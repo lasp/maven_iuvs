@@ -667,9 +667,7 @@ def get_dark_frames(dark_fits, average=False):
     elif n_ints_dark == 1: 
         # Early mission, only one dark frame was taken.
         darks[0, :, :] = dark_fits['Primary'].data[0]
-        darks[1, :, :] = dark_fits['Primary'].data[0] # Best option for observations with 1 dark, which is mostly early mission. 
-                                                      # Don't want to set to nan because we would still like to see the light 
-                                                      # frames. Not a better way to adjust the quicklooks atm. 
+        darks[1, :, :] = np.nan # Set the second frame to nans if there was only one dark frame taken
     elif n_ints_dark == 2:
         # Noise pattern of the first and every other frame is different. Eventually, we realized this
         # and started taking two darks

@@ -577,12 +577,14 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     for i in range(n_ints):
         if i in nan_light_inds:
             ThumbAxes[i].text(0.1, 1.1, "Missing data", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
+            this_frame = data[i, :, :]
         elif i in bad_light_inds:
             ThumbAxes[i].text(0.1, 1.1, "Saturated/broken", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
+            this_frame = data[i, :, :]
         elif i in light_frames_with_nan_dark:
-            ThumbAxes[i].text(0.1, 1.1, "Bad dark frame", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
+            ThumbAxes[i].text(0.1, 1.1, "Raw shown (bad dark)", color=color_dict['darkgrey'], va="top", fontsize=8+fontsizes[fs], transform=ThumbAxes[i].transAxes)
+            this_frame = light_fits['Primary'].data[i, :, :] # Display the raw light frame even if the dark was bad - for inspection purposes.
 
-        this_frame = data[i, :, :]
         detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
                                print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         # print the alt
