@@ -189,6 +189,8 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
     ----------
     index : list
             list of dictionaries of file metadata returned by get_file_metadata
+    light_dark : string
+                 "light" or "dark"; downselects index to either light or dark observations.
     orbit : int or list
             orbit number to select; if a list of length 2 is passed, orbits within the range 
             will be selected. A -1 may be passed in the second position to indicate to run to the end.
@@ -197,8 +199,22 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
            If a list is entered, observations between the two date/times are returned. A -1 may be passed in the second position to indicate to run to the end.
            Whenever the time is not included, the code will liberally assume to start at midnight on the first day of the range 
            and end at 23:59:59 on the last day of the range.
-    segment: an orbit segment to look for. "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay" etc
-
+    segment : string 
+              orbit segment to be selected for. Valid options: "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay", "peripase", "outspace", "inspace"
+    lat : float or list
+          Latitude of observation to select. Based on the latitudes stored within the metadata index entries, which include
+          minimum and maximum latitudes in the observation.
+          If a float, will select observations in the range [floor(lat), ceil(lat)]. 
+          If a list, will select observations with minimum and maximum latitudes within the range defined by the list.
+    ls : float or list
+         Mars solar longitude, based on value stored in metadata index entry. 
+         If a float, will select observations whose Ls is within the range defined by [floor(ls), ceil(ls)];
+         If a list, will select observations whose Ls is within the range defined by the list.
+    int_time : float
+               Will select observations whose integration time (per frame) exactly matches int_time.
+    binning : dictionary
+              Will select observations whose binning entry in the metadata index exactly matches binning.
+          
     Returns
     ----------
     selected : list
