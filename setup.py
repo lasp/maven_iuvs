@@ -9,6 +9,7 @@ setuptools.setup(
     author=('Zachariah Milby,'
             ' Kyle Connour,'
             ' Mike Chaffin,'
+            ' Eryn Cangi,'
             ' and the IUVS team'),
     packages=setuptools.find_packages(),
     include_package_data=True,

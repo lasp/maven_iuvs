@@ -289,14 +289,26 @@ def DN_to_PE_conversion_factor(light_fits):
 
 def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     """
-    Figure out the random uncertainty in DN.
+    Figure out the random uncertainty in DN. This is adapted from the IDL pipeline in file:"
+    IUVS-ITF-SW/code/level1b/iuvs_calc_unc.pro
 
-    # Let's start by just wholesale adapting the uncertainty calculation from Matteo in the IDL pipeline and see what it looks like.
-    # In progress
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+    dark_subtracted_and_cleaned_data : Array
+                                       data cube from the same file
+
+    Returns
+    ---------
+    ran_DN : Array
+             Random DN uncertainty, with the same shape as dark_subtracted_and_cleaned_data.
     """
-    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])   # I think it's wrong to use this. IDL is acquiring the voltage. mcp_volt_to_gain(, channel="FUV")
-    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # in a square bin of spatial x spectral. works out to 22 for recent dat
-    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) # WHERE the heck did I get this??
+    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0]) 
+    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # I believe this is pixels per square bin, spatial x spectral.
+                                                                                                 # For recent data, 11 (spa) x 2 (spe) = 22.
+    # Following lines are from the IDL pipeline, file: 
+    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) 
     fit_function = 40 / (2**((700-volt)/50))
     
     # This is the correct shape, not sure if it's reasonable values though:

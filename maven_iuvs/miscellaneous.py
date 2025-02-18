@@ -2,15 +2,17 @@ import numpy as np
 import datetime
 import re 
 import os
-
+from maven_iuvs.user_paths import l1a_dir, l1a_full_mission_reprocess_dir
 
 # Common regular expressions for parsing filenames
 orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
 orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)"
 datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}"
-fn_RE = r"(?<=00/).+"
+fn_RE = r"mvn.+" #r"(?<=00/).+"
+fn_noext_RE = r"mvn.+[r|s]\d{2}"
 folder_RE = r".+(?=mvn)"
-uniqueID_RE = r"[a-z]+-orbit[0-9]{5}-[a-z]+_[0-9]{8}[tT]{1}[0-9]{6}"
+uniqueID_RE = r"(?<=l[0-2][a-c]\_).+(?=_v[\d]{0,2})"
+gen_error_RE = r"(?<=ERROR:\s)[\s\S]*?with file mvn.+\.fits\.gz"
 
 
 def clear_line(n=100):
@@ -206,9 +208,68 @@ def locate_missing_frames(hdul, n_int):
     return None
    
 
-
 def iuvs_data_product_level_from_fname(fname):
     """Find the string representing the data product level, e.g. 'l1a'."""
 
     seg_pattern = "(?<=iuv_)l[0-3][a-c]*"
     return re.search(seg_pattern, fname)[0]
+
+
+def relative_path_from_fname(l1a_fname, v="v13"):
+    """
+    Given some l1a filename (no path information), get the relative path it lives in.
+
+    Parameters
+    ----------
+    l1a_fname : string
+                filename (e.g. 'mvn_iuv_.....fits.gz')
+    v : string
+        data product version, "v13" or "v14" for now. 
+        The latter will return the full mission reprocess directory 
+        until the reprocess is the copy of record, at which point this
+        function ought to be updated.
+    
+    Returns
+    ----------
+    Parent l1a folder including orbit set folder : string
+    """
+
+    # Get orbit folder
+    orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
+    if v=="v13":
+        return l1a_dir + orbfold + "/"
+    elif v=="v14":
+        return l1a_full_mission_reprocess_dir + orbfold + "/"
+    else:
+        raise Exception("Invalid version number for data products! Please choose 'v13' or 'v14'")
+
+
+def findDiff(d1, d2, path=""):
+    """
+    Recursive functon to find the difference between two dictionaries, the entries in which
+    may themselves be dictionaries. 
+
+    Parameters
+    ----------
+    d1, d2 : dictionaries
+             dictionaries whose entries may also be dictionaries
+    path : string
+           Keeps track of the path in the dictionary where the difference was found.
+    
+    Returns
+    ----------
+    String      showing differences, if they are found
+    None        if no differences
+
+    Source https://stackoverflow.com/a/27266178
+    """
+    
+    for k in d1:
+        if k in d2:
+            if type(d1[k]) is dict:
+                findDiff(d1[k],d2[k], "%s -> %s" % (path, k) if path else k)
+            if d1[k] != d2[k]:
+                result = [ "%s: " % path, " - %s : %s" % (k, d1[k]) , " + %s : %s" % (k, d2[k])]
+                print("\n".join(result))
+        else:
+            print ("%s%s as key not in d2\n" % ("%s: " % path if path else "", k))

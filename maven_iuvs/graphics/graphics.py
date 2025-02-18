@@ -1364,7 +1364,7 @@ def make_sza_plot(fitfile, ax=None, linecolor="cornflowerblue"):
         intnum += 1
     
     ax.tick_params(axis="both", labelsize=16)
-    ax.set_xlabel("Integration no.", fontsize=20)
+    ax.set_xlabel("Integration", fontsize=20)
     ax.set_ylabel("SZA (°)", fontsize=20)
     # ax.set_ylim(0,180)
     ax.set_title("Solar zenith angle", fontsize=20)
@@ -1373,7 +1373,7 @@ def make_sza_plot(fitfile, ax=None, linecolor="cornflowerblue"):
         return fig
     
 
-def make_SCalt_plot(fitfile, ax=None, t=""):
+def make_alt_plot(fitfile, slit_inds, ax=None, ax2=None, t=""):
     """
     Plots the spacecraft altitude procession vs. integration.
     
@@ -1392,34 +1392,54 @@ def make_SCalt_plot(fitfile, ax=None, t=""):
           Returned if ax is not passed as an argument
     """
 
+    ax0col = "xkcd:vibrant purple"
+    ax1col = "xkcd:kelly green"
+
     new_ax = False
     if ax is None:
         new_ax = True
         fig = plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(1, 1, 1)
 
-    arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
-    arr_shape = arr.shape
+    sc_alt_arr = fitfile["SpacecraftGeometry"].data["SPACECRAFT_ALT"]
+    arr_shape = sc_alt_arr.shape
+
+    mrh_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_MRH_ALT"]
+    mean_mrh = np.mean(mrh_arr[:, slit_inds[0]:slit_inds[1]+1, -1], axis=1)
+
+    ax.scatter(range(0, arr_shape[0]), mean_mrh, label="mean MRH", s=25, color=ax0col)
+    ax.tick_params(axis="both", which="both", labelsize=16)
+    ax.tick_params(axis="y", which="both", color=ax0col, labelcolor=ax0col)
+
+    if ax2 is None:
+        ax2 = ax.twinx()
+
+    ax2.scatter(range(0, arr_shape[0]), sc_alt_arr, label="MAVEN", s=25, color=ax1col)
+    ax2.tick_params(axis="both", which="both", color=ax1col, labelcolor=ax1col, labelsize=16)
+    ax2.tick_params(axis="x", which="both", labelbottom=False, bottom=False)
     
-    ax.scatter(range(0, arr_shape[0]), arr, color="cornflowerblue", s=25)
-    ax.tick_params(axis="both", labelsize=16)
-    ax.set_xlabel("Integration no.", fontsize=20)
-    ax.set_ylabel("Alt (km)", fontsize=20)
-    ax.set_title(f"Spacecraft altitude{t}", fontsize=20)
+    ax.set_xlabel("Integration", fontsize=20)
+    ax.set_ylabel("Spatial-mean MRH", fontsize=20, color=ax0col)
+    ax.set_title(f"Altitudes (km){t}", fontsize=20)
+    ax2.set_ylabel("MAVEN (km)", fontsize=20, color=ax1col)
+    
 
     if new_ax:
         return fig
-    
-def make_tangent_lat_lon_plot(fitfile, ax=None, t="", colmap=idl_colorbars.getcmap(76), mikes=True):
+
+
+def make_tangent_lat_lon_plot(fitfile, slit_inds, ax=None, t="", colmap=idl_colorbars.getcmap(74), mikes=True):
     """
     Plots the latitude and longitude of the spacecraft tangent line to the surface vs. integration.
     
     Parameters
     ----------
-    ax : AxesObject
-         Externally-created axis on which to draw the plot.
     fitfile : astropy.io.fits instance
              IUVS FITS file to use
+    slit_inds : list or tuple
+                Two indices specifying the start and end of the slit in the spatial direction
+    ax : AxesObject
+         Externally-created axis on which to draw the plot.
     t : string
         Optional extra text for the plot title
     colmap : name of a colormap or a cmap object from Mike's idl_colorbars module
@@ -1439,20 +1459,21 @@ def make_tangent_lat_lon_plot(fitfile, ax=None, t="", colmap=idl_colorbars.getcm
 
     lat_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LAT"]
     lon_arr = fitfile["PixelGeometry"].data["PIXEL_CORNER_LON"]
-    
-    lat_arr_shape = lat_arr.shape
-    total_ints = lat_arr_shape[0]
-    intnum = 1
-    
+
+    total_ints = lat_arr.shape[0]    
     colors = get_grad_colors(total_ints, colmap, mikes=mikes)
         
     # Loop over integrations
-    for i in range(0, lat_arr_shape[0]):      
-        ax.plot(lon_arr[i, :, -1], lat_arr[i, :, -1], color=colors[i, :], linewidth=2)
-        intnum += 1
+    for i in range(0, lat_arr.shape[0]): 
+        # int=i, plot only the slit inds, only the center of pixel.
+        ax.scatter(lon_arr[i, slit_inds[0], -1], lat_arr[i, slit_inds[0], -1], marker="o", color=colors[i, :]) # Start; 
+        ax.scatter(lon_arr[i, slit_inds[1]+1, -1], lat_arr[i, slit_inds[1]+1, -1], marker="x", color=colors[i, :]) # end of slit 
+        ax.plot(lon_arr[i, slit_inds[0]:slit_inds[1]+1, -1], lat_arr[i, slit_inds[0]:slit_inds[1]+1, -1], color=colors[i, :], linewidth=2)
+
     ax.tick_params(axis="both", labelsize=16)
     ax.set_xlabel("Longitude", fontsize=20)
     ax.set_ylabel("Latitude", fontsize=20)
+    ax.set_facecolor("#454545")
 
     ax.set_title(f"Tangent point lat/lon{t}", fontsize=20)
 

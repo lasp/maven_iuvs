@@ -83,7 +83,7 @@ def detector_image(myfits, integration=0, **kwargs):
 def plot_detector(data_to_plot, spapixrange, spepixrange, 
                   fig=None, ax=None, plot_full_extent=True,
                   scale="linear", print_scale_type=False, 
-                  norm=None, cmap=109, show_colorbar=True, cbar_lbl_size=18, cbar_tick_size=16,
+                  norm=None, cmap=None, cmap_fallback=109, show_colorbar=True, cbar_lbl_size=18, cbar_tick_size=16,
                   arange=None, prange=None):
     """
     Creates an image of the full detector with data_to_plot overlaid. 
@@ -137,11 +137,12 @@ def plot_detector(data_to_plot, spapixrange, spepixrange,
         new_ax = True
         fig = plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(1, 1, 1)
-    if not isinstance(cmap, int):
-        raise ValueError("cmap must be an integer"
-                         " specifying an idl_colorbars colormap.")
+    # if not isinstance(cmap, int):
+    #     raise ValueError("cmap must be an integer"
+    #                      " specifying an idl_colorbars colormap.")
 
-    cmap = idl_colorbars.getcmap(cmap)
+    if cmap is None:
+        cmap = idl_colorbars.getcmap(cmap_fallback)
 
     if plot_full_extent:
         ax.set_xlim([0, 1024])

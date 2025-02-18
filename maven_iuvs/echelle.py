@@ -24,7 +24,7 @@ from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoeven
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
-    uniqueID_RE, find_nearest, fn_RE, orbit_folder
+    orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
@@ -180,15 +180,17 @@ def identify_rogue_observations(idx):
 
 # HELPER METHODS ======================================================
 
-def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, ls=None):
+def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None, lat=None, ls=None, int_time=None, binning=None):
     """
-    Given the light_index of files, this will select only those files which 
+    Given the index of files, this will select only those files which 
     match the orbit number, segment, or date. 
 
     Parameters
     ----------
-    light_index : list
-                  list of dictionaries of file metadata returned by get_file_metadata
+    index : list
+            list of dictionaries of file metadata returned by get_file_metadata
+    light_dark : string
+                 "light" or "dark"; downselects index to either light or dark observations.
     orbit : int or list
             orbit number to select; if a list of length 2 is passed, orbits within the range 
             will be selected. A -1 may be passed in the second position to indicate to run to the end.
@@ -197,30 +199,52 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
            If a list is entered, observations between the two date/times are returned. A -1 may be passed in the second position to indicate to run to the end.
            Whenever the time is not included, the code will liberally assume to start at midnight on the first day of the range 
            and end at 23:59:59 on the last day of the range.
-    segment: an orbit segment to look for. "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay" etc
-
+    segment : string 
+              orbit segment to be selected for. Valid options: "outlimb", "inlimb", "indisk", "outdisk", "corona", "relay", "peripase", "outspace", "inspace"
+    lat : float or list
+          Latitude of observation to select. Based on the latitudes stored within the metadata index entries, which include
+          minimum and maximum latitudes in the observation.
+          If a float, will select observations in the range [floor(lat), ceil(lat)]. 
+          If a list, will select observations with minimum and maximum latitudes within the range defined by the list.
+    ls : float or list
+         Mars solar longitude, based on value stored in metadata index entry. 
+         If a float, will select observations whose Ls is within the range defined by [floor(ls), ceil(ls)];
+         If a list, will select observations whose Ls is within the range defined by the list.
+    int_time : float
+               Will select observations whose integration time (per frame) exactly matches int_time.
+    binning : dictionary
+              Will select observations whose binning entry in the metadata index exactly matches binning.
+          
     Returns
     ----------
-    selected_lights : list
-                      Similar to light_index, list of dictionaries of file metadata.
+    selected : list
+               Similar to index, list of dictionaries of file metadata.
     """
-    selected_lights = copy.deepcopy(light_index)
+    selected = copy.deepcopy(index)
+
+    # Filter to lights or darks as specified 
+    if light_dark=="light":
+        selected = [entry for entry in selected if ech_islight(entry)]
+    elif light_dark=="dark":
+        selected = [entry for entry in selected if ech_isdark(entry)]
+    else: 
+        pass
 
     # First filter by segment; a given segment can occur on many dates and many orbits
     if segment is not None:
-        selected_lights = [entry for entry in selected_lights if segment in iuvs_segment_from_fname(entry['name'])]
+        selected = [entry for entry in selected if segment in iuvs_segment_from_fname(entry['name'])]
 
     # Then filter by orbit, since orbits sometimes cross over day boundaries
     if orbit is not None: 
         # If specifying orbits, first get rid of cruise data
 
         if type(orbit) is int:
-            selected_lights = [entry for entry in selected_lights if ((entry['orbit']==orbit) & (entry['orbit'] != "cruise")) ]
+            selected = [entry for entry in selected if ((entry['orbit']==orbit) & (entry['orbit'] != "cruise")) ]
         elif type(orbit) is list:
             if orbit[1] == -1: 
                 orbit[1] = 99999 # MAVEN will die before this orbit number is reached
 
-            selected_lights = [entry for entry in selected_lights if orbit[0] <= entry['orbit'] <= orbit[1]]
+            selected = [entry for entry in selected if orbit[0] <= entry['orbit'] <= orbit[1]]
 
     # Lastly, filter by date/time
     if date is not None:
@@ -234,10 +258,8 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
                 date[1] = datetime.datetime(date[1].year, date[1].month, date[1].day, 23, 59, 59)
             elif date[1] == -1: # Use this to just go until the present time/date.
                 date[1] = datetime.datetime.utcnow()
-            
-            print(f"Returning observations between {date[0]} and {date[1]}")
 
-            selected_lights = [entry for entry in selected_lights if date[0] <= entry['datetime'] <= date[1]]
+            selected = [entry for entry in selected if date[0] <= entry['datetime'] <= date[1]]
 
         # To get observations at a specific day or specific day/time:
         elif type(date) is not list:  
@@ -246,13 +268,21 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
                 date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0)
                 date1 = datetime.datetime(date.year, date.month, date.day, 23, 59, 59)
 
-                selected_lights = [entry for entry in selected_lights if date0 <= entry['datetime'] <= date1]
+                selected = [entry for entry in selected if date0 <= entry['datetime'] <= date1]
 
             else: # if a full datetime.datetime object is entered, look for that exact entry.
-                selected_lights = [entry for entry in selected_lights if entry['datetime'] == date]
+                selected = [entry for entry in selected if entry['datetime'] == date]
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")
+ 
+    # int time
+    if int_time is not None:
+        selected = [entry for entry in selected if entry['int_time'] == int_time]
+
+    # int time
+    if binning is not None:
+        selected = [entry for entry in selected if entry['binning'] == binning]
 
     # lat
     if lat is not None:
@@ -260,34 +290,159 @@ def downselect_data(light_index, orbit=None, date=None, segment=None, lat=None, 
             lat0 = math.floor(lat)
             lat1 = math.ceil(lat)
 
-            selected_lights = [entry for entry in selected_lights 
-                               if np.all(( (lat0 <= entry['lat']) & (entry['lat'] <= lat1)) \
-                                         | np.isnan(entry['lat']) \
-                                         | np.isnan(entry['lat']))
-            ]
+            selected = [entry for entry in selected 
+                               if (lat0 <= entry['minmax_lat'][0]) & (entry['minmax_lat'][1] <= lat1)
+                              ]
 
         elif type(lat) is list:
-            selected_lights = [entry for entry in selected_lights 
-                               if np.all(( (lat[0] <= entry['lat']) & (entry['lat'] <= lat[1])) \
-                                         | np.isnan(entry['lat']) \
-                                         | np.isnan(entry['lat']))
-            ]
+            selected = [entry for entry in selected 
+                               if (lat[0] <= entry['minmax_lat'][0]) & (entry['minmax_lat'][1] <= lat[1])
+                              ]
 
     # ls
     if ls is not None:
         if type(ls) is not list:
             ls0 = math.floor(lat)
             ls1 = math.ceil(lat)
-            selected_lights = [entry for entry in selected_lights if (ls0 <= entry['Ls'] <= ls1)]
+            selected = [entry for entry in selected if (ls0 <= entry['Ls'] <= ls1)]
         elif type(ls) is list:
-            selected_lights = [entry for entry in selected_lights if (ls[0] <= entry['Ls'] <= ls[1])]
+            selected = [entry for entry in selected if (ls[0] <= entry['Ls'] <= ls[1])]
 
-    return selected_lights
+    return selected
 
 # Relating to dark vs. light observations -----------------------------
+def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lights_and_darks.csv", process_based_on="PDS", PDS=0, 
+                                 orbit_range=None, date_range=None, disallow_processing_past=True):
+    """
+    Parameters
+    ----------
+    ech_l1a_idx : dictionary
+                  includes metadata for all observations throughout mission.
+    dark_index : dictionary
+                 similar to ech_l1a_index but only includes dark files.
+    l1a_dir : string
+              Root directory for l1a files; may differ based on file versions.
+    csv_path : string
+               Full path at which to write out the CSV file.
+    process_based_on : string
+                       "PDS", "orbits", or "dates". Will determine how to select the files that will be included.
+    PDS : int
+          PDS number if processing by PDS.
+    orbit_range : list
+                  Format [start_orbit, end_orbit] (where the entries are integers).
+    date_range : list
+                 Format [start_date, end_date] where each entry is a datetime object of format datetime.datetime(Y, M, D, h, m, s).
+    disallow_processing_past : boolean
+                               if True, the code will throw an error if you are processing a PDS that is already past.
+                               Can be set to False to allow for reprocessing older lists (for example, if being used in a mission-long
+                               reprocess effort)
+    Returns
+    ---------
+    None
+    
+    writes out a CSV file with lights and matching darks. 
+    """
+    # For PDS, do the date/time setup checking
+    if process_based_on=="PDS": 
+        print(f"Processing lights/darks for PDS {PDS}")
+        # TODO: Store these in a spreadsheet and read them in. Plus that way it'll be a nice record of when everythign was done.
+        deadlines = {39: {"start_datetime": datetime.datetime(2024, 5, 15, 0, 0, 0),
+                          "end_datetime": datetime.datetime(2024, 8, 14, 23, 59, 0),
+                          "due_VM": datetime.datetime(2024, 10, 15, 0, 0, 0)},
+                    40: {"start_datetime": datetime.datetime(2024, 8, 15, 0, 0, 0),
+                         "end_datetime": datetime.datetime(2024, 11, 14, 23, 59, 0),
+                         "due_VM": datetime.datetime(2025, 1, 15, 0, 0, 0)}
+                    }
+
+        # Set the delivery due date, start date for the data range, and end date for data range.
+        # Currently these have to be adjusted manually but there may be a way to be smart about it?
+        due_datetime = deadlines[PDS]["due_VM"] # Date it is due to the VM (1 month before due date to PDS) 
+        start_datetime = deadlines[PDS]["start_datetime"] # Starting date of the data window 
+        end_datetime = deadlines[PDS]["end_datetime"] # Ending date of the data window 
+
+        # Check that the due date is in the future - this will obviously fail if I haven't updated the duedate.
+        if disallow_processing_past:
+            if due_datetime < datetime.datetime.now():
+                raise Exception("ERROR! Due date is in the past, please update the dates")
+            else: 
+                print("Running before due date - OK")
+
+            # Check for errors in start and end date entries
+            if (due_datetime-start_datetime).days / 7 > 22: # 22 will account for longer months 
+                raise Exception(f"Error: Start date seems wrong. Due date is {due_datetime} so " 
+                                f"the start date should be 5 months before that, which is {due_datetime - datetime.timedelta(weeks=5*4)}"
+                                " or the 15th in the same month, if previous date is not the 15th")
+            else:
+                print("Start date seems OK")
+
+            if (due_datetime-end_datetime).days / 7 > 9: 
+                raise Exception(f"Error: End date seems wrong. Due date is {due_datetime} so " 
+                                f"the start date should be 2 months before that, which is {due_datetime - datetime.timedelta(weeks=2*4)}"
+                                " or the 15th in the same month, if previous date is not the 15th")
+            else:
+                print("End date seems OK")
+
+        # Downselect to the right dates 
+        print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
+        
+    elif process_based_on=="orbits":
+        print(f"Downselecting to orbits {orbit_range[0]}--{orbit_range[1]}")
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", orbit=orbit_range)
+    elif process_based_on=="dates":
+        print(f"Downselecting to orbits {date_range[0]}--{date_range[1]}")
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=date_range)
+
+    # NPair lights and darks
+    print("Finding darks for the lights")
+    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
+
+    # The following prefixes "limb" and "disk" files but for some reason the light/dark pair files
+    # have a column that just lists "limb" or "disk" without the prefix. So we remove it for that column.
+    prefixes = ["in", "out"]
+    errors = []
+
+    print("Writing out light/dark pair file")
+    with open(csv_path, 'w', newline='') as csvfile:
+        wr = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        wr.writerow(["Folder", "Light", "Dark", "Segment"])
+        for k in lights_and_darks.keys():
+            lightfn = k
+            label = iuvs_segment_from_fname(lightfn)
+
+            # remove in/out from disk and limb because they're not in the IDL code.
+            for p in prefixes:
+                if p in label:
+                    label = label.replace(p, "", 1)
+                
+            orbit_num = iuvs_orbno_from_fname(lightfn)
+            try: 
+                darkfn = lights_and_darks[k][1]["name"]
+                wr.writerow([l1a_dir + orbit_folder(orbit_num) + "/",
+                                lightfn, 
+                                darkfn,
+                                label])
+            except TypeError as e:
+                errors.append(k)
+                wr.writerow([lightfn, "ERROR!", label])
+                print(f"Caught error {e} for file {lightfn}")
+                continue
+
+    if files_missing_dark:
+        print("Warning: Some files didn't have a valid dark. Here they are:")
+        print(files_missing_dark)
+
+    print("Done!")
+    pass
+
+
 def get_dark(light_filepath, idx, drkidx):
     """
     Automatically find and return the appropriate dark for a specific light file. 
+
+    WARNING: this calls pair_lights_and_darks, so it's quite slow. In many cases it
+    will be a better idea to not use this higher-level function if looping over many 
+    files.
     
     Parameters
     ----------
@@ -337,7 +492,8 @@ def get_dark(light_filepath, idx, drkidx):
                 print("Revision mismatch on this file. Manually adjusted")
                 
             elif len(lights_and_darks.keys()) == 0:
-                raise Exception("No pair identified but it's also not a file missing dark??")
+                return "No valid dark"
+                # raise Exception("No pair identified but it's also not a file missing dark??")
             
         thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
 
@@ -446,17 +602,26 @@ def subtract_darks(light_fits, dark_fits):
         good_frame_inds.append(i)
         medians.append(np.median(median_this_frame))
 
-    # Control for possibility of one dark frame or both containing NaN
-    if np.isnan(first_dark).any():
+    # Handle what to do with the darks based on whether the second exists.
+    second_dark_exists = True 
+    if np.isnan(second_dark).all():
+        second_dark_exists = False 
+
+    # Now handle the first dark
+    if np.isnan(first_dark).any():  # First dark is bad 
         nan_dark_inds.append(0)
         light_frames_with_nan_dark.append(0)
-
-    if np.isnan(second_dark).any():
-        light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])
-        nan_dark_inds.append(1)   
+    else:  # First dark is good 
+        if not second_dark_exists: 
+            nan_dark_inds.append(1)  # mark it as a bad dark 
+        else:  # second dark exists
+            if np.isnan(second_dark).any():
+                nan_dark_inds.append(1)  # mark it as a bad dark 
+                light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
 
     # Collect indices of frames which can't be processed for whatever reason. 
-    # Note that any frames whose associated dark frame is 0 WILL be caught here. 
+    # Note that any frames whose associated dark frame is 0 WILL be caught here, unless it's an observation where the second
+    # dark didn't exist - those files will use the first dark.
     i_bad = sorted(list(set([*nan_light_inds, *bad_light_inds, *light_frames_with_nan_dark])))
 
     # Get a list of indices of good frames by differencing the indices of all remaining frames with bad indices.
@@ -468,7 +633,14 @@ def subtract_darks(light_fits, dark_fits):
     # Note that it's possible at this point for EITHER first_dark OR second_dark to contain NaNs. If they do,
     # their associated light frame will be caught and set to nan in the line that sets nans below.
     dark_subtracted[0, :, :] = light_data[0] - first_dark  
-    dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
+
+    # Here, we should account for the possibility that no second dark exists (get_dark_frames() would have set it to all nan). 
+    # In that case, let's use the first dark frame for all frames.
+    if not second_dark_exists:
+        dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - first_dark
+    else:
+        dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
+
     dark_subtracted[i_bad, :, :] = np.nan
 
     # Throw an error if there are no acceptable frames
@@ -504,18 +676,22 @@ def get_dark_frames(dark_fits, average=False):
     n_ints_dark = get_n_int(dark_fits)
 
     # Make a grand array to store the darks
-    darks = np.empty((n_ints_dark, *dark_fits['Primary'].data[0].shape))
+    darks = np.empty((2, *dark_fits["Primary"].data.shape[-2:]))
 
-    if n_ints_dark <= 1: 
-        raise ValueError(f"Error: There are only {n_ints_dark} dark integrations in file {dark_fits.basename}")
-
-    # The first and second dark integrations have different noise patterns
-    if n_ints_dark == 2:
+    if n_ints_dark == 0:
+        raise Exception(f"{dark_fits['Primary'].header['FILENAME']} has no darks at all")
+    elif n_ints_dark == 1: 
+        # Early mission, only one dark frame was taken.
+        darks[0, :, :] = dark_fits['Primary'].data[0]
+        darks[1, :, :] = np.nan # Set the second frame to nans if there was only one dark frame taken
+    elif n_ints_dark == 2:
+        # Noise pattern of the first and every other frame is different. Eventually, we realized this
+        # and started taking two darks
         darks[0, :, :] = dark_fits['Primary'].data[0]
         darks[1, :, :] = dark_fits['Primary'].data[1]
-    else:
+    elif n_ints_dark > 2:
+        # If there's more than 2, we can just take the element-wise mean of frames 2:end. Ignore nans.
         darks[0, :, :] = dark_fits['Primary'].data[0]
-        # If more than 2 additional darks, get the element-wise mean to use as second dark. Ignore nans.
         darks[1, :, :] = np.nanmean(dark_fits['Primary'].data[1:, :, :], axis=0)
 
     # Check that we don't have both frames full of NaN
@@ -557,7 +733,7 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
             dark_opts = find_dark_options(fidx, dark_idx) 
             chosen_dark = choose_dark(fidx, dark_opts)
             if chosen_dark == None:
-                lights_missing_darks.append(fidx["name"])  # if it's a light file missing a dark, we would like to know.
+                lights_missing_darks.append(fidx)#fidx["name"])  # if it's a light file missing a dark, we would like to know.
             else:
                 lights_and_darks[fidx['name']] = (fidx, chosen_dark)
         except ValueError:
@@ -749,7 +925,7 @@ def get_lya_countrates(idx_entry):
 # Metadata -------------------------------------------------------------
 
 
-def get_dir_metadata(the_dir, geospatial=False, new_files_limit=None):
+def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     """
     Collect the metadata for all files within the_dir. May contain
     subdirectories.
@@ -768,9 +944,9 @@ def get_dir_metadata(the_dir, geospatial=False, new_files_limit=None):
               Each dictionary contains metadata for one file.
     """
     if geospatial:
-        name_ext = "_metadata_geosp.npy"
-    else:
         name_ext = "_metadata.npy"
+    else:
+        name_ext = "_metadata_nogeophys.npy"
     idx_fname = the_dir[:-1] +  name_ext
     print(f'loading {idx_fname}...')
     
@@ -790,8 +966,9 @@ def get_dir_metadata(the_dir, geospatial=False, new_files_limit=None):
     not_in_idx = np.setdiff1d(most_recent_fnames, idx_fnames)
     not_in_idx = sorted(not_in_idx, key=iuvs_filename_to_datetime)
     not_in_idx = not_in_idx[:new_files_limit]
-    
+
     add_to_idx = []
+    
     if len(not_in_idx) > 0:
         print(f'adding {len(not_in_idx)} files to index...')
         
@@ -809,6 +986,14 @@ def get_dir_metadata(the_dir, geospatial=False, new_files_limit=None):
     # remove old files from index
     remove_from_idx = np.setdiff1d(idx_fnames, most_recent_fnames)
     new_idx = [i for i in idx if i['name'] not in remove_from_idx]
+
+    # NEW: UPDATE WITH MISSING INFO - don't run on new index, just on existing entries
+    print(f"Now updating existing entries...")  
+    new_idx, added_keys, added_geom = update_metadata_file(the_dir, new_idx, geospatial=geospatial)
+    if added_keys != 0 or added_geom != 0:
+        print(f"Updated the metadata index:\n\tmissing keys added to {added_keys} files\n\tgeometry summary added to {added_geom} files")
+    else:
+        print("No entry updates needed")
 
     # add new files to index
     new_idx = np.concatenate([new_idx, add_to_idx])
@@ -867,28 +1052,135 @@ def get_file_metadata(fname, geospatial=False):
                      'Ls': this_fits['Observation'].data['SOLAR_LONGITUDE']
     }
 
-    if geospatial:
-        try: 
-            metadata_dict['SZA'] = this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']
-        except KeyError:
-            metadata_dict['SZA'] = "['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'] does not exist"
+    if geospatial and has_geometry_pvec(this_fits):
+        metadata_dict['minmax_SZA'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])]
+        metadata_dict['med_SZA'] = np.nanmedian(this_fits['PixelGeometry'].data['PIXEL_SOLAR_ZENITH_ANGLE'])
+        metadata_dict['minmax_lat'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT'])]
+        metadata_dict['minmax_lon'] = [np.nanmin(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']), 
+                                        np.nanmax(this_fits['PixelGeometry'].data['PIXEL_CORNER_LON'])]
+        flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
+        metadata_dict['min_lt'] = np.nanmin(flat_LT)
+        metadata_dict['max_lt'] = np.nanmax(flat_LT)
+    elif geospatial and not has_geometry_pvec(this_fits):
+        metadata_dict['minmax_SZA'] = None 
+        metadata_dict['med_SZA'] =  None 
+        metadata_dict['minmax_lat'] = None 
+        metadata_dict['minmax_lon'] = None
+        metadata_dict['min_lt'] = None
+        metadata_dict['max_lt'] = None 
+    else: 
+        pass
 
-        try: 
-            metadata_dict['lat'] = this_fits['PixelGeometry'].data['PIXEL_CORNER_LAT']
-            metadata_dict['lon'] = this_fits['PixelGeometry'].data['PIXEL_CORNER_LON']
-        except KeyError:
-            metadata_dict['lat'] = "['PixelGeometry'].data['PIXEL_CORNER_LAT'] does not exist"
-            metadata_dict['lon'] = "['PixelGeometry'].data['PIXEL_CORNER_LON'] does not exist"
+    # Close fits
+    this_fits.close()
 
-        try: 
-            flat_LT = np.ndarray.flatten(this_fits["PixelGeometry"].data["PIXEL_LOCAL_TIME"])
-            metadata_dict['min_lt'] = np.nanmin(flat_LT)
-            metadata_dict['max_lt'] = np.nanmax(flat_LT)
-        except KeyError:
-            metadata_dict['min_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
-            metadata_dict['max_lt'] = "['PixelGeometry'].data['PIXEL_LOCAL_TIME'] does not exist"
-        
     return metadata_dict
+
+
+def update_metadata_file(the_data_dir, idx_file, geospatial=False):
+    """
+    Updates the index file with either missing keys or geometry information, after it has come in.
+    
+    Parameters
+    ----------
+    idx_file : dictionary
+               Python dictionary describing IUVS file metadata
+    geospatial : boolean
+                 whether to include the geometry and such things
+    
+    Returns
+    -------
+    idx_file - but updated
+    """
+
+    updated_missing_keys = 0
+    updated_with_geometry = 0
+    
+    # TODO: These should be hard-coded somewhere else.
+    if geospatial:
+        correct_key_list = ['name', 'orbit', 'segment', 'shape', 'n_int', 'datetime', 'binning', 'int_time', 'mcp_gain', 'geom', 
+                            'missing_frames', 'countrate_diagnostics', 'Ls', 'minmax_SZA', 'med_SZA', 'minmax_lat', 'minmax_lon', 'min_lt', 'max_lt']
+    else:
+        correct_key_list = ['name', 'orbit', 'segment', 'shape', 'n_int', 'datetime', 'binning', 'int_time', 'mcp_gain', 'geom', 
+                            'missing_frames', 'countrate_diagnostics', 'Ls']
+        
+    entries_missing_keys = [] # of ints 
+    entries_missing_geom = []
+
+    # FIRST: Find entries with missing metadata keys and entries which are missing geom.
+    for (i, e) in enumerate(idx_file):
+
+        # Skip weird early mission stuff
+        if ("IPH" not in e['name']) & ("cruisecal" not in e['name']) & ("ISON" not in e['name']):
+
+            # Missing keys
+            missing_keys = list(set(correct_key_list).difference(set(e.keys())))
+            if missing_keys:
+                entries_missing_keys.append(i) # idx_file, is a list of dicts so we can just keep track of indices.
+
+            # Missing geom
+            if geospatial:
+                if file_metadata_is_missing_geom(e):
+                    entries_missing_geom.append(i)
+   
+
+    # SECOND:  Update entries with missing metadata keys 
+    for missingkey_i in entries_missing_keys:
+        this_file_full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(idx_file[missingkey_i]["name"])) + "/" + idx_file[missingkey_i]["name"]
+        metadata_this_file = get_file_metadata(this_file_full_path, geospatial=geospatial)
+        # replace it in the list 
+        idx_file[missingkey_i] = metadata_this_file
+        updated_missing_keys += 1
+
+    # THIRD: Update geometry on entries without geometry 
+    if geospatial:
+        for geom_i in entries_missing_geom:
+            this_file_full_path = the_data_dir + orbit_folder(iuvs_orbno_from_fname(idx_file[geom_i]["name"])) + "/" + idx_file[geom_i]["name"]
+            metadata_this_file = get_file_metadata(this_file_full_path, geospatial=geospatial)
+            
+            # replace it in idx_filek but only if there is a change
+            if idx_file[geom_i]['geom'] != metadata_this_file['geom']:
+                idx_file[geom_i] = metadata_this_file
+                updated_with_geometry += 1
+            else: 
+                # In this scenario, file without geometry still missing geometry after updating, must be a file which never had  any geometry.
+                pass 
+            
+        
+    return idx_file, updated_missing_keys, updated_with_geometry
+
+
+def file_metadata_is_missing_geom(metadata_dict):
+    """
+    Similar to has_geometry_pvec(), this function determines if the metadata entry in the .npy 
+    index file has nans entered for the geometry. This is a faster way to determine if geometry
+    is missing and needs to be filled in in the index file.
+
+    Parameters
+    ----------
+    metadata_dict : dictionary
+                    file metadata for a single fits file.
+
+    Returns
+    ----------
+    True / False
+
+    """
+    # There may be some entries where a string was stored saying something like 'This entry doesn't exist' so control for that.
+    whether_geom_is_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | (metadata_dict['minmax_SZA'] is None)),
+                                          ((type(metadata_dict['med_SZA']) is str) | (metadata_dict['med_SZA'] is None)),
+                                          ((type(metadata_dict['minmax_lat']) is str) | (metadata_dict['minmax_lat'] is None)),
+                                          ((type(metadata_dict['minmax_lon']) is str) | (metadata_dict['minmax_lon'] is None)),
+                                          ((type(metadata_dict['min_lt']) is str) | (metadata_dict['min_lt'] is None)),
+                                          ((type(metadata_dict['max_lt']) is str) | (metadata_dict['max_lt'] is None))
+                                        ])
+
+    if whether_geom_is_missing.any():
+        return True
+    else:
+        return False
 
 
 def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
@@ -909,7 +1201,7 @@ def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     file_paths = [Path(f) for f in list_fnames]
 
     print(f'total files to index: {len(file_paths)}')
-    idx = get_dir_metadata(rootpath, new_files_limit=0)
+    idx = get_dir_metadata(rootpath, new_files_limit=0, geospatial=geospatial)
     print(f'current index total: {len(idx)}')
     new_files_to_add = len(file_paths)-len(idx)
     print(f'total files to add: {new_files_to_add}')
@@ -991,9 +1283,9 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibration="new", solv="Powell", fitpackage="scipy", approach="dynamic", livepts=500, 
-                       clean_data=True, clean_method="new", run_writeout=True, 
+                       clean_data=True, clean_method="new", run_writeout=True, make_plots=True, hush_warning=False, fit_IPH=False, IPH_lambda_guess=121.555,
                        check_background=False, plot_subtract_bg=True, plot_bg_separately=False, print_algorithm_details_on_plot=False, plot_comparison=False,
-                       remove_rays=True, remove_hotpix=True,
+                       remove_rays=True, remove_hotpix=True, return_each_line_fit=False, make_example_plot=False, print_fn_on_plot=True, do_BU_background_comparison=False,
                        idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
     """
     Converts a single l1a echelle observation to l1c. At present, two .csv files containing some 
@@ -1049,6 +1341,11 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                   if True, the remove_cosmic_rays() routine will be run.
     remove_hotpix : boolean
                     if True, the remove_hot_pixels() routine will be run.
+    return_each_line_fit : boolean
+                           Whether to return the parts of the model fit specific to H and D--useful for
+                            making certain plots.
+    make_example_plot : boolean
+                        Whether to draw an example fit plot (for illustrative purposes) showing parts of the fit.
     idl_pipeline_folder : string
                           Local path of the IDL pipeline software, to which certain files will be written out 
                           to allow for the final l1c product creation via IDL called from subprocess.
@@ -1131,8 +1428,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
     D_brightnesses = np.empty(n_int)
     H_bright_1sig = np.empty(n_int)
     D_bright_1sig = np.empty(n_int)
-    H_brightnesses_BUbg = np.empty(n_int) # for BU background
-    D_brightnesses_BUbg = np.empty(n_int) # for BU background
+    if do_BU_background_comparison:
+        H_brightnesses_BUbg = np.empty(n_int) # for BU background
+        D_brightnesses_BUbg = np.empty(n_int) # for BU background
     bright_data_ph_per_s = np.ndarray((n_int, get_wavelengths(light_fits).size))
 
     # Wavelengths and binwidths (which typically don't change)
@@ -1163,29 +1461,70 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
-        H_i = [20, 170] # Range for integrating H and D. 
-        D_i = [80, 100]
-        initial_guess = line_fit_initial_guess(wavelengths, spec, H_a=H_i[0], H_b=H_i[1], D_a=D_i[0], D_b=D_i[1]) 
-        fit_params, I_fit, fit_1sigma = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, solver=solv, 
-                                                 fitter=fitpackage, approach=approach, livepts=livepts) 
+        initial_guess = line_fit_initial_guess(wavelengths, spec)
+        if fit_IPH:
+            print("Fitting IPH")
+            initial_guess.append(initial_guess[0]*0.6) # total brightness IPH. wild guess
+            initial_guess.append(IPH_lambda_guess)
+        else:
+            pass 
 
+        fitting_results = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, unc=unc, fit_IPH=fit_IPH,
+                                      solver=solv, fitter=fitpackage, approach=approach, livepts=livepts, hush_warning=hush_warning) 
+        if return_each_line_fit:
+            fit_params_list, I_fit, fit_1sigma, H_fit, D_fit, IPH_fit = fitting_results
+        else:
+            fit_params_list, I_fit, fit_1sigma, *_ = fitting_results
+
+        # Convert fit_params to a dictionary so it's easier to use.
+        fit_params = {"area_H": fit_params_list[0], "area_D": fit_params_list[1], 
+                       "lambdac_H": fit_params_list[2], "lambdac_D": fit_params_list[2]-D_offset, 
+                       "M":fit_params_list[3], "B": fit_params_list[4]}
+        fit_unc = {"uncert_H": fit_1sigma[0], "uncert_D": fit_1sigma[1], "uncert_lambdac_H": fit_1sigma[2], 
+                   "uncert_M": fit_1sigma[3], "uncert_B": fit_1sigma[4]}
+
+        if fit_IPH:
+            fit_params["area_IPH"] = fit_params_list[-2]
+            fit_params["lambdac_IPH"] = fit_params_list[-1]         
+            fit_unc["uncert_IPH"] = fit_1sigma[-2]
+            fit_unc["uncert_lambdac_IPH"] = fit_1sigma[-1]  
+
+        
         # Create a convenient dictionary which can be used with a plotting routine
-        fit_params_for_printing = {'area': round(fit_params[0]), 'area_D': round(fit_params[1]), 
-                                    'lambdac': round(fit_params[2], 3), 'lambdac_D': round(fit_params[2]-D_offset, 3), 
-                                    'M': round(fit_params[3]), 'B': round(fit_params[4])}
+        if np.isnan(fit_params_list).all():
+            fit_params_for_printing = fit_params
+        else:
+            fit_params_for_printing = {'area_H': round(fit_params["area_H"]), 'area_D': round(fit_params["area_D"]), 
+                                        'lambdac_H': round(fit_params["lambdac_H"], 3), 'lambdac_D': round(fit_params["lambdac_H"]-D_offset, 3),
+                                        "M": round(fit_params["M"]), "B": round(fit_params["B"])}
+            
+        if fit_IPH:
+            fit_params_for_printing["area_IPH"] = fit_params["area_IPH"]
+            fit_params_for_printing["lambdac_IPH"] = fit_params["lambdac_IPH"]
         
         # Construct a background array from the fit which can then be converted like the spectrum
-        bg_fit = background(wavelengths, fit_params_for_printing['M'], fit_params_for_printing['lambdac'], fit_params_for_printing['B'])
+        bg_fit = background(wavelengths, fit_params['M'], fit_params['lambdac_H'], fit_params['B'])
         
         # ALTERNATIVE FIT - BU BACKGROUND  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        IDL_style_background = backgrounds_BU[i, :]
-        fit_params_BUbg, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, 
-                                                                unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
+        if do_BU_background_comparison: 
+            IDL_style_background = backgrounds_BU[i, :]
+            fit_params_BUbg_list, I_fit_BUbg, fit_1sigma_BUbg = fit_H_and_D(initial_guess, wavelengths, spec, light_fits, theCLSF, hush_warning=hush_warning,
+                                                                    unc=unc, solver=solv, fitter=fitpackage, BU_bg=IDL_style_background) 
+            
+            # Convert fit_params to a dictionary so it's easier to use.
+            fit_params_BUbg = {"area_H": fit_params_BUbg_list[0], "area_D": fit_params_BUbg_list[1], 
+                        "lambdac_H": fit_params_BUbg_list[2], "lambdac_D": fit_params_BUbg_list[2]-D_offset}
+            fit_unc_BUbg = {"uncert_H": fit_1sigma_BUbg[0], "uncert_D": fit_1sigma_BUbg[1], "uncert_lambdac_H": fit_1sigma_BUbg[2]}
 
-        # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
-        # since we didn't do integrated brightness in this method.
-        fit_params_for_printing_BUbg = {'area': round(fit_params_BUbg[0]), 'area_D': round(fit_params_BUbg[1]), 
-                                        'lambdac': round(fit_params_BUbg[2], 3), 'lambdac_D': round(fit_params_BUbg[2]-D_offset, 3)}
+
+            # Fill the stuff we will use to print on plots. Peaks are zero and get filled in later,
+            # since we didn't do integrated brightness in this method.
+            if np.isnan(fit_params_BUbg_list).all():
+                fit_params_for_printing_BUbg = {'area_H': fit_params_BUbg["area_H"], 'area_D': fit_params_BUbg["area_D"], 
+                                            'lambdac_H': fit_params_BUbg["lambdac_H"], 'lambdac_D': fit_params_BUbg["lambdac_H"]-D_offset}
+            else:
+                fit_params_for_printing_BUbg = {'area_H': round(fit_params_BUbg["area_H"]), 'area_D': round(fit_params_BUbg["area_D"]), 
+                                            'lambdac_H': round(fit_params_BUbg["lambdac_H"], 3), 'lambdac_D': round(fit_params_BUbg["lambdac_H"]-D_offset, 3)}
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
         # COLLECT BRIGHTNESSES
@@ -1195,32 +1534,41 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         # so we have to also.
         spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spec) / (t_int)
         background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) / (t_int)
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
-                                           bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-        bg_ph_s = background(wavelengths, popt[0], fit_params_for_printing['lambdac'], popt[2])
-        spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
+        if ~np.isnan(fit_params_list).all():
+            popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s, p0=[-1, 121.567, 1], 
+                                            bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
+            bg_ph_s = background(wavelengths, popt[0], fit_params['lambdac_H'], popt[2])
+        
+            spec_ph_s_bg_sub = spec_ph_s - bg_ph_s
+        else:
+            spec_ph_s_bg_sub[:] = np.nan # TODO: Update this if needed to handle problem files.
+        
         bright_data_ph_per_s[i, :] = spec_ph_s_bg_sub
 
         # Using the BU bg ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if do_BU_background_comparison:
+            # Convert to physical units
+            I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_per_nm
+            spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
+            data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
+            bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_per_nm
 
-        # Convert to physical units
-        I_fit_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, I_fit_BUbg) * conv_to_kR_per_nm
-        spec_kR = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
-        data_unc_kR  = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
-        bg_array_kR = convert_spectrum_DN_to_photoevents(light_fits, IDL_style_background) * conv_to_kR_per_nm
+            # Now convert the total brightness and their uncertainties to physical units. Because the model
+            # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
+            H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg["area_H"]) * conv_to_kR 
+            D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg["area_D"]) * conv_to_kR 
+            H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_BUbg["uncert_H"]) * conv_to_kR
+            D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_BUbg["uncert_D"]) * conv_to_kR 
 
-        # Now convert the total brightness and their uncertainties to physical units. Because the model
-        # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
-        H_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[0]) * conv_to_kR 
-        D_kR_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_params_BUbg[1]) * conv_to_kR 
-        H_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[0]) * conv_to_kR
-        D_kR_1sig_BUbg = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma_BUbg[1]) * conv_to_kR 
+            # Add brightnesses to arrays so they can be returned for comparison
+            H_brightnesses_BUbg[i] = H_kR_BUbg
+            D_brightnesses_BUbg[i] = D_kR_BUbg
 
-        # Update fit params
-        fit_params_for_printing_BUbg['area'] = round(H_kR_BUbg, 2)
-        fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
-        fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
-        fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
+            # Update fit params
+            fit_params_for_printing_BUbg['area_H'] = round(H_kR_BUbg, 2)
+            fit_params_for_printing_BUbg['area_D'] = round(D_kR_BUbg, 2)
+            fit_params_for_printing_BUbg['uncert_H'] = H_kR_1sig_BUbg
+            fit_params_for_printing_BUbg['uncert_D'] = D_kR_1sig_BUbg
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1231,20 +1579,32 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, spec) * conv_to_kR_per_nm
         data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, unc) * conv_to_kR_per_nm
         bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
+        if 'H_fit' in vars():
+            H_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, H_fit) * conv_to_kR_per_nm
+        if 'D_fit' in vars():
+            D_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, D_fit) * conv_to_kR_per_nm
 
         # Now convert the total brightness and their uncertainties to physical units. Because the model
         # fits total DN, this doesn't have a 1/nm attached, and is just converted to kR.
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_H"]) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_D"]) * conv_to_kR 
         H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
         D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
-          
+        if fit_IPH:
+            IPH_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params["area_IPH"]) * conv_to_kR 
+            IPH_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc["uncert_IPH"]) * conv_to_kR 
+
         # In order to plot the background, we have to fit the background again once it's in the right units to 
         # get the converted slope and intercept.
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
-                                           bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
-        fit_params_for_printing['M'] = popt[0]
-        fit_params_for_printing['B'] = popt[2]
+        if ~np.isnan(fit_params_list).all():
+            popt, pcov = sp.optimize.curve_fit(background, wavelengths, bg_array_kR_pernm, p0=[-24, 121.567, 20], 
+                                               bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 500]))
+            fit_params_for_printing['M'] = popt[0]
+            fit_params_for_printing['B'] = popt[2]
+        else:
+            fit_params_for_printing['M'] = np.nan
+            fit_params_for_printing['B'] = np.nan
+
 
         # Add brightnesses and uncertainty to arrays so they can be written out to the l1c 
         H_brightnesses[i] = H_kR
@@ -1253,16 +1613,17 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         D_bright_1sig[i] = D_kR_1sig
 
         # Update fit params
-        fit_params_for_printing['area'] = round(H_kR, 2)
+        fit_params_for_printing['area_H'] = round(H_kR, 2)
         fit_params_for_printing['area_D'] = round(D_kR, 2)
         fit_params_for_printing['uncert_H'] = H_kR_1sig
         fit_params_for_printing['uncert_D'] = D_kR_1sig
+        if fit_IPH:
+            fit_params_for_printing['area_IPH'] = round(IPH_kR, 2)
+            fit_params_for_printing['uncert_IPH'] = IPH_kR_1sig
         
         # Plot fit
         # ============================================================================================
         titletext = f"Orbit {re.search(orbno_RE, light_fits['Primary'].header['Filename'] ).group(0)} - Integration {i} - Python fit"
-
-        # re.search(uniqueID_RE, light_fits['Primary'].header['Filename'] ).group(0)
 
         # Plot in kR/nm
         if print_algorithm_details_on_plot:
@@ -1275,18 +1636,31 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
                 extra_print_on_plot.append(f"Remove hot pix: {remove_hotpix}")
         else: 
             extra_print_on_plot = []
-            
 
-        echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext,
-                            plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately, extra_print_on_plot=extra_print_on_plot)
-        
-        # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if plot_comparison:
-            echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
-                                           fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
-                                           titles=["Linear background", "Background ~Mayyasi+2023"], 
-                                           plot_subtract_bg=plot_subtract_bg, unit=["kR/nm", "kR"], data_unc_new=data_unc_kR_pernm, 
-                                           data_unc_BU=data_unc_kR, suptitle=titletext)
+        if print_fn_on_plot:
+            thefnonly = re.search(fn_RE, light_l1a_path).group(0)
+            # extra_print_on_plot = [thefnonly]
+        else:
+            thefnonly = ""
+            
+        if make_plots:
+            if make_example_plot:
+                if return_each_line_fit is False:
+                    raise Exception("You must pass return_each_line_plot=True in order to make an example plot, or set make_example_plot=False.")
+                echgr.example_fit_plot(wavelengths, spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bg=bg_array_kR_pernm, H_fit=H_fit_kR_pernm, D_fit=D_fit_kR_pernm)
+
+            echgr.plot_line_fit(wavelengths, spec_kR_pernm, I_fit_kR_pernm, fit_params_for_printing, data_unc=data_unc_kR_pernm, t=titletext, fn_for_subtitle=thefnonly, 
+                                plot_bg=bg_array_kR_pernm, plot_subtract_bg=plot_subtract_bg, plot_bg_separately=plot_bg_separately, extra_print_on_plot=extra_print_on_plot)
+            
+            # Plot a comparison of the two methods ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            if plot_comparison:
+                if do_BU_background_comparison == False:
+                    raise Exception("please set do_BU_background_comparison=True to make this plot")
+                echgr.plot_line_fit_comparison(wavelengths, spec_kR_pernm, spec_kR, I_fit_kR_pernm, I_fit_kR_BUbg, fit_params_for_printing, 
+                                            fit_params_for_printing_BUbg, bg_array_kR, bg_array_kR_pernm, 
+                                            titles=["Linear background", "Background ~Mayyasi+2023"], 
+                                            plot_subtract_bg=plot_subtract_bg, data_unc_new=data_unc_kR_pernm, 
+                                            data_unc_BU=data_unc_kR, suptitle=titletext)
         
         # Background comparison
         # ============================================================================================
@@ -1369,8 +1743,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, savepath, calibrat
         print("Errors: ", errs)
         print("Finished writing to IDL, I hope")
 
-    return H_brightnesses, D_brightnesses,\
-           H_brightnesses_BUbg, D_brightnesses_BUbg
+    if do_BU_background_comparison:
+        return H_brightnesses, D_brightnesses, H_brightnesses_BUbg, D_brightnesses_BUbg
+    else:
+        return H_brightnesses, D_brightnesses
 
 
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
@@ -1378,7 +1754,8 @@ def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     Identify and return the appropriate conversion factors for the data.
     """
     Aeff =  32.327455  # Acquired by testing on one file in the IDL pipeline, 16910 outdisk. 
-                       # Does not seem to change with different files.
+                       # DOES change with different files but is small.
+                       # TODO: account for this changing
 
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
@@ -1437,7 +1814,8 @@ def get_binning_df(calibration="new"):
 
 # Line fitting =============================================================
     
-def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver=None, fitter="scipy", approach="dynamic", livepts=500, BU_bg=None):
+def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver="Powell", fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
+                hush_warning=True, fit_IPH=False):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
     and minimizes the "badness".
@@ -1467,6 +1845,9 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
               Number of live points to use with dynesty.NestedSampler (static version)
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
+    hush_warning : boolean
+                   Whether to suppress printing of the warning about the Scipy fitting routine not including 
+                   native fit uncertainties
    
     Returns
     ----------
@@ -1475,6 +1856,8 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
     I_bin : array
             the simple fit of the LSF to the data, (A_H * LSF) + (A_D * LSF) + (background), encoding
             the DN per bin.
+    fit_uncert : Array
+                 uncertainty on the fit parameters, in the same order as param_initial_guess.
     """
 
     # Get bin edges in nm.
@@ -1484,31 +1867,29 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
     if fitter=="scipy":
         # If doing things with the BU background
         if BU_bg is not None:
-            bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess[:-2], args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
-            I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg)
-            modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess[:-2]))]
-        # If using a linear background
-        else:
-            bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, None), method=solver)
-            I_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, None)
-            modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess))]
+            param_initial_guess = param_initial_guess[0:3] # only use the estimated areas and central wavelength for this version. 
+        
+        bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
+        I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg, fit_IPH=fit_IPH)
+        modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess))]
 
         # Get the uncertainties on the fit
         try:
             # Some methods return the inverse hessian already.
             fit_uncert = np.sqrt(np.diag(bestfit.hess_inv))
         except Exception as y:
-            print(f"Warning: algorithm {solver} doesn't return an inverse hessian. The uncertainties will be estimated using an approximate hessian.")
+            if not hush_warning:
+                print(f"Warning: algorithm {solver} doesn't return an inverse hessian. The uncertainties will be estimated using an approximate hessian.")
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives. 
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
-            if BU_bg is not None:
-                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg))
-            else:
-                hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, None))
+            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), 
+                                                                kwargs={"fit_IPH": fit_IPH})
+            
             fit_uncert = np.sqrt(np.diag(inv(hessian)))
 
-        return modeled_params, I_bin, fit_uncert
+        return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
+
 
     elif fitter=="dynesty":
 
@@ -1617,7 +1998,7 @@ def badness_bg(params, wavelength_data, DN_data):
     return badness
 
 
-def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n, BU_bg):
+def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n, BU_bg, fit_IPH=False,):
     """
     Retrieves the model of the lineshape to fit and the associated log likelihood, denoted 
     L (assuming a Gaussian distributed quantity). If n=-1 is passed in, then L becomes the 
@@ -1648,7 +2029,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
     """
 
     # Now do the model 
-    DN_fit = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg) 
+    DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg, fit_IPH=fit_IPH) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
     L = -np.sum((DN_fit - data)**2 / (2*(uncertainty**2) ) ) # negative log-likelihood
@@ -1656,7 +2037,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
     return L * n
 
 
-def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg):
+def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH=False):
     """
     Builds the line shape model of the form:
     (A_H * LSF) + (A_D * LSF) + (Background)
@@ -1673,18 +2054,20 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg):
               the cumulative line spread function for the LSF
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
+    fit_IPH : boolean
+              if True, a third total brightness and central wavelength (intended for IPH) 
+              can be passed in as parameters in the last 2 positions in the order named here.
+              if False, the fitter will proceed fitting only H and D.
 
     Returns:
     ----------
     I_bin : array
             brightness per bin 
-
     """
     total_brightness_H = params[0] # Integrated - DN
     total_brightness_D = params[1] # Integrated - DN
     central_wavelength_H = params[2] # nm
     central_wavelength_D = params[2] - D_offset # nm
-    
 
     # Interpolate the CLSF for a given attempted central wavelength 
     interpolated_CLSF_H = interpolate_CLSF(central_wavelength_H, binedges, theCLSF)
@@ -1697,21 +2080,34 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg):
     normalized_line_shape_H = frac_per_bin_H 
     normalized_line_shape_D = frac_per_bin_D
 
+    H_fit = total_brightness_H * normalized_line_shape_H
+    D_fit = total_brightness_D * normalized_line_shape_D
+    fitsum = H_fit + D_fit
+
+    # Do the IPH fit, if requested
+    if fit_IPH:
+        total_brightness_IPH = params[-2]
+        central_wavelength_IPH = params[-1]
+        interpolated_CLSF_IPH = interpolate_CLSF(central_wavelength_IPH, binedges, theCLSF)
+        normalized_line_shape_IPH = np.diff(interpolated_CLSF_IPH) # Unitless
+        IPH_fit = total_brightness_IPH * normalized_line_shape_IPH
+        fitsum += IPH_fit
+    else:
+        IPH_fit = None
+
     # Return the flux per bin
     if BU_bg is not None:
-        I_bin = (total_brightness_H * normalized_line_shape_H + 
-                total_brightness_D * normalized_line_shape_D +
-                BU_bg
+        I_bin = (fitsum + 
+                 BU_bg
                 )
     else:
         background_m = params[3]
         background_b = params[4]
-        I_bin = (total_brightness_H * normalized_line_shape_H + 
-                total_brightness_D * normalized_line_shape_D +
-                background(wavelength_data, background_m, central_wavelength_H, background_b)
+        I_bin = (fitsum +  
+                 background(wavelength_data, background_m, central_wavelength_H, background_b)
                 )
 
-    return I_bin
+    return I_bin, H_fit, D_fit, IPH_fit
 
 
 def background(lamda, m, lamda_c, b):
@@ -1933,37 +2329,40 @@ def get_spectrum(data, light_fits, average=False, coadded=False, integration=0):
     return spectrum
 
 
-def add_in_quadrature(uncertainties, light_fits, integration=0): 
+def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=0): 
     """
     Similar to get_spectrum, but adds up the uncertainties in what is hopefully 
     the correct manner. 
 
     Parameters:
     ----------
-    data : array
+    uncertainties : array
            3D numpy array of image detector data, dark subtracted and cleaned. 
     light_fits : astropy.io.fits instance
                  File with light observation
+    coadded : boolean
+              whether the supplied 'uncertainties' array has already been coadded across integrations.
+              if True, the dimensionality of 'uncertainties' should be (spatial, spectral).
     integration : int
                   Integration frame to use for the specrum. Used if coadded=False.
-    clean_data : boolean 
-                 whether to perform the data cleaning routines
-
     Returns:
     ----------
-    spectrum : array
+    total_uncert : array
                Spectrum in total DN summed over the spatial dimension
     
     """
     # Collect pixel range which we need to find the slit start and end 
     si1, si2 = get_ech_slit_indices(light_fits)
 
-    total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2+1, :])**2, axis=0) )
-    # +1 because of the way python does indices.
+    if coadded:
+        total_uncert = np.sqrt( np.sum( (uncertainties[si1:si2+1, :])**2, axis=0) )
+    else:
+        total_uncert = np.sqrt( np.sum( (uncertainties[integration, si1:si2+1, :])**2, axis=0) )
+
     return total_uncert
 
 
-def line_fit_initial_guess(wavelengths, spectrum, H_a=95, H_b=135, D_a=80, D_b=100):
+def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=100):
     """
     Parameters
     ----------
@@ -1995,30 +2394,7 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=95, H_b=135, D_a=80, D_b=1
 # Cosmic ray and hot pixel removal -------------------------------------------
 
 
-def get_lya_mask(datacube, light_fits):
-    """
-    Construct a mask for the Lyman alpha region to be used when cleaning up data. 
-    This is not a particularly good approach and tends to ruin the spectra shape, so this should probably be retired.
-    This also isn't currently used because the hot pixel routine is working ok and not deleting real emissions.
-
-    Parameters
-    ----------
-    datacube : array (3D)
-               Detector image array in (integrations, spatial bins, spectral bins)
-    light_fits : astropy.io.fits instance
-                 fits object representing the light observations.
-    Returns
-    ----------
-    mask : masked array
-    """
-    mask = np.zeros_like(datacube[0, :, :]) # only needs to be 2D.
-    si1, si2 = get_ech_slit_indices(light_fits) # slit
-    wi = np.asarray(np.where(np.logical_and(get_wavelengths(light_fits)>=121.53, get_wavelengths(light_fits)<=121.58)))[0]
-    mask[si1:si2+1, wi] = 1  # +1 because of the way python does indices.
-    return mask
-
-
-def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"): 
+def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"): 
     """
     Removes cosmic rays from the detector image by stacking images and setting any pixel
     which is outside the median ± Ns*sigma to the median value.
@@ -2027,10 +2403,12 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
     ----------
     data : Array (integrations, spatial bins, spectral bins)
            All detector images for a given observation
-    themask : masked array
-              Mask shape to use for masking out lyman alpha.
     Ns : int
          number of sigma to constrain stacked-frame filtering
+    std_or_mad : string
+                 "std" or "mad", whether to use standard deviation
+                 or median absolute deviation in finding the "standard 
+                 deviation" of the pixels across integrations.
     """
     Nfr = data.shape[0]  # frames (integrations)
     Nsp = data.shape[1]  # Spatial bins
@@ -2053,24 +2431,17 @@ def remove_cosmic_rays(data, mask=None, Ns=2, std_or_mad="mad"):
         sigma = sp.stats.median_abs_deviation(data, axis=0)
     
     no_rays = copy.deepcopy(data)
-    
+
     for f in range(data.shape[0]):
-        if mask is not None:
-            no_rays = np.ma.masked_array(data[f, :, :], mask=mask) # Ignore roughly the region around Lyman alph. This is really kludgy and doesn't work great
+
+        # Find all points in the data cube where the value recorded is larger than median + Ns*sigma. 
+        ray_pixels = np.where((no_rays[f, :, :] > medhighval+Ns*sigma) | (no_rays[f, :, :] < medhighval-Ns*sigma))
+        no_rays[f, *ray_pixels] = medhighval[ray_pixels]
         
-        ray_pixels = np.ma.where((no_rays[:, :] > medhighval+Ns*sigma) | (no_rays[:, :] < medhighval-Ns*sigma))
-
-        # Create coordinate lists for where the rays exist
-        coord = list(zip(ray_pixels[0], ray_pixels[1]))
-
-        # Set any pixels matching the ray coordinates to median
-        for c in coord:
-            no_rays[f, c[0], c[1]] = medhighval[c[0], c[1]]
-
     return no_rays
 
 
-def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
+def remove_hot_pixels(data, all_bad_lights=None, Wdt=3, Ns=3):
     """
     Removes hot pixels from the data by calculating the median pixel value in a 7x7 surrounding box 
     at every pixel, and setting the central pixel to the median value if it is outside the median ± 3σ
@@ -2080,8 +2451,8 @@ def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
     ----------
     data : Array (integrations, spatial bins, wavelength bins)
            All detector images for a given observation
-    themask : masked array
-              Mask shape to use for masking out lyman alpha.
+    all_bad_lights : list
+                     List of light integration frames which are broken in some way.
     Wdt : int
           Width of the box used for single-frame median filtering
     Ns : int
@@ -2119,10 +2490,7 @@ def remove_hot_pixels(data, all_bad_lights=None, mask=None, Wdt=3, Ns=3):
 
     for f in frame_list:
         # Ignore roughly the region around Lyman alpha. This is really kludgy and doesn't work great
-        if mask is not None:
-            thisdata = np.ma.masked_array(data[f, :, :], mask=mask) 
-        else:
-            thisdata = data[f, :, :]
+        thisdata = data[f, :, :]
 
         # First task is to compute the difference of every pixel from the median of a 7x7 box centered on that pixel: -------------
         # First, at every pixel, get the median value in a window_edge x window_edge sliding window centered on each pixel.

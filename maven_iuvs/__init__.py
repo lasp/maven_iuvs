@@ -18,6 +18,7 @@ from . import integration
 from . import file_classes
 from . import binning
 from . import echelle
+from . import reprocessing
 
 
 try:
