@@ -56,6 +56,38 @@ def utc_to_sol(utc):
     return sol, my
 
 
+def mars_date_to_utc(my, sol):
+    """
+    Converts a Mars Year and sol to a Python datetime object. 
+    Reverse of utc_to_sol().
+
+    Parameters
+    ----------
+    my : int
+         The Mars year.
+    sol : float
+          The decimal sol date. If -1, sol will be reset to the maximum
+          number of sols.
+    
+    Returns
+    -------
+    UTC datetime object.
+    """
+    # constants
+    ns = 668.6  # number of sols in a Mars year
+    jdref = 2442765.667  # reference Julian date corresponding to Ls = 0
+    myref = 12  # jdref is the beginning of Mars year 12
+    e_m_scale_in_sec = (86400. / 88775.245)
+
+    # Make it so people don't have to know the exact number of sols.
+    if sol == -1: 
+        sol = ns
+
+    jd = ((((my - myref) * ns ) / e_m_scale_in_sec) + jdref) \
+         + sol * (1/e_m_scale_in_sec) # Sol
+
+    return julian.from_jd(jd)
+
 def Ls(et, return_marsyear=False):
     """Convert string or SPICE ET to Mars solar longitude. Requires SPICE
     kernels.
