@@ -602,17 +602,26 @@ def subtract_darks(light_fits, dark_fits):
         good_frame_inds.append(i)
         medians.append(np.median(median_this_frame))
 
-    # Control for possibility of one dark frame or both containing NaN
-    if np.isnan(first_dark).any():
+    # Handle what to do with the darks based on whether the second exists.
+    second_dark_exists = True 
+    if np.isnan(second_dark).all():
+        second_dark_exists = False 
+
+    # Now handle the first dark
+    if np.isnan(first_dark).any():  # First dark is bad 
         nan_dark_inds.append(0)
         light_frames_with_nan_dark.append(0)
-
-    if np.isnan(second_dark).any():
-        light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])
-        nan_dark_inds.append(1)   
+    else:  # First dark is good 
+        if not second_dark_exists: 
+            nan_dark_inds.append(1)  # mark it as a bad dark 
+        else:  # second dark exists
+            if np.isnan(second_dark).any():
+                nan_dark_inds.append(1)  # mark it as a bad dark 
+                light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
 
     # Collect indices of frames which can't be processed for whatever reason. 
-    # Note that any frames whose associated dark frame is 0 WILL be caught here. 
+    # Note that any frames whose associated dark frame is 0 WILL be caught here, unless it's an observation where the second
+    # dark didn't exist - those files will use the first dark.
     i_bad = sorted(list(set([*nan_light_inds, *bad_light_inds, *light_frames_with_nan_dark])))
 
     # Get a list of indices of good frames by differencing the indices of all remaining frames with bad indices.
@@ -624,7 +633,14 @@ def subtract_darks(light_fits, dark_fits):
     # Note that it's possible at this point for EITHER first_dark OR second_dark to contain NaNs. If they do,
     # their associated light frame will be caught and set to nan in the line that sets nans below.
     dark_subtracted[0, :, :] = light_data[0] - first_dark  
-    dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
+
+    # Here, we should account for the possibility that no second dark exists (get_dark_frames() would have set it to all nan). 
+    # In that case, let's use the first dark frame for all frames.
+    if not second_dark_exists:
+        dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - first_dark
+    else:
+        dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
+
     dark_subtracted[i_bad, :, :] = np.nan
 
     # Throw an error if there are no acceptable frames
