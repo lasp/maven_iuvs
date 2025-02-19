@@ -493,7 +493,6 @@ def get_dark(light_filepath, idx, drkidx):
                 
             elif len(lights_and_darks.keys()) == 0:
                 return "No valid dark"
-                # raise Exception("No pair identified but it's also not a file missing dark??")
             
         thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
 
@@ -1847,7 +1846,7 @@ def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
     elif calibration=="old":
-        Ph_pers_perkR = 29.8 # There's some extra factors in the old cal...
+        Ph_pers_perkR = 29.8 # Average calibration factor WRT SWAN (Mayyasi+ 2017)
         Adj_Factor = 1# 100/88  # This factor is used in IDL, but it accounts for the fact that the method used is not flux-conservative.
                                 # We are using a conservative fit method so we don't need it, but I'm placing it here just in case
                                 # we need to refer to it in future / in case I did something wrong.
