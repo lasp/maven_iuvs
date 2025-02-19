@@ -594,7 +594,7 @@ def subtract_darks(light_fits, dark_fits):
             bad_light_inds.append(i)
 
         # For all other light frames, we can compare to the stored median values of known good frames.
-        if (len(medians)>0) and (median_this_frame / np.median(medians) > 100): 
+        if (len(medians)>0) and (median_this_frame / np.median(medians) > 10): 
             bad_light_inds.append(i)
             continue
 
