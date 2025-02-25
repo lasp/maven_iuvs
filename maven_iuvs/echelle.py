@@ -1,4 +1,5 @@
 import datetime
+import pytz
 import numpy as np
 import scipy as sp
 from astropy.io import fits
@@ -57,9 +58,8 @@ def weekly_echelle_report(weeks_before_now_to_report, root_folder):
     idx = get_dir_metadata(root_folder)
  
     # Get data on new files 
-    weekly_report_datetime_start = datetime.datetime.utcnow() - datetime.timedelta(weeks=weeks_before_now_to_report)
-
-    weekly_report_idx = [fidx for fidx in idx if fidx['datetime'] >= weekly_report_datetime_start]
+    weekly_report_datetime_start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(weeks=weeks_before_now_to_report)
+    weekly_report_idx = [fidx for fidx in idx if fidx['datetime'].replace(tzinfo=pytz.UTC) >= weekly_report_datetime_start]
     weekly_report_idx = sorted(weekly_report_idx, key=lambda i:i['datetime'])
     weekly_report_orbit_start = iuvs_orbno_from_fname(weekly_report_idx[0]['name'])
 
@@ -252,26 +252,31 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
         # To get observations for a range of dates:
         if type(date) is list:
             if type(date[0]) == datetime.date: # If no time information was entered, be liberal and assume start of first day and end of last
-                date[0] = datetime.datetime(date[0].year, date[0].month, date[0].day, 0, 0, 0)
+                date[0] = datetime.datetime(date[0].year, date[0].month, date[0].day, 0, 0, 0, pytz.UTC)
 
             if type(date[1]) == datetime.date:
-                date[1] = datetime.datetime(date[1].year, date[1].month, date[1].day, 23, 59, 59)
+                date[1] = datetime.datetime(date[1].year, date[1].month, date[1].day, 23, 59, 59, pytz.UTC)
             elif date[1] == -1: # Use this to just go until the present time/date.
-                date[1] = datetime.datetime.utcnow()
+                date[1] = datetime.datetime.now(datetime.timezone.utc)
 
-            selected = [entry for entry in selected if date[0] <= entry['datetime'] <= date[1]]
+            # Check for datetime object naivety, assume the entered datetimes are in UTC (because what else would they be?)
+            for (i, d) in enumerate(date):
+                if d.tzinfo is None:
+                    date[i] = date[i].replace(tzinfo=pytz.UTC)
+           
+            selected = [entry for entry in selected if date[0] <= entry['datetime'].replace(tzinfo=pytz.UTC) <= date[1]]
 
         # To get observations at a specific day or specific day/time:
         elif type(date) is not list:  
 
             if type(date) == datetime.date: # If no time information was entered, be liberal and assume start of first day and end of last
-                date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0)
-                date1 = datetime.datetime(date.year, date.month, date.day, 23, 59, 59)
+                date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0, pytz.UTC)
+                date1 = datetime.datetime(date.year, date.month, date.day, 23, 59, 59, pytz.UTC)
 
-                selected = [entry for entry in selected if date0 <= entry['datetime'] <= date1]
+                selected = [entry for entry in selected if date0 <= entry['datetime'].replace(tzinfo=pytz.UTC) <= date1]
 
             else: # if a full datetime.datetime object is entered, look for that exact entry.
-                selected = [entry for entry in selected if entry['datetime'] == date]
+                selected = [entry for entry in selected if entry['datetime'].replace(tzinfo=pytz.UTC) == date]
 
         else:
             raise TypeError(f"Date entered is of type {type(date)}")

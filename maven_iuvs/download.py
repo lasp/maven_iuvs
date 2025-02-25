@@ -521,7 +521,7 @@ def sync_data(spice=True, level='l1b',
         # sync level 1B data
         if level is not None:
             # get the file names of all the relevant files
-            print(f"Running sync on {datetime.datetime.utcnow().strftime('%a %d %b %Y, %I:%M%p')}")
+            print(f"Running sync on {datetime.datetime.now(datetime.timezone.utc).strftime('%a %d %b %Y, %I:%M%p')}")
             print('Fetching names of production and stage'
                   ' files from the VM...')
             prod_filenames = get_vm_file_list(vm,
