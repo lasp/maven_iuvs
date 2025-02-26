@@ -2056,9 +2056,9 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
         weights = dresults.importance_weights()
         modeled_params, covariance = dyfunc.mean_and_cov(samples, weights)
         fit_uncert = np.sqrt(np.diag(covariance))
-        I_bin = lineshape_model(modeled_params, wavelengths, edges, CLSF, BU_bg)
+        I_bin, H_bin, D_bin, IPH_bin = lineshape_model(modeled_params, wavelengths, edges, CLSF, BU_bg, fit_IPH=fit_IPH)
 
-        return modeled_params, I_bin, fit_uncert
+        return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
 
 
 def badness_bg(params, wavelength_data, DN_data):
