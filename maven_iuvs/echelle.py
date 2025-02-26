@@ -2483,9 +2483,9 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=1
 
     # Total flux of H and D initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
-    DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b], x=wavelengths[H_a:H_b]) 
-    DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b], x=wavelengths[D_a:D_b])
-
+    DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
+    DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
+    
     # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
     # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
     lambda_H_lya_guess = 121.567
