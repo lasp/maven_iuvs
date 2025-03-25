@@ -920,7 +920,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     residax.set_ylabel(f"Residuals\n (data-model)")
     residax.set_xlabel("Wavelength (nm)")
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
-    bound = np.max([abs(np.min(residual)), np.max(residual)]) * 1.10
+    bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
     residax.set_ylim(-bound, bound)
     
     plt.show()
@@ -1070,15 +1070,16 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     # Residual axis
     residual_color = "xkcd:dark lilac"
     residual_new = (data_vals_new - model_fit_new)
+    residual_BU = (data_vals_BU - model_fit_BU)
+    bound1 = np.max([abs(np.min(residual_new)), np.max(residual_new)])
+    bound2 = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
+    bound = math.ceil(np.max((bound1, bound2))) * 1.5  # Gives it some room to accommodate error bars
+
     residax.step(data_wavelengths, residual_new, where="mid", linewidth=1, color=residual_color, zorder=3)
     residax.errorbar(data_wavelengths, residual_new, yerr=data_unc_new, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
-    bound = np.max([abs(np.min(residual_new)), np.max(residual_new)]) * 1.10
     residax.set_ylim(-bound, bound)
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
 
-    residual_BU = (data_vals_BU - model_fit_BU)
-    bound = np.max([abs(np.min(residual_BU)), np.max(residual_BU)])
-    bound = bound * 1.10
     residax_BU.step(data_wavelengths, residual_BU, where="mid", linewidth=1, color=residual_color, zorder=3)
     residax_BU.errorbar(data_wavelengths, residual_BU, yerr=data_unc_BU, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
     residax_BU.set_ylim(-bound, bound)
