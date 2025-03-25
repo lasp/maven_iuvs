@@ -5,6 +5,7 @@ import scipy as sp
 from astropy.io import fits
 import textwrap
 import os 
+import csv
 import copy
 import skimage as ski
 import matplotlib as mpl
