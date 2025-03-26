@@ -269,6 +269,8 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 
         # To get observations at a specific day or specific day/time:
         elif type(date) is not list:  
+            if date.tzinfo is None:
+                date = date.replace(tzinfo=pytz.UTC)
 
             if type(date) == datetime.date: # If no time information was entered, be liberal and assume start of first day and end of last
                 date0 = datetime.datetime(date.year, date.month, date.day, 0, 0, 0, pytz.UTC)
