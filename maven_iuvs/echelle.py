@@ -444,14 +444,10 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     pass
 
 
-def get_dark(light_filepath, idx, drkidx):
+def get_dark_path(light_l1a_path, idx, drkidx):
     """
-    Automatically find and return the appropriate dark for a specific light file. 
+    Given the filepath for a light observation, will find and return the appropriate dark
 
-    WARNING: this calls pair_lights_and_darks, so it's quite slow. In many cases it
-    will be a better idea to not use this higher-level function if looping over many 
-    files.
-    
     Parameters
     ----------
     light_filepath : string
@@ -463,48 +459,30 @@ def get_dark(light_filepath, idx, drkidx):
 
     Returns
     ----------
-    thedarkpath : string
-                  Pathname for the associated dark
+    string (Pathname for associated dark) or None if no dark found.
     """
 
     # Get orbit number
-    orbitno = iuvs_orbno_from_fname(light_filepath)
-    seg = iuvs_segment_from_fname(light_filepath)
+    orbitno = iuvs_orbno_from_fname(light_l1a_path)
+    seg = iuvs_segment_from_fname(light_l1a_path)
     orbfolder = orbit_folder(orbitno)
 
     # Trim down the index to just the light file we want to find a dark match for
-    datetimeobj = re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_filepath).group(0)
+    datetimeobj = re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_l1a_path).group(0)
+    print(f"Looking for orbit number {orbitno}, segment {seg}, datetime {datetime.datetime.fromisoformat(datetimeobj)}")
     selected_l1a = downselect_data(idx, 
-                                   orbit=orbitno, 
-                                   segment=seg, 
+                                   orbit=orbitno,
+                                   segment=seg,
                                    date=datetime.datetime.fromisoformat(datetimeobj))
 
-    lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, drkidx, verbose=True)
+    light_idx = selected_l1a[0]
+    dark_opts = find_dark_options(light_idx, drkidx)
+    dark_idx = choose_dark(light_idx, dark_opts)
 
-    if len(lights_and_darks.keys()) > 1:
-        raise Exception("There shouldn't be more than one entry in the light and dark pair dict")
-    
-    # Get filename
-    justfn = re.search(fn_RE, light_filepath).group(0)
-
-    if justfn in files_missing_dark:
-        thedarkpath = "no valid dark"
+    if dark_idx is not None:
+        return f"{l1a_dir}{orbfolder}/{dark_idx['name']}"
     else:
-        # Handle a special case where the entry in the index file is a newer revision, but we are
-        # working with an older revision. Happens in the full mission reprocess.
-        if justfn not in lights_and_darks:
-            
-            if len(lights_and_darks.keys()) == 1: # case where a different revision is in there
-                onlykey = list(lights_and_darks.keys())[0]
-                lights_and_darks[justfn] = lights_and_darks.pop(onlykey)
-                print("Revision mismatch on this file. Manually adjusted")
-                
-            elif len(lights_and_darks.keys()) == 0:
-                return "No valid dark"
-            
-        thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
-
-    return thedarkpath
+        return None
 
 
 def coadd_lights(data, n_good):
