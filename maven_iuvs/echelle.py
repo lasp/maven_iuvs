@@ -469,7 +469,6 @@ def get_dark_path(light_l1a_path, idx, drkidx):
 
     # Trim down the index to just the light file we want to find a dark match for
     datetimeobj = re.search(r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}", light_l1a_path).group(0)
-    print(f"Looking for orbit number {orbitno}, segment {seg}, datetime {datetime.datetime.fromisoformat(datetimeobj)}")
     selected_l1a = downselect_data(idx, 
                                    orbit=orbitno,
                                    segment=seg,
