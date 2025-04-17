@@ -146,8 +146,10 @@ def identify_rogue_observations(idx):
         
         print(f'\n{s}: ({len(segment_idx)} l1a files)')
         for o in orbits:
+            possible_orbits_fuzzy = range(o-2, o+3) # This ensures we don't accidentally miss the darks, which may be one orbit less than lights.
+                                                    # Applying it to both light and dark search ensures we don't generate false positive 'dark without light's.
             orbit_segment_idx = [fidx for fidx in segment_idx
-                                 if iuvs_orbno_from_fname(fidx['name']) == o]
+                                 if iuvs_orbno_from_fname(fidx['name']) in possible_orbits_fuzzy]
             light_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_islight(fidx)]
             dark_orbit_segment_flist = [fidx for fidx in orbit_segment_idx if ech_isdark(fidx)]
             
