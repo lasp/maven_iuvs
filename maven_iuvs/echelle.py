@@ -1316,7 +1316,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, l1c_savepath, cali
 
     # Set number of integration frames to fit 
     # ===============================================================================================
-    ints_to_fit = {"first": 1, "all": get_n_int(light_fits)}.get(ints_to_fit, get_n_int(light_fits))
+    ints_to_fit = {"first": 1}.get(ints_to_fit, get_n_int(light_fits))
 
     # Collect binning and pixel information
     # ===============================================================================================
