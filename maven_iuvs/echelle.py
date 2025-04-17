@@ -1583,7 +1583,7 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
         fit_params_list.append(fit_params)
 
     # Error control
-    if np.isnan(fit_params).all():
+    if np.isnan(fit_params).any():
         raise Exception("Fit failed")
 
     # Convert fit params to a dict for ease of use
