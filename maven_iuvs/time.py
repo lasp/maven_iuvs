@@ -59,7 +59,9 @@ def utc_to_sol(utc):
 def mars_date_to_utc(my, sol):
     """
     Converts a Mars Year and sol to a Python datetime object. 
-    Reverse of utc_to_sol().
+    Reverse of utc_to_sol(). Equation form stolen from the javascript on 
+    the Mars Climate Database, from converter located here:
+    https://www-mars.lmd.jussieu.fr/mars/time/mars_date_to_earth_date.html
 
     Parameters
     ----------
