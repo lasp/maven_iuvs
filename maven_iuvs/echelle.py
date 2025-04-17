@@ -2481,7 +2481,7 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=1
     Vector of initial guess values
     """
 
-    # Total flux of H and D initial guess: get by integrating around the line. Note that the H bounds as defined
+    # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
     DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
     DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
