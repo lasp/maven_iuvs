@@ -1650,7 +1650,7 @@ def make_array_of_fitted_backgrounds(light_fits, fit_params):
 def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
     """
     The echelle l1c files typically report a quantity referred to in IDL pipeline as bright_data_ph_per_s, 
-    e.g. photons per second. This function computes this value so that it can continue to be reported.
+    e.g. photoevents per second. This function computes this value so that it can continue to be reported.
     
     Parameters
     ----------
