@@ -16,6 +16,7 @@ from pathlib import Path
 import re 
 import pandas as pd
 import subprocess
+from tqdm.auto import tqdm
 from numpy.lib.stride_tricks import sliding_window_view
 from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
 from maven_iuvs.constants import D_offset
@@ -714,7 +715,7 @@ def pair_lights_and_darks(selected_l1a, dark_idx, verbose=False):
     lights_and_darks = {}
     lights_missing_darks = []
     
-    for fidx in selected_l1a:
+    for fidx in tqdm(selected_l1a):
         try:
             dark_opts = find_dark_options(fidx, dark_idx) 
             chosen_dark = choose_dark(fidx, dark_opts)
