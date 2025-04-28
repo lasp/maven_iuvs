@@ -324,7 +324,7 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 
 # Relating to dark vs. light observations -----------------------------
 def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lights_and_darks.csv", process_based_on="PDS", PDS=0, 
-                                 orbit_range=None, date_range=None, disallow_processing_past=True):
+                                 disallow_processing_past=True, **kwargs):
     """
     Parameters
     ----------
@@ -348,6 +348,8 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
                                if True, the code will throw an error if you are processing a PDS that is already past.
                                Can be set to False to allow for reprocessing older lists (for example, if being used in a mission-long
                                reprocess effort)
+    **kwargs : dictionary
+               keyword arugments passed to downselect_data().
     Returns
     ---------
     None
@@ -359,11 +361,17 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
         print(f"Processing lights/darks for PDS {PDS}")
         # TODO: Store these in a spreadsheet and read them in. Plus that way it'll be a nice record of when everythign was done.
         deadlines = {39: {"start_datetime": datetime.datetime(2024, 5, 15, 0, 0, 0),
-                          "end_datetime": datetime.datetime(2024, 8, 14, 23, 59, 0),
+                          "end_datetime": datetime.datetime(2024, 8, 14, 23, 59, 59),
                           "due_VM": datetime.datetime(2024, 10, 15, 0, 0, 0)},
                     40: {"start_datetime": datetime.datetime(2024, 8, 15, 0, 0, 0),
-                         "end_datetime": datetime.datetime(2024, 11, 14, 23, 59, 0),
-                         "due_VM": datetime.datetime(2025, 1, 15, 0, 0, 0)}
+                         "end_datetime": datetime.datetime(2024, 11, 14, 23, 59, 59),
+                         "due_VM": datetime.datetime(2025, 1, 15, 0, 0, 0)},
+                    41: {"start_datetime": datetime.datetime(2024, 11, 15, 0, 0, 0),
+                         "end_datetime": datetime.datetime(2025, 2, 14, 23, 59, 59),
+                         "due_VM": datetime.datetime(2025, 4, 15, 0, 0, 0)},
+                    42: {"start_datetime": datetime.datetime(2025, 2, 15, 0, 0, 0),
+                         "end_datetime": datetime.datetime(2025, 5, 14, 23, 59, 59),
+                         "due_VM": datetime.datetime(2025, 7, 15, 0, 0, 0)},
                     }
 
         # Set the delivery due date, start date for the data range, and end date for data range.
@@ -398,12 +406,9 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
         print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
         selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
         
-    elif process_based_on=="orbits":
-        print(f"Downselecting to orbits {orbit_range[0]}--{orbit_range[1]}")
-        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", orbit=orbit_range)
-    elif process_based_on=="dates":
-        print(f"Downselecting to orbits {date_range[0]}--{date_range[1]}")
-        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=date_range)
+    else:
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", **kwargs)
+
 
     # NPair lights and darks
     print("Finding darks for the lights")
