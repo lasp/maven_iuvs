@@ -12,6 +12,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import math
+import time
 from pathlib import Path
 import re 
 import pandas as pd
@@ -1269,8 +1270,9 @@ def get_ech_slit_indices(light_fits):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, l1c_savepath, calibration="new", IPH_lamb_guess=None, ints_to_fit="all",
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, calibration="new", IPH_lamb_guess=None, ints_to_fit="all",
                        fit_IPH=False, return_each_line_fit=False, do_BU_background_comparison=False, run_writeout=True, make_plots=True, 
+                       idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
                        clean_data_kwargs = {"clean_data": True, "clean_method": "new", "remove_rays": True, "remove_hotpix": True},
                        plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
                    
@@ -1309,6 +1311,10 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, l1c_savepath, cali
                         See clean_data()
     plot_kwargs : dict 
                   kwargs which may be passed to the plotting routines to control plot appearance.
+    idl_process_kwargs : dict
+                         kwargs for passing to write_l1c
+    **kwargs : kwargs
+               other kwargs for passing to fit_flat_data()
     
     Returns
     ----------
@@ -1388,7 +1394,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, l1c_savepath, cali
     # Write out the l1c file
     # ===============================================================================================
     if run_writeout:
-        writeout_l1c(light_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_kR, fit_unc_kR, bright_data_ph_per_s)
+        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_kR, fit_unc_kR, bright_data_ph_per_s, **idl_process_kwargs)
 
     return
 
@@ -1747,8 +1753,8 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
     return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
 
 
-def writeout_l1c(light_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
-                 idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/"):
+def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
+                 idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/", open_idl=True, proc_passed_in=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
 
@@ -1819,18 +1825,23 @@ def writeout_l1c(light_l1a_path, l1c_savepath, light_fits, binning_df, fit_param
     bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
     
     # Now call IDL
-    os.chdir(idl_pipeline_folder)
-    commands = f'''
-                .com write_l1c_file_from_python.pro
-                write_l1c_file_from_python, '{light_l1a_path}', '{l1c_savepath}', '{brightness_csv_path}', '{ph_per_s_csv_path}'
-                ''' 
+    if open_idl is True:
+        os.chdir(idl_pipeline_folder)
+        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
+        proc.stdin.write(".com write_l1c_file_from_python.pro")
+        time.sleep(1) # Be sure it's compiled 
+        print("IDL is now open")
+    else:
+        if proc_passed_in is None:
+            raise Exception("Please pass in the subprocess proc")
+        proc = proc_passed_in
+    
+    proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', '{dark_l1a_path}', '{l1c_savepath}', '{brightness_csv_path}', '{ph_per_s_csv_path}'\n")
+    proc.stdin.flush()
 
-    proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
-    print("IDL is now open")
-    outs, errs = proc.communicate(input=commands, timeout=600)
-    print("Output: ", outs)
-    print("Errors: ", errs)
-    print("Finished writing to IDL")
+    if open_idl is True:
+        proc.terminate() 
+
     return 
 
 
