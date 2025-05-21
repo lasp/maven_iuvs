@@ -399,12 +399,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     coadded_unc_spec = add_in_quadrature(coadded_unc, light_fits, coadded=True)  # added over spatial for a spectrum uncertainty
 
     # Do a fit to the coadded image -------------------------------------------------------------------
-    conv_to_kR_per_nm, unused, conv_to_kR = get_conversion_factors(light_fits["Primary"].header["INT_TIME"], 
+    conv_to_kR_per_nm, _, conv_to_kR = get_conversion_factors(light_fits["Primary"].header["INT_TIME"], 
                                                                                     np.diff(get_bin_edges(light_fits)), 
                                                                                     calibration="new")
     wl = get_wavelengths(light_fits) 
     coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
-    initial_guess = line_fit_initial_guess(wl, coadded_spec) 
+    initial_guess = line_fit_initial_guess(wl, coadded_spec)
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 
@@ -467,7 +467,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     if show_DN_histogram:
         pctles = [50, 75, 99, 99.9]
         pctle_vals = np.percentile(all_data, pctles)
-        fig, ax = plt.subplots(figsize=(6, 1))
+        _, ax = plt.subplots(figsize=(6, 1))
         counts, bins = np.histogram(all_data, bins=1000)
         ax.stairs(counts, bins)
         trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
@@ -546,8 +546,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
     # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
     # left, bottom, width, height
-    lm, bm, wm, hm = DetAxes[1].get_position().bounds
-    ls, bs, ws, hs = DetAxes[0].get_position().bounds
+    lm, _, wm, _ = DetAxes[1].get_position().bounds
+    _, bs, _, hs = DetAxes[0].get_position().bounds
     DetAxes[0].set_position([lm, bs, wm, hs]) # constrain the horizontal size using the main axis but keep the original vertical position and height    
  
     # Plot the dark frames ----------------------------------------------------------------------------------
