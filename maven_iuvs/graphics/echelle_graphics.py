@@ -84,6 +84,7 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
     # Arrays to keep track of which files were processed, which were already done, and which had problems
     processed = []
     badfiles = []
+    nonlinearfiles = []
     already_done = []
     unique_exceptions = []
 
@@ -119,10 +120,10 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
                 badfiles.append(light_idx['name'])
             elif quicklook_status == "Success":
                 processed.append(light_idx['name'])
+            elif "Keyword 'SPE_SIZE' not found." in str(quicklook_status):
+                nonlinearfiles.append(light_idx['name'])
             else:
                 print("Got an unhandled exception, but it should be logged.")
-                # CHEAT SHEET:
-                # "Keyword 'SPE_SIZE' not found." --> The file has non-linear binning and code hasn't been written to deal with this.
         ki += 1
 
     if savefolder is not None:
@@ -157,6 +158,13 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
                 for f in badfiles:
                     logfile.write(f"\t{f['name']}\n")
                 logfile.write("\n") # newline
+
+            # Log nonlinear files
+            if len(nonlinearfiles) > 0:
+                logfile.write(f"{len(nonlinearfiles)} nonlinearly-binned file(s) (need to build capability to handle these):\n")
+                for f in nonlinearfiles:
+                    logfile.write(f"\t{f['name']}\n")
+                logfile.write("\n") # newline
            
             # Log files that threw a weird error
             if unique_exceptions:
@@ -172,7 +180,7 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
     gc.collect()
 
 
-def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1):
+def quicklook_figure_skeleton(N_thumbs, figsz=(44, 24), thumb_cols=10, aspect=1):
     """
     Creates the sketch of the quicklook figure, i.e. the "skeleton".
 
@@ -190,17 +198,20 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
 
     # The number of thumbnail rows wrecks everything so calculate it first
     THUMBNAIL_ROWS = math.ceil(N_thumbs / thumb_cols)
+    optadd = 0
+    if THUMBNAIL_ROWS >= 4:
+        optadd = THUMBNAIL_ROWS
 
     # Calculate a new fig height based on thumbnail rows
-    figsz = (figsz[0], figsz[1] + 2*THUMBNAIL_ROWS)
+    figsz = (figsz[0], figsz[1] + 0.5*THUMBNAIL_ROWS + optadd)
     fig = plt.figure(figsize=figsz)
-    COLS = 16
+    COLS = 17
     ROWS = 8
 
     # Set up the gridspec
-    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=4)
+    TopGrid = gs.GridSpec(ROWS, COLS, figure=fig, hspace=0.5, wspace=5)
     TopGrid.update(bottom=0.5)
-    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.05, wspace=0.05) 
+    BottomGrid = gs.GridSpec(THUMBNAIL_ROWS, thumb_cols, figure=fig, hspace=0.15, wspace=0.05) 
     BottomGrid.update(top=0.45) # Don't change these! Figure size changes depending on number of thumbnails
                                 # and if you make it too tight, stuff will overlap for files with lots of
                                 # light integrations.
@@ -209,7 +220,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     d_main = 5  # colspan of main detector plot
     d_dk = 3  # colspan/rowspan of darks and colspan of geometry
     d_geo = 2  # rowspan of geometry plots
-    start_sm = d_main # +1 # col to start darks and geometry. Use the +1 if the vertical spacer below is on.
+    start_sm = d_main +1 # col to start darks and geometry. Use the +1 if the vertical spacer below is on.
     
     # Detector images and geometry ------------------------------------------------------------
     # Spectrum axis
@@ -227,13 +238,13 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     MainAx.axes.set_aspect(aspect, adjustable="box")
 
     # A spacing axis between detector image and geometry axes: May not be necessary, so currently off
-    # VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
-    # VerticalSpacer.axis("off")
+    VerticalSpacer = plt.subplot(TopGrid.new_subplotspec((0, d_main), rowspan=d_main+1, colspan=1)) 
+    VerticalSpacer.axis("off")
 
     # 3 small subplots in a row to the right of main plot - these are now the geo axes
     R1Ax1 = plt.subplot(TopGrid.new_subplotspec((2, start_sm), colspan=d_dk, rowspan=d_geo))
     R1Ax2 = plt.subplot(TopGrid.new_subplotspec((2, start_sm+d_dk), colspan=d_dk, rowspan=d_geo))
-    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((2, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo))
+    R1Ax3 = plt.subplot(TopGrid.new_subplotspec((2, start_sm+2*d_dk), colspan=d_dk, rowspan=d_geo)) # leave room for altitude plot
 
     R1Axes = [R1Ax1, R1Ax2, R1Ax3]
 
@@ -276,7 +287,8 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(40, 24), thumb_cols=10, aspect=1)
     return fig, [SpectrumAx, MainAx], R1Axes, R2Axes, ThumbAxes 
 
 
-def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, figsz=(36, 26), show_D_inset=True, show_D_guideline=True, 
+def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, 
+                       figsz=(42, 26), 
                        arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, overwrite_prior_to=datetime.datetime.now(), fs="large", useframe="coadded", cmap=None):
     """ 
     Fills in the quicklook figure for a single observation.
@@ -394,22 +406,28 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
     initial_guess = line_fit_initial_guess(wl, coadded_spec) 
     lsfx_nm, lsf_f = load_lsf(calibration="new")
-    theCLSF = theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
+    theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 
-    fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, unc=coadded_unc_spec, 
-                                                solver="Powell", fitter="scipy", hush_warning=True) 
-    bg_fit = background(wl, fit_params[3], fit_params[2], fit_params[4])
+    fit_succeeded = True 
+    try:
+        fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, 
+                                                        unc=coadded_unc_spec, solver="Powell", fitter="scipy", hush_warning=True) 
+        bg_fit = background(wl, fit_params[3], fit_params[2], fit_params[4])
+         # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
+        I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
+        bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
+        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
+        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
+    except Exception as e:
+        print(f"Couldn't fit: {e}")
+        fit_succeeded = False
+    finally:
+        spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_spec) * conv_to_kR_per_nm
+        data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_unc_spec) * conv_to_kR_per_nm
         
-    # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
-    I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
-    spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_spec) * conv_to_kR_per_nm
-    data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_unc_spec) * conv_to_kR_per_nm
-    bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
-    H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
-    D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
-    H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
-    D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
-
+   
     # DARK PROCESSING ===================================================================================
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
@@ -488,13 +506,19 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=14+fontsizes[fs])
     DetAxes[0].errorbar(wl, spec_kR_pernm, yerr=data_unc_kR_pernm, color=data_color, linewidth=0,elinewidth=1, zorder=3)
     DetAxes[0].step(wl, spec_kR_pernm, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
-    DetAxes[0].step(wl, I_fit_kR_pernm, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
-    DetAxes[0].step(wl, bg_array_kR_pernm, where="mid", color=bg_color, label="background", linewidth=2, zorder=2)
-    DetAxes[0].text(1.02, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
-    DetAxes[0].text(1.02, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-    DetAxes[0].text(1.02, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-    DetAxes[0].text(1.02, 0.4, "NOTE: Coadded fit is a 'quick look' at D emission.\nBest practice is to fit each integration separately.", 
-                    color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+
+    textLA = 1.05
+    if fit_succeeded:
+        DetAxes[0].step(wl, I_fit_kR_pernm, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
+        DetAxes[0].step(wl, bg_array_kR_pernm, where="mid", color=bg_color, label="background", linewidth=2, zorder=2)
+        DetAxes[0].text(textLA, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
+        DetAxes[0].text(textLA, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+        DetAxes[0].text(textLA, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+        DetAxes[0].text(textLA, 0.4, "NOTE: Coadded fit is a 'quick look' at D emission.\nBest practice is to fit each integration separately.", 
+                        color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+    else:
+        DetAxes[0].text(textLA, 0.4, "Model fit to data failed, no fit reported", 
+                        color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
     DetAxes[0].set_ylim(bottom=0)
     DetAxes[0].axes.get_xaxis().set_visible(True)   
     DetAxes[0].tick_params(axis="both", labelsize=12+fontsizes[fs], bottom=True, labelbottom=True)
@@ -593,7 +617,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
             thisalt = round(thisalt)
             ThumbAxes[i].text(0.1, -0.05, f"{thisalt} km", color=color_dict['darkgrey'], va="top", fontsize=9+fontsizes[fs], transform=ThumbAxes[i].transAxes)
 
-    ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below):", fontsize=22, transform=ThumbAxes[0].transAxes)
+    ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below; listed altitude is mean minimum ray height altitude across spatial dimension on slit):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Explanatory text printing ----------------------------------------------------------------------------------
     utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
