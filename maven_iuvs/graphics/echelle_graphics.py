@@ -670,8 +670,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 # LINE FITTING PLOTS ========================================================
 def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params, fit_unc, H_fit=None, D_fit=None,
+                   
                    do_BU_background_comparison=False, print_fn_on_plot=True, plot_bg_separately=False, plot_subtract_bg=False, make_example_plot=False,
-                   BU_stuff=None):
+                   BU_stuff=None, fig_savepath=None):
     """
     Given data and model information in physical units this makes some nice plots.
     Everything should be in physical units or you'll be sad.
@@ -745,7 +746,7 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
             
         plot_line_fit(wavelengths, spec[i, :], I_fit[i, :], fit_params_for_printing, data_unc=data_unc[i, :], 
                             t=titletext, fn_for_subtitle=thefnonly, plot_bg=bg_fits[i, :], plot_subtract_bg=plot_subtract_bg, 
-                            plot_bg_separately=plot_bg_separately)
+                            plot_bg_separately=plot_bg_separately, fig_savepath=fig_savepath + f"frame{i}")
 
         if do_BU_background_comparison:
             plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :], fit_params_for_printing, fit_params_for_printing_BUbg, 
@@ -802,8 +803,8 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
                   t="Fit", fittext_x=[0.6, 0.6, 0.6], fittext_y=[0.5, 0.4, 0.3], fn_for_subtitle="", 
-                  logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False,
-                  extra_print_on_plot=None):
+                  logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False, fig_savepath=None,
+                  img_dpi=92, extra_print_on_plot=None):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -947,13 +948,15 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
     residax.set_ylim(-bound, bound)
     
-    plt.show()
-    
     if plot_bg_separately:
         fig2, ax2 = plt.subplots()
         ax2.plot(data_wavelengths, plot_bg)
         plt.show()
-    pass
+
+    if fig_savepath is not None:
+        plt.savefig(fig_savepath, dpi=img_dpi, bbox_inches="tight")
+    else:
+        plt.show()
 
 
 def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, model_fit_new, model_fit_BU, fit_params_new, fit_params_BU, BUbackground, pybackground,
