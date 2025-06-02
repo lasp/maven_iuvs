@@ -162,7 +162,7 @@ def get_default_data_directory(level='l1b'):
     elif level == 'l1a_full_mission_reprocess':
         local_dir = l1a_full_mission_reprocess_dir
     else:
-        raise ValueError("level must be 'l1a' or 'l1b'")
+        raise ValueError("level must be 'l1a' or 'l1b' or 'l1a_full_mission_reprocess'")
 
     if not os.path.exists(local_dir):
         raise Exception("Cannot find specified directory: "
@@ -220,7 +220,7 @@ def call_rsync(remote_path,
 
     # Add some code to handle a case where spaces in the local folder path will cause rsync to fail silently
     if " " in local_path:
-        local_path = local_path.replace(" ", "\ ")
+        local_path = local_path.replace(" ", "\\ ")
 
     rsync_command = " ".join(['rsync -trvzL',
                               progress_flag,

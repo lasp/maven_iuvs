@@ -2,7 +2,6 @@ import numpy as np
 import datetime
 import re 
 import os
-from maven_iuvs.user_paths import l1a_dir, l1a_full_mission_reprocess_dir
 
 # Common regular expressions for parsing filenames
 orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
@@ -236,10 +235,11 @@ def relative_path_from_fname(l1a_fname, v="v13"):
 
     # Get orbit folder
     orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
+    from maven_iuvs.download import get_default_data_directory
     if v=="v13":
-        return l1a_dir + orbfold + "/"
+        return get_default_data_directory('l1a') + orbfold + "/"
     elif v=="v14":
-        return l1a_full_mission_reprocess_dir + orbfold + "/"
+        return get_default_data_directory('l1a_full_mission_reprocess') + orbfold + "/"
     else:
         raise Exception("Invalid version number for data products! Please choose 'v13' or 'v14'")
 

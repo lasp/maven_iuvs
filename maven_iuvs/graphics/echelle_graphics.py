@@ -25,7 +25,7 @@ from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
     iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, fn_noext_RE, fn_RE
 from maven_iuvs.search import find_files 
 from maven_iuvs.time import utc_to_sol
-from maven_iuvs.user_paths import l1a_dir
+from maven_iuvs.download import get_default_data_directory
 
 # COMMON COLORS ==========================================================================================
 model_color = "#1b9e77"
@@ -93,11 +93,11 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
         light_idx = lights_and_darks[k][0]
 
         # open the light file --------------------------------------------------------------------
-        light_path = find_files(data_directory=l1a_dir,
+        light_path = find_files(data_directory=get_default_data_directory('l1a'),
                                 use_index=False, pattern=light_idx['name'])[0]
 
         # open the dark file ---------------------------------------------------------------------
-        dark_path = find_files(data_directory=l1a_dir,
+        dark_path = find_files(data_directory=get_default_data_directory('l1a'),
                                use_index=False, pattern=lights_and_darks[k][1]["name"])[0]
 
         quicklook_status = ""
