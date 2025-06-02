@@ -162,7 +162,7 @@ def get_default_data_directory(level='l1b'):
     elif level == 'l1a_full_mission_reprocess':
         local_dir = l1a_full_mission_reprocess_dir
     else:
-        raise ValueError("level must be 'l1a' or 'l1b'")
+        raise ValueError("level must be 'l1a' or 'l1b' or 'l1a_full_mission_reprocess'")
 
     if not os.path.exists(local_dir):
         raise Exception("Cannot find specified directory: "

@@ -28,8 +28,8 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
 from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
+from maven_iuvs.download import get_default_data_directory
 from statistics import median_high
-from maven_iuvs.user_paths import l1a_dir
 from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
 from numpy.linalg import inv
 import dynesty as d
@@ -418,7 +418,7 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
             orbit_num = iuvs_orbno_from_fname(lightfn)
             try: 
                 darkfn = lights_and_darks[k][1]["name"]
-                wr.writerow([l1a_dir + orbit_folder(orbit_num) + "/",
+                wr.writerow([get_default_data_directory('l1a') + orbit_folder(orbit_num) + "/",
                                 lightfn, 
                                 darkfn,
                                 label])
@@ -495,7 +495,7 @@ def get_dark(light_filepath, idx, drkidx):
                 return "No valid dark"
                 # raise Exception("No pair identified but it's also not a file missing dark??")
             
-        thedarkpath = f"{l1a_dir}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
+        thedarkpath = f"{get_default_data_directory('l1a')}{orbfolder}/{lights_and_darks[justfn][1]['name']}"
 
     return thedarkpath
 
