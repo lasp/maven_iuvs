@@ -35,5 +35,11 @@ setuptools.setup(
         'idl_colorbars>=1.1.2',
         'scipy>=1.11.2',
         'scikit-image>=0.21.0'
+        'scikit-learn'
+        'pandas'
+        'statsmodels'
+        'dynesty'
+        'ipywidgets'
     ]
 )
+
