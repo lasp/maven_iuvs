@@ -1591,11 +1591,11 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
     wavelengths = get_wavelengths(light_fits) # TODO: No reason to not index this
 
     I_fit_array = np.zeros_like(spectrum)
-    fit_unc_list = [] # list of lists since the code doesn't yet know the length of fit_params since it depends on initial_guess
-    fit_params_list = [] # List of dicts
     H_fit_array = np.zeros_like(spectrum)
     D_fit_array = np.zeros_like(spectrum)
     IPH_fit_array = np.zeros_like(spectrum)
+    fit_params_dicts = []
+    fit_unc_dicts = []
 
      # Loop over integrations to do the fits
     for i in range(0, ints_to_fit):
@@ -1627,37 +1627,18 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
         else:
             fit_params, I_fit, fit_1sigma, *_ = result_vec
 
+        # Make a fit_params dictionary 
+        fit_params_dict = make_fit_param_dict(fit_params, "params", BU_bg=BU_bg, fit_IPH=fit_IPH)
+        fit_unc_dict = make_fit_param_dict(fit_1sigma, "uncertainty", BU_bg=BU_bg, fit_IPH=fit_IPH)
+
+        # Append everything to lists, one entry for each integration
         I_fit_array[i, :] = I_fit
-        fit_unc_list.append(fit_1sigma)
-        fit_params_list.append(fit_params)
+        fit_params_dicts.append(fit_params_dict)
+        fit_unc_dicts.append(fit_unc_dict)
 
     # Error control
     if np.isnan(fit_params).any():
         raise Exception("Fit failed")
-
-    # Convert fit params to a dict for ease of use
-    fit_params_dicts = []
-    fit_unc_dicts = []
-    for (fp, fu) in zip(fit_params_list, fit_unc_list): 
-        this_param_dict = {"area_H": fp[0], "area_D": fp[1], "lambdac_H": fp[2], "lambdac_D": fp[2]-D_offset}
-        this_unc_dict = {"unc_H": fu[0], "unc_D": fu[1], "unc_lambdac_H": fu[2]}
-
-        if BU_bg is None:
-            this_param_dict["M"] = fp[3]
-            this_param_dict["B"] = fp[4]
-            this_unc_dict["unc_M"] = fu[3]
-            this_unc_dict["unc_B"] = fu[4]
-        
-        if fit_IPH:
-            this_param_dict["area_IPH"] = fp[-3]
-            this_param_dict["lambdac_IPH"] = fp[-2]
-            this_param_dict["width_IPH"] = fp[-1]
-            this_unc_dict["unc_IPH"] = fu[-3]
-            this_unc_dict["unc_lambdac_IPH"] = fu[-2]
-            this_param_dict["unc_width_IPH"] = fp[-1]
-            
-        fit_params_dicts.append(this_param_dict)
-        fit_unc_dicts.append(this_unc_dict)
 
     if not return_each_line_fit:
         H_fit_array = None
@@ -1665,6 +1646,67 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
         IPH_fit_array = None
         
     return I_fit_array, H_fit_array, D_fit_array, IPH_fit_array, fit_params_dicts, fit_unc_dicts
+
+
+def make_fit_param_dict(thelist, params_or_unc, BU_bg=None, fit_IPH=False):
+    """ 
+    Convert a list of the best-match fit parameters to a dictionary for ease of access.
+
+    Parameters
+    ----------
+    thelist : list
+                List of either fit parameters or fit parameter uncertainties found by the 
+                optimizer. Assumes the following order (as in initial guess) for the
+                parameter list // uncertainty list:
+                0. total area of H line in DN // its uncertainty,
+                1. total area of D line in DN // its uncertainty,
+                2. central wavelength of H Ly alpha // its uncertainty,
+                3. background M // its uncertainty,
+                4. background B // its uncertainty,
+                5. total area of IPH line in DN (optional) // its uncertainty,
+                6. central wavelength of IPH line (optional) // its uncertainty,
+                7. width of the IPH line (σ assuming a Gaussian) (optional) // its uncertainty,
+                8. maximum log likelihood (i.e. minimized negative log likelihood) (optional)
+    params_or_unc : string; 
+                   "params" or "uncertainty" -- determines which keys to use. 
+    
+    Returns
+    ----------
+    d: dict
+       Dictionary with each of these parameters mapped to a useful keyword
+
+    """
+    if params_or_unc == "params":
+        d = {"maxLL": thelist[-1],
+            "area_H": thelist[0], 
+            "area_D": thelist[1], 
+            "lambdac_H": thelist[2], 
+            "lambdac_D": thelist[2]-D_offset,
+            }
+        if BU_bg is None:
+            d["M"] = thelist[3]
+            d["B"] = thelist[4]
+        if fit_IPH: # TODO: This is crazy work make this better
+            d["area_IPH"] = thelist[5]
+            d["lambdac_IPH"] = thelist[6]
+            d["width_IPH"] = thelist[7]
+    elif params_or_unc=="uncertainty": 
+        d = {"unc_H": thelist[0], 
+            "unc_D": thelist[1], 
+            "unc_lambdac_H": thelist[2]
+            }
+        if BU_bg is None:
+            d["unc_M"] = thelist[3]
+            d["unc_B"] = thelist[4]
+
+        if fit_IPH: # TODO: This is crazy work make this better
+            d["unc_IPH"] = thelist[5]
+            d["unc_lambdac_IPH"] = thelist[6]
+            d["unc_width_IPH"] = thelist[7]
+    else: 
+        raise ValueError("Error: please enter 'params' or 'uncert' when creating a dictionary of fit result values")
+
+    return d
 
 
 def make_array_of_fitted_backgrounds(light_fits, fit_params):

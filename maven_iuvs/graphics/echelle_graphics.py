@@ -19,7 +19,7 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
     subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
     get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors, \
-    get_ech_slit_indices
+    get_ech_slit_indices, make_fit_param_dict
 from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_alt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
@@ -408,18 +408,22 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 
-    fit_succeeded = True 
+    # This keeps track of whether fitting H and D succeeded - not whether the whole quicklook process succeeds
+    fit_succeeded = True
     try:
-        fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF, 
-                                                        unc=coadded_unc_spec, solver="Powell", fitter="scipy", hush_warning=True) 
-        bg_fit = background(wl, fit_params[3], fit_params[2], fit_params[4])
+        fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF,
+                                                        unc=coadded_unc_spec, solver="Powell", fitter="scipy", hush_warning=True)
+        fit_params_dict = make_fit_param_dict(fit_params, "params")
+        fit_unc_dict = make_fit_param_dict(fit_1sigma, "uncertainty")
+
+        bg_fit = background(wl, fit_params_dict["M"], fit_params_dict["lambdac_H"], fit_params_dict["B"])
          # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
         I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
         bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[0]) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params[1]) * conv_to_kR 
-        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[0]) * conv_to_kR
-        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_1sigma[1]) * conv_to_kR 
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict["area_H"]) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict["area_D"]) * conv_to_kR 
+        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict["unc_H"]) * conv_to_kR
+        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict["unc_D"]) * conv_to_kR 
     except Exception as e:
         print(f"Couldn't fit: {e}")
         fit_succeeded = False
@@ -716,24 +720,9 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
     if do_BU_background_comparison:
         spec_BUbg, data_unc_BUbg, I_fit_BUbg, bg_array_BUbg, fit_params_BUbg, fit_unc_BUbg = BU_stuff
 
-    for i in range(len(fit_params)): 
-        
-        # Round fit params
-        fit_params_for_printing = {"area_H": round(fit_params[i]["area_H"], 2), "uncert_H": fit_unc[i]["unc_H"],
-                                   "area_D": round(fit_params[i]["area_D"], 2), "uncert_D": fit_unc[i]["unc_D"], 
-                                  "lambdac_H": round(fit_params[i]["lambdac_H"], 3), "lambdac_D": round(fit_params[i]["lambdac_H"]-D_offset, 3), 
-                                  "M": round(fit_params[i]["M"]), "B": round(fit_params[i]["B"])}
-        if "area_IPH" in fit_params[i].keys():
-            fit_params_for_printing["area_IPH"] = round(fit_params[i]["area_IPH"], 2)
-            fit_params_for_printing["lambdac_IPH"] = round(fit_params[i]["lambdac_IPH"], 2)
-            fit_params_for_printing["uncert_IPH"] = round(fit_unc[i]["unc_IPH"], 2)
-
-
-        # Round fit params
-        if do_BU_background_comparison:
-            fit_params_for_printing_BUbg = {"area_H": round(fit_params_BUbg[i]["area_H"], 2), "uncert_H": fit_unc_BUbg[i]["unc_H"],
-                                            "area_D": round(fit_params_BUbg[i]["area_D"], 2), "uncert_D": fit_unc_BUbg[i]["unc_D"], 
-                                            "lambdac_H": round(fit_params_BUbg[i]["lambdac_H"], 3), "lambdac_D": round(fit_params_BUbg[i]["lambdac_H"]-D_offset, 3)}
+    for (i, fp) in enumerate(fit_params):
+        fit_params_for_printing = fp | fit_unc[i]
+        fit_params_for_printing["lambdac_D"] = fp["lambdac_H"]-D_offset
             
         # Plot fit
         # ============================================================================================
@@ -749,6 +738,9 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
                             plot_bg_separately=plot_bg_separately, fig_savepath=fig_savepath + f"frame{i}")
 
         if do_BU_background_comparison:
+            fit_params_for_printing_BUbg = fit_params_BUbg | fit_unc_BUbg[i]
+            fit_params_for_printing_BUbg["lambdac_D"] = fit_params_BUbg["lambdac_H"]-D_offset
+
             plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :], fit_params_for_printing, fit_params_for_printing_BUbg, 
                                      bg_array_BUbg[i, :], bg_fits[i, :], data_unc_new=data_unc[i, :], data_unc_BU=data_unc_BUbg[i, :], 
                                      titles=["Linear background", "Mayyasi+2023 background"])
@@ -913,14 +905,16 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     # Print text
     printme = []
-    printme.append(f"H: {fit_params_for_printing['area_H']} ± {round(fit_params_for_printing['uncert_H'], 2)} "+
-                   f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['uncert_H'], 1)})")
-    printme.append(f"D: {fit_params_for_printing['area_D']} ± {round(fit_params_for_printing['uncert_D'], 2)} "+
-                   f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['uncert_D'], 1)})")
+    if "maxLL" in fit_params_for_printing:
+        printme.append(f"Max log likelihood: {round(fit_params_for_printing['maxLL'])}")
+    printme.append(f"H: {round(fit_params_for_printing['area_H'], 2)} ± {round(fit_params_for_printing['unc_H'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['unc_H'], 1)})")
+    printme.append(f"D: {round(fit_params_for_printing['area_D'], 2)} ± {round(fit_params_for_printing['unc_D'], 2)} "+
+                   f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['unc_D'], 1)})")
     if "lambdac_IPH" in fit_params_for_printing.keys():
-        printme.append(f"IPH: {fit_params_for_printing['area_IPH']} ± {round(fit_params_for_printing['uncert_IPH'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['uncert_IPH'], 1)})")
-    talign = ["left", "left", "left"]
+        printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} "+
+                       f"kR (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
+    talign = ["left", "left", "left", "left"]
 
     for i in range(0, len(printme)):
         mainax.text(fittext_x[i], fittext_y[i], printme[i], transform=mainax.transAxes, ha=talign[i])
@@ -1068,15 +1062,19 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     printme_new = []
     printme_BU = []
 
-    printme_new.append(f"H: {fit_params_new['area_H']} ± {round(fit_params_new['uncert_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_new['area_H'] / fit_params_new['uncert_H'], 1)})")
-    printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['uncert_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['uncert_D'], 1)})")
+    if "maxLL" in fit_params_new:
+        printme_new.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
+    printme_new.append(f"H: {fit_params_new['area_H']} ± {round(fit_params_new['unc_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area_H'] / fit_params_new['unc_H'], 1)})")
+    printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['unc_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['unc_D'], 1)})")
 
-    printme_BU.append(f"H: {fit_params_BU['area_H']} ± {round(fit_params_BU['uncert_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['area_H'] / fit_params_BU['uncert_H'], 1)})")
-    printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['uncert_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['uncert_D'], 1)})")
+    if "maxLL" in fit_params_BU:
+        printme_BU.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
+    printme_BU.append(f"H: {fit_params_BU['area_H']} ± {round(fit_params_BU['unc_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area_H'] / fit_params_BU['unc_H'], 1)})")
+    printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['unc_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['unc_D'], 1)})")
 
     textx = [0.53, 0.53]#[0.38, 0.28]
     texty = [0.5, 0.4]#[0.5, 0.2]
