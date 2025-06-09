@@ -1722,7 +1722,8 @@ def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
     t_int = light_fits["Primary"].header["INT_TIME"] 
     wavelengths = get_wavelengths(light_fits)
     n_int = get_n_int(light_fits)
-    bright_data_ph_per_s = np.zeros_like(bg_fits)
+    bright_data_ph_per_s = np.zeros((n_int, wavelengths.shape[0]))
+    
     # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
     spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spectrum) / (t_int)
     background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fits) / (t_int)
