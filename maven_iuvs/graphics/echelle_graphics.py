@@ -290,6 +290,7 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(44, 24), thumb_cols=10, aspect=1)
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, 
                        figsz=(42, 26), 
                        arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, overwrite_prior_to=datetime.datetime.now(), fs="large", useframe="coadded", cmap=None):
+                       figsz=(42, 26), fs="large", useframe="coadded", cmap=None,
     """ 
     Fills in the quicklook figure for a single observation.
     
@@ -335,6 +336,9 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                 whether files that already exist will be redrawn and overwritten
     fs : "small", "medium", "large" or "huge"
          Sets multiple font sizes for the quicklooks at once using a qualitative descriptor
+    useframe : string
+               "coadded" (default) or "median": determines what type of composite frame to plot in the large box on the quicklook. 
+               "median" is an option in case there is a lot of pollution
               
     Returns
     ----------
@@ -345,7 +349,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     """
     
     # Adjust font face
-    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams["font.sans-serif"] = "Louis George Cafe"
 
     # Create the folder if it isn't there
     if savefolder is not None:
@@ -754,7 +758,7 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
 
 
 def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, H_fit=None, D_fit=None):
-    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams["font.sans-serif"] = "Louis George Cafe"
     mpl.rcParams['font.size'] = 18
     mpl.rcParams['legend.fontsize'] = 16
     mpl.rcParams['xtick.labelsize'] = 16
@@ -835,7 +839,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
          
     """
 
-    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams["font.sans-serif"] = "Louis George Cafe"
     mpl.rcParams['font.size'] = 18
     mpl.rcParams['legend.fontsize'] = 16
     mpl.rcParams['xtick.labelsize'] = 16
@@ -980,7 +984,7 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
          
     """
 
-    mpl.rcParams["font.sans-serif"] = "Louis George Caf?"
+    mpl.rcParams["font.sans-serif"] = "Louis George Cafe"
     mpl.rcParams['font.size'] = 18
     mpl.rcParams['legend.fontsize'] = 16
     mpl.rcParams['xtick.labelsize'] = 16
