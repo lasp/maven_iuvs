@@ -1294,6 +1294,7 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, calibration="new", IPH_lamb_guess=None, ints_to_fit="all",
+                       save_arrays=False, place_for_arrays=None,
                        fit_IPH=False, return_each_line_fit=False, do_BU_background_comparison=False, run_writeout=True, make_plots=True, 
                        idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
                        clean_data_kwargs = {"clean_data": True, "clean_method": "new", "remove_rays": True, "remove_hotpix": True},
@@ -1401,6 +1402,24 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
         arrays_in_DN.append(D_fit)
 
     arrays_in_kR_pernm, fit_params_kR, fit_unc_kR = convert_to_physical_units(light_fits, arrays_in_DN, fit_params, fit_uncertainties, fit_IPH=fit_IPH)
+
+    if save_arrays:
+        header = ["Wavelengths (nm)", "Data", "Data unc", "Total model", "Background"]
+        
+        # Stack vectors as columns
+        for i in range(spectrum.shape[0]):
+            data = np.column_stack((get_wavelengths(light_fits), 
+                                    arrays_in_kR_pernm[0][i, :],  # spectra
+                                    arrays_in_kR_pernm[1][i, :],  # data uncertainties
+                                    arrays_in_kR_pernm[2][i, :],  # model fits
+                                    arrays_in_kR_pernm[3][i, :]))  # background fits
+        
+            fp_dict = fit_params_kR[i] | fit_unc_kR[i]  # merge these two dictionaries so we can write them out easily
+            fp_df = pd.DataFrame([fp_dict])
+
+            # Save to CSV
+            np.savetxt(place_for_arrays + f"int{i}.csv", data, delimiter=',', header=','.join(header), comments='', fmt='%.6f')
+            fp_df.to_csv(place_for_arrays + f"int{i}_fitparams.csv", index=False)
 
     # Make fitting plots
     # ===============================================================================================
