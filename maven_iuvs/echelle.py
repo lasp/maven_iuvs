@@ -2052,7 +2052,7 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
         
         bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg, fit_IPH=fit_IPH)
-        modeled_params = [bestfit.x[p] for p in range(0, len(param_initial_guess))]
+        modeled_params = [*[bestfit.x[p] for p in range(0, len(param_initial_guess))], bestfit.fun]
 
         # Get the uncertainties on the fit
         try:
@@ -2150,7 +2150,10 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
     
         samples = dresults.samples
         weights = dresults.importance_weights()
+        max_logl = -max(dresults.logl)
+
         modeled_params, covariance = dyfunc.mean_and_cov(samples, weights)
+        modeled_params = [*modeled_params, max_logl]
         fit_uncert = np.sqrt(np.diag(covariance))
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(modeled_params, wavelengths, edges, CLSF, BU_bg, fit_IPH=fit_IPH)
 
