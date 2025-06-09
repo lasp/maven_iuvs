@@ -337,7 +337,10 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     csv_path : string
                Full path at which to write out the CSV file.
     process_based_on : string
-                       "PDS", "orbits", or "dates". Will determine how to select the files that will be included.
+                       "PDS": Will process all files falling within a certain PDS delivery.
+                       "selection": Will downselect ech_l1a_idx based on entries given to **kwargs.
+                       "whole-file": Will process for every entry in ech_l1a_idx. Use this option 
+                                     if you already hand-selected your lights.
     PDS : int
           PDS number if processing by PDS.
     orbit_range : list
@@ -356,6 +359,10 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     
     writes out a CSV file with lights and matching darks. 
     """
+
+    # Enforce slash.
+    if l1a_dir[-1] != "/":
+        l1a_dir += "/"
     # For PDS, do the date/time setup checking
     if process_based_on=="PDS": 
         print(f"Processing lights/darks for PDS {PDS}")
@@ -406,11 +413,13 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
         print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
         selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
         
-    else:
+    elif process_based_on=="selection":
         selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", **kwargs)
+    elif process_based_on=="whole-file":
+        selected_l1a = ech_l1a_idx
 
 
-    # NPair lights and darks
+    # Pair lights and darks
     print("Finding darks for the lights")
     lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
 
@@ -422,7 +431,7 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     print("Writing out light/dark pair file")
     with open(csv_path, 'w', newline='') as csvfile:
         wr = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        wr.writerow(["Folder", "Light", "Dark", "Segment"])
+        wr.writerow(["Light Folder", "Light", "Dark Folder", "Dark", "Segment"])
         for k in lights_and_darks.keys():
             lightfn = k
             label = iuvs_segment_from_fname(lightfn)
@@ -433,12 +442,16 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
                     label = label.replace(p, "", 1)
                 
             orbit_num = iuvs_orbno_from_fname(lightfn)
+
             try: 
                 darkfn = lights_and_darks[k][1]["name"]
+                # control for if dark is in a different folder
+                dark_orbit_num = iuvs_orbno_from_fname(darkfn)
                 wr.writerow([l1a_dir + orbit_folder(orbit_num) + "/",
-                                lightfn, 
-                                darkfn,
-                                label])
+                             lightfn, 
+                             l1a_dir + orbit_folder(dark_orbit_num) + "/",
+                             darkfn,
+                             label])
             except TypeError as e:
                 errors.append(k)
                 wr.writerow([lightfn, "ERROR!", label])
