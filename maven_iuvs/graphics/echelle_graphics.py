@@ -714,7 +714,7 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
     spec, data_unc, I_fit, bg_fits = arrays_for_plotting
     
     if do_BU_background_comparison:
-        spec_BUbg, data_unc_BUbg, I_fit_BUbg, bg_array_BUbg, fit_params_BUbg, fit_unc_BUbg, H_fit_BUbg, D_fit_BUbg = BU_stuff
+        spec_BUbg, data_unc_BUbg, I_fit_BUbg, bg_array_BUbg, fit_params_BUbg, fit_unc_BUbg = BU_stuff
 
     for i in range(len(fit_params)): 
         

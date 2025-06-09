@@ -1374,11 +1374,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
         # no need to make  background array for this one, its already made because it's prescribed
         
         # Convert to physical units...
-        arrays_in_DN_BUbg = [spectrum, data_unc, I_fit_BUbg, backgrounds_BU]# 
-        if return_each_line_fit:
-            arrays_in_DN_BUbg.append(H_fit_BUbg)
-            arrays_in_DN_BUbg.append(D_fit_BUbg)
-
+        arrays_in_DN_BUbg = [spectrum, data_unc, I_fit_BUbg, backgrounds_BU]
         arrays_in_kR_pernm_BUbg, fit_params_BUbg_kR, fit_uncertainties_BUbg_kR = convert_to_physical_units(light_fits, arrays_in_DN_BUbg, fit_params_BUbg, 
                                                                                                            fit_uncertainties_BUbg)
 
