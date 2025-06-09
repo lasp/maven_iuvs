@@ -466,7 +466,7 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     pass
 
 
-def get_dark_path(light_l1a_path, idx, drkidx):
+def get_dark_path(light_l1a_path, idx, drkidx, return_sep=False):
     """
     Given the filepath for a light observation, will find and return the appropriate dark
 
@@ -495,15 +495,20 @@ def get_dark_path(light_l1a_path, idx, drkidx):
                                    orbit=orbitno,
                                    segment=seg,
                                    date=datetime.datetime.fromisoformat(datetimeobj))
-
     light_idx = selected_l1a[0]
     dark_opts = find_dark_options(light_idx, drkidx)
     dark_idx = choose_dark(light_idx, dark_opts)
 
     if dark_idx is not None:
-        return f"{l1a_dir}{orbfolder}/{dark_idx['name']}"
+        if return_sep==True:
+            return [f"{l1a_dir}{orbfolder}", f"{dark_idx['name']}"]
+        else:
+            return f"{l1a_dir}{orbfolder}/{dark_idx['name']}"
     else:
-        return None
+        if return_sep==True:
+            return [None, None]
+        else:
+            return None
 
 
 def coadd_lights(data, n_good):
