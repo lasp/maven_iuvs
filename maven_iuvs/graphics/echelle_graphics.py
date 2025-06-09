@@ -106,23 +106,23 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
         try:
             quicklook_status = make_one_quicklook(lights_and_darks[k], light_path, dark_path, no_geo=no_geometry, savefolder=savefolder, **kwargs) 
         except Exception as e:  # Handle uncaught exceptions
-            quicklook_status = e
+            quicklook_status = e.args[0] #  Collect the actual message
             if kwargs["verbose"] is True:
                 raise(e)
-            unique_exceptions.append(f"{light_idx['name']} - Exception: {e}")
-
         finally:
             if quicklook_status == "File exists":
                 already_done.append(light_idx['name'])
             elif (quicklook_status=="Missing critical observation data: no valid lights"):
                 badfiles.append(light_idx['name'])
-            elif (quicklook_status=="Missing critical observation data: no valid darks"):
+            elif (quicklook_status=="Missing critical observation data: no valid darks"): 
+                # This is different from files missing dark. Here, a dark file was found, but the frames are all bad.
                 badfiles.append(light_idx['name'])
-            elif quicklook_status == "Success":
-                processed.append(light_idx['name'])
-            elif "Keyword 'SPE_SIZE' not found." in str(quicklook_status):
+            elif (quicklook_status=="Keyword \'SPE_SIZE\' not found."):
                 nonlinearfiles.append(light_idx['name'])
+            elif (quicklook_status == "Success"):
+                processed.append(light_idx['name'])
             else:
+                unique_exceptions.append(f"{light_idx['name']} - Exception: {quicklook_status}")
                 print("Got an unhandled exception, but it should be logged.")
         ki += 1
 
@@ -154,16 +154,16 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
 
             # Log files with bad data
             if len(badfiles) > 0:
-                logfile.write(f"{len(badfiles)} file(s) had no valid data:\n")
+                logfile.write(f"{len(badfiles)} file(s) had no valid light frames:\n")
                 for f in badfiles:
-                    logfile.write(f"\t{f['name']}\n")
+                    logfile.write(f"\t{f}\n")
                 logfile.write("\n") # newline
 
             # Log nonlinear files
             if len(nonlinearfiles) > 0:
                 logfile.write(f"{len(nonlinearfiles)} nonlinearly-binned file(s) (need to build capability to handle these):\n")
                 for f in nonlinearfiles:
-                    logfile.write(f"\t{f['name']}\n")
+                    logfile.write(f"\t{f}\n")
                 logfile.write("\n") # newline
            
             # Log files that threw a weird error
@@ -173,7 +173,7 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
                     logfile.write(f"\t{e}\n")
                 logfile.write("\n") # newline
 
-            logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark)}\n")
+            logfile.write(f"Total files: {len(processed) + len(badfiles) + len(already_done) + len(files_missing_dark) + len(nonlinearfiles) + len(unique_exceptions)}\n")
 
             print(f"\nLog written for orbits {selected_l1a[0]['orbit']}--{selected_l1a[-1]['orbit']}\n")
 
