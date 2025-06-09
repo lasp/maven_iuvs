@@ -2538,15 +2538,29 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=1
     ----------
     Vector of initial guess values
     """
-
     # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
+
+    #Account for files where H may not be located at usual location
+    if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
+        H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
+        H_b = min(np.argmax(spectrum) + 50, len(spectrum))
+        D_a = max(0, np.argmax(spectrum) - 30)
+        D_b = min(np.argmax(spectrum) - 10, len(spectrum))
+        # Now control for either of these both somehow being accidentally set to 0
+        if D_a == D_b == 0:
+            D_b += 20
+    
+    # Now integrate to get an initial area guess
     DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
     DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
     
     # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
     # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
     lambda_H_lya_guess = 121.567
+    # Account for cases with huge wavelength shift
+    if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
+        lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
 
     # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
     bg_m_guess = 0
