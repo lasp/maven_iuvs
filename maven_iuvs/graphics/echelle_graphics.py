@@ -288,9 +288,8 @@ def quicklook_figure_skeleton(N_thumbs, figsz=(44, 24), thumb_cols=10, aspect=1)
 
 
 def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show=True, savefolder=None, 
-                       figsz=(42, 26), 
-                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, overwrite_prior_to=datetime.datetime.now(), fs="large", useframe="coadded", cmap=None):
                        figsz=(42, 26), fs="large", useframe="coadded", cmap=None,
+                       arange=None, prange=None, special_prange=[0, 65], show_DN_histogram=False, verbose=False, img_dpi=96, overwrite=False, overwrite_prior_to=datetime.datetime.now()):
     """ 
     Fills in the quicklook figure for a single observation.
     
