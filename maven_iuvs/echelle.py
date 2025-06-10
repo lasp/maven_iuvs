@@ -33,7 +33,7 @@ from maven_iuvs.geometry import has_geometry_pvec
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
-from maven_iuvs.user_paths import l1a_dir
+from maven_iuvs.user_paths import l1a_dir, idl_pipeline_dir
 from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
 from numpy.linalg import inv
 import dynesty as d
@@ -1839,7 +1839,7 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
 
 
 def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
-                 idl_pipeline_folder="/home/emc/OneDrive-CU/Research/IUVS/IDL_pipeline/", open_idl=True, proc_passed_in=None):
+                 idl_pipeline_folder=idl_pipeline_dir, open_idl=True, proc_passed_in=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
 
@@ -2461,7 +2461,7 @@ def load_lsf(calibration="new"):
     """
     Load appropriate LSF
     """
-    lsf = sp.io.readsav(f"../IDL_pipeline/lsf_{calibration}.idl", idict=None, python_dict=False)
+    lsf = sp.io.readsav(f"{idl_pipeline_dir}/lsf_{calibration}.idl", idict=None, python_dict=False)
     sav_var_names = {"new": ["echw", "echf"], 
                      "old": ["w", "f"]
                     }[calibration]

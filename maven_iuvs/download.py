@@ -100,6 +100,9 @@ def setup_user_paths():
 
     l1a_full_mission_reprocess_dir = input("Where would you like IUVS l1a FITS files"
                     "for the full mission reprocess to be stored by sync_data? ")
+    
+    idl_pipeline_dir = input("Where would you like to put the IDL pipeline"
+                             " directory? (Required for echelle; location of LSF file.)")
 
     # determine whether to load SPICE kernels automatically on startup
     while True:
@@ -129,6 +132,7 @@ def setup_user_paths():
     user_paths_file.write("spice_dir = \""+spice_dir+"\"\n")
     user_paths_file.write("iuvs_vm_username = \""+vm_username+"\"\n")
     user_paths_file.write("auto_spice_load = "+auto_spice_load+"\n")
+    user_paths_file.write("idl_pipeline_dir = \""+idl_pipeline_dir+"\"\n")
     user_paths_file.close()
 
     # now scripts can import the relevant directories from user_paths
