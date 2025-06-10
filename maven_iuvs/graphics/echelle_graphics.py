@@ -35,7 +35,7 @@ bg_color = "xkcd:cerulean"
 
 # QUICKLOOK CODE =========================================================================================
 
-def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, savefolder=None, **kwargs):
+def run_quicklooks(ech_l1a_idx, selected_l1a=None, date=None, orbit=None, segment=None, start_k=0, savefolder=None, **kwargs):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either date, orbit, or segment.
     
@@ -62,16 +62,14 @@ def run_quicklooks(ech_l1a_idx, date=None, orbit=None, segment=None, start_k=0, 
     """
     
     dark_idx = make_dark_index(ech_l1a_idx)
-    selected_l1a = copy.deepcopy(ech_l1a_idx)
+    if selected_l1a is None:
+        selected_l1a = downselect_data(ech_l1a_idx, date=date, orbit=orbit, segment=segment)
 
     # Make the quicklook folder if it's not there
     if savefolder is not None:
         if not os.path.exists(savefolder):
             os.makedirs(savefolder)
     
-    # Downselect the metadata
-    selected_l1a = downselect_data(ech_l1a_idx, date=date, orbit=orbit, segment=segment)
-
     # Checks to see if we've accidentally removed all files from the to-do list
     if len(selected_l1a) == 0:
         raise IndexError("Error: No matching files found. Try removing one of or loosening the requirements of one or more arguments.")
