@@ -739,8 +739,8 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
                             plot_bg_separately=plot_bg_separately, fig_savepath=fig_savepath + f"frame{i}")
 
         if do_BU_background_comparison:
-            fit_params_for_printing_BUbg = fit_params_BUbg | fit_unc_BUbg[i]
-            fit_params_for_printing_BUbg["lambdac_D"] = fit_params_BUbg["lambdac_H"]-D_offset
+            fit_params_for_printing_BUbg = fit_params_BUbg[i] | fit_unc_BUbg[i]
+            fit_params_for_printing_BUbg["lambdac_D"] = fit_params_for_printing_BUbg["lambdac_H"]-D_offset
 
             plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :], fit_params_for_printing, fit_params_for_printing_BUbg, 
                                      bg_array_BUbg[i, :], bg_fits[i, :], data_unc_new=data_unc[i, :], data_unc_BU=data_unc_BUbg[i, :], 
@@ -1065,21 +1065,21 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
 
     if "maxLL" in fit_params_new:
         printme_new.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
-    printme_new.append(f"H: {fit_params_new['area_H']} ± {round(fit_params_new['unc_H'], 2)} "+
+    printme_new.append(f"H: {round(fit_params_new['area_H'], 2)} ± {round(fit_params_new['unc_H'], 2)} "+
                        f"kR (SNR: {round(fit_params_new['area_H'] / fit_params_new['unc_H'], 1)})")
-    printme_new.append(f"D: {fit_params_new['area_D']} ± {round(fit_params_new['unc_D'], 2)} "+
+    printme_new.append(f"D: {round(fit_params_new['area_D'], 2)} ± {round(fit_params_new['unc_D'], 2)} "+
                        f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['unc_D'], 1)})")
 
     if "maxLL" in fit_params_BU:
         printme_BU.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
-    printme_BU.append(f"H: {fit_params_BU['area_H']} ± {round(fit_params_BU['unc_H'], 2)} "+
+    printme_BU.append(f"H: {round(fit_params_BU['area_H'], 2)} ± {round(fit_params_BU['unc_H'], 2)} "+
                        f"kR (SNR: {round(fit_params_BU['area_H'] / fit_params_BU['unc_H'], 1)})")
-    printme_BU.append(f"D: {fit_params_BU['area_D']} ± {round(fit_params_BU['unc_D'], 2)} "+
+    printme_BU.append(f"D: {round(fit_params_BU['area_D'], 2)} ± {round(fit_params_BU['unc_D'], 2)} "+
                        f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['unc_D'], 1)})")
 
-    textx = [0.53, 0.53]#[0.38, 0.28]
-    texty = [0.5, 0.4]#[0.5, 0.2]
-    talign = ["left", "left"]
+    textx = [0.53, 0.53, 0.53]
+    texty = [0.5, 0.4, 0.3]
+    talign = ["left", "left", "left", "left"]
 
     for i in range(0, len(printme_new)):
         mainax.text(textx[i], texty[i], printme_new[i], transform=mainax.transAxes, ha=talign[i])
