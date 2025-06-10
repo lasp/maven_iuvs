@@ -797,7 +797,7 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
                   t="Fit", fittext_x=[0.6, 0.6, 0.6], fittext_y=[0.5, 0.4, 0.3], fn_for_subtitle="", 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False, fig_savepath=None,
-                  img_dpi=92, extra_print_on_plot=None):
+                  img_dpi=92, extra_print_on_plot=None, restrict_x=True):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -925,7 +925,15 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         mainax.set_yscale("log")
     mainax.legend(bbox_to_anchor=(1,1))
     
-    mainax.set_xlim(121.5, 121.65)#(min(data_wavelengths)-0.02, max(data_wavelengths)+0.02)# 
+    if not restrict_x:
+        x0 = min(data_wavelengths)-0.02
+        x1 = max(data_wavelengths)+0.02
+    else:
+        x0 = 121.5
+        x1 = 121.65
+    
+    mainax.set_xlim(x0, x1)
+    residax.set_xlim(x0, x1)
     
     # Print some extra messages
     if extra_print_on_plot:
