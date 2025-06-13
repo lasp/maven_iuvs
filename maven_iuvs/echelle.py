@@ -2188,11 +2188,18 @@ def badness_bg(params, wavelength_data, DN_data):
     return badness
 
 
-def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n, BU_bg, fit_IPH=False,):
+def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s, BU_bg, fit_IPH=False,):
     """
     Retrieves the model of the lineshape to fit and the associated log likelihood, denoted 
-    L (assuming a Gaussian distributed quantity). If n=-1 is passed in, then L becomes the 
+    L (assuming a Gaussian distributed quantity). If s=-1 is passed in, then L becomes the 
     "badness" of the fit, a quantity to be minimized in a parent function.
+
+    Equation: Σ_i^N ((d_i - m_i)^2 / (2(σ_i)^2))
+    Where:
+        d_i = DN counts in wavelength bin i
+        m_i = Model-produced counts in wavelength bin i 
+        σ_i = data uncertainty in wavelength bin i 
+        N = number of wavelength bins 
 
     Parameters
     ----------
@@ -2208,6 +2215,11 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
            spectrum in DN that will be fit
     uncertainty : int or array
                   DN uncertainty on the spectrum 
+    s : integer
+        Multiplies the log likelihood to determine if the value will be negative 
+        (to be minimized) or positive (to be maximized).
+        Note that if s is +1, the function returns negative log likelihood, and 
+        log likelihood if s = -1
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
     
@@ -2217,14 +2229,15 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, n,
         A single value which represents either the log-likelihood (if negative)
         or the fit "badness" if positive.
     """
+    s = s / abs(s)  # Enforce s to be -1 or 1 since python doesn't have sign.
 
     # Now do the model 
     DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg, fit_IPH=fit_IPH) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
-    L = -np.sum((DN_fit - data)**2 / (2*(uncertainty**2) ) ) # negative log-likelihood
+    L = -np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
     
-    return L * n
+    return L * s
 
 
 def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH=False):
