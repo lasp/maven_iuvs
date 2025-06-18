@@ -2235,7 +2235,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
     DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg, fit_IPH=fit_IPH) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
-    L = -np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
+    L = -np.sum((data - DN_fit)**2 / ((uncertainty**2) ) )
     
     return L * s
 
