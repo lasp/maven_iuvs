@@ -948,7 +948,7 @@ def has_geometry_pvec(hdul):
     geom_quantity = hdul['PixelGeometry'].data['PIXEL_CORNER_LAT']
     
     n_nan = np.sum(np.isnan(geom_quantity))
-    n_quant = np.product(np.shape(geom_quantity))
+    n_quant = np.prod(np.shape(geom_quantity))
 
     nanfrac = n_nan / n_quant
     

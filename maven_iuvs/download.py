@@ -100,6 +100,9 @@ def setup_user_paths():
 
     l1a_full_mission_reprocess_dir = input("Where would you like IUVS l1a FITS files"
                     "for the full mission reprocess to be stored by sync_data? ")
+    
+    idl_pipeline_dir = input("Where would you like to put the IDL pipeline"
+                             " directory? (Required for echelle; location of LSF file.)")
 
     # determine whether to load SPICE kernels automatically on startup
     while True:
@@ -129,6 +132,7 @@ def setup_user_paths():
     user_paths_file.write("spice_dir = \""+spice_dir+"\"\n")
     user_paths_file.write("iuvs_vm_username = \""+vm_username+"\"\n")
     user_paths_file.write("auto_spice_load = "+auto_spice_load+"\n")
+    user_paths_file.write("idl_pipeline_dir = \""+idl_pipeline_dir+"\"\n")
     user_paths_file.close()
 
     # now scripts can import the relevant directories from user_paths
@@ -272,6 +276,7 @@ def get_vm_file_list(server,
                      serverdir,
                      username,
                      password,
+                     ssh_pkey=None,
                      pattern="*.fits*",
                      minorb=100, maxorb=100000,
                      include_cruise=False,
@@ -292,6 +297,9 @@ def get_vm_file_list(server,
 
     password : str
         password for server access
+
+    ssh_pkey : str
+        Location of the SSH private keyfile on the local machine 
 
     pattern : str
         glob pattern used to search for matching files
@@ -334,9 +342,13 @@ def get_vm_file_list(server,
         return files
 
     # connect to the server using paramiko
+    connect_kwargs = {'password': password}
+    if ssh_pkey is not None:
+        connect_kwargs['key_filename'] = ssh_pkey
+
     ssh = fabric.Connection(server,
                             user=username,
-                            connect_kwargs={'password': password})
+                            connect_kwargs=connect_kwargs)
 
     # get the list of folders on the VM
     # result = ssh.run('ls '+serverdir, hide=True)
@@ -395,6 +407,7 @@ def sync_data(spice=True, level='l1b',
               include_cruise=False,
               delete_old=None,
               iuvs_vm_password=None,
+              ssh_pkey=None,
               **filename_kwargs):
     """
     Synchronize new SPICE kernels and L1B data from the VM and remove
@@ -491,7 +504,7 @@ def sync_data(spice=True, level='l1b',
 
     # try to sync the files, if it fails, user probably isn't on the VPN
     try:
-        if iuvs_vm_password is None:
+        if (iuvs_vm_password is None) and (ssh_pkey is None):
             try:
                 from maven_iuvs.user_paths import iuvs_vm_password
             except ImportError:
@@ -501,19 +514,25 @@ def sync_data(spice=True, level='l1b',
         # sync SPICE kernels
         if spice:
             print('Updating SPICE kernels...')
+            exflags_rsync = "--delete"
+            if ssh_pkey is not None:
+                exflags_rsync = exflags_rsync + f' ssh -i {ssh_pkey}'
+
             call_rsync(vm_spice, spice_dir, iuvs_vm_password,
-                       extra_flags="--delete")
+                       extra_flags=exflags_rsync)
+            
 
         # sync level 1B data
         if level is not None:
             # get the file names of all the relevant files
-            print(f"Running sync on {datetime.datetime.utcnow().strftime('%a %d %b %Y, %I:%M%p')}")
+            print(f"Running sync on {datetime.datetime.now(datetime.timezone.utc).strftime('%a %d %b %Y, %I:%M%p')}")
             print('Fetching names of production and stage'
                   ' files from the VM...')
             prod_filenames = get_vm_file_list(vm,
                                               production_vm,
                                               iuvs_vm_username,
                                               iuvs_vm_password,
+                                              ssh_pkey=ssh_pkey,
                                               pattern=pattern,
                                               minorb=minorb,
                                               maxorb=maxorb,
@@ -524,6 +543,7 @@ def sync_data(spice=True, level='l1b',
                                                    stage_vm,
                                                    iuvs_vm_username,
                                                    iuvs_vm_password,
+                                                   ssh_pkey=ssh_pkey,
                                                    pattern=pattern,
                                                    minorb=minorb,
                                                    maxorb=maxorb,
@@ -567,11 +587,14 @@ def sync_data(spice=True, level='l1b',
 
             print('Syncing ' + str(len(files_from_production)) +
                   ' files from production...')
+            exflags_prod = f'--files-from={transfer_from_production_file.name}'
+            if ssh_pkey is not None:
+                exflags_prod = exflags_prod + f' --rsh="ssh -i {ssh_pkey}"'
+                            
             call_rsync(login+production_vm,
                        local_dir,
                        iuvs_vm_password,
-                       extra_flags=('--files-from=' +
-                                    transfer_from_production_file.name))
+                       extra_flags=exflags_prod)
 
             # stage, identical to above
             transfer_from_stage_file = tempfile.NamedTemporaryFile()
@@ -582,11 +605,14 @@ def sync_data(spice=True, level='l1b',
             if stage_vm is not None:
                 print('Syncing ' + str(len(files_from_stage)) +
                       ' files from stage...')
+                exflags_stage = f'--files-from={transfer_from_stage_file.name}'
+                if ssh_pkey is not None:
+                    exflags_stage = exflags_stage + f' --rsh="ssh -i {ssh_pkey}"'
+
                 call_rsync(login+stage_vm,
                            local_dir,
                            iuvs_vm_password,
-                           extra_flags=('--files-from=' +
-                                        transfer_from_stage_file.name))
+                           extra_flags=exflags_stage)
 
             # now delete all of the old files superseded by newer versions
             clear_line()
