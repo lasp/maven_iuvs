@@ -912,14 +912,19 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                    f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['unc_H'], 1)})")
     printme.append(f"D: {round(fit_params_for_printing['area_D'], 2)} ± {round(fit_params_for_printing['unc_D'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['unc_D'], 1)})")
-    if "lambdac_IPH" in fit_params_for_printing.keys():
-        printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
-    talign = ["left", "left", "left", "left"]
+    printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} kR"
+                    + f" (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
+    printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['lambdac_IPH'], 4)}, ")
+    printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
 
-    for i in range(0, len(printme)):
-        mainax.text(fittext_x[i], fittext_y[i], printme[i], transform=mainax.transAxes, ha=talign[i])
+                       
+    talign = ["left"] * len(printme)
+    fittext_x=[0.6] * len(printme)
+    fittext_y=[0.8-0.1*i for i in range(len(printme))]
 
+    for (i, p) in enumerate(printme):
+        mainax.text(fittext_x[i], fittext_y[i], p, transform=mainax.transAxes, ha=talign[i])
+    
     mainax.set_ylabel("Brightness (kR/nm)")
     if logview:
         mainax.set_yscale("log")
