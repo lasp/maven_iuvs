@@ -1999,7 +1999,8 @@ def get_binning_df(calibration="new"):
 
 # Line fitting =============================================================
     
-def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1, solver="Powell", fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
+def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(None, None), 
+                solver="Powell", fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
                 hush_warning=True):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
@@ -2007,7 +2008,7 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
 
     Parameters
     ----------
-    param_initial_guess : list or array
+    pig : list or array
                           includes initial guess of values for each fit parameter: total integrated DN for the H and D lines,
                           central wavelength of H in nm, background slope (DN), and background offset (DN).
     wavelengths : array
@@ -2042,7 +2043,7 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
             the simple fit of the LSF to the data, (A_H * LSF) + (A_D * LSF) + (background), encoding
             the DN per bin.
     fit_uncert : Array
-                 uncertainty on the fit parameters, in the same order as param_initial_guess.
+                 uncertainty on the fit parameters, in the same order as pig.
     """
 
     # Get bin edges in nm.
@@ -2052,11 +2053,20 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
     if fitter=="scipy":
         # If doing things with the BU background
         if BU_bg is not None:
-            param_initial_guess = param_initial_guess[0:-2] # skip the modeled background.
+            pig = pig[0:-2] # skip the modeled background.
 
-        bestfit = sp.optimize.minimize(loglikelihood, param_initial_guess, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg), method=solver)
+        bestfit = sp.optimize.minimize(loglikelihood, pig, 
+                                       args=(wavelengths, edges, CLSF, spec, \
+                                             unc, -1, BU_bg), 
+                                       method=solver,
+                                       bounds=[(None, None), (None, None), 
+                                               (0, None), 
+                                               (121.55, 121.58), IPH_bounds, 
+                                               (0.0001, 0.02), 
+                                               (None, None), (None, None)]
+                                      )
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg)
-        modeled_params = [*[bestfit.x[p] for p in range(0, len(param_initial_guess))], bestfit.fun]
+        modeled_params = [*[bestfit.x[p] for p in range(0, len(pig))], bestfit.fun]
 
         # Get the uncertainties on the fit
         try:
@@ -2124,19 +2134,19 @@ def fit_H_and_D(param_initial_guess, wavelengths, spec, light_fits, CLSF, unc=1,
         loglike_args = [wavelengths, edges, CLSF, spec, unc, 1, BU_bg]
 
         # List of arguments for prior_transform
-        ptf_args = [ [[param_initial_guess[0]/10, param_initial_guess[0]*10], # Total DN, H
-                      [-param_initial_guess[1]/10, param_initial_guess[1]*10],  # DN, D
-                      [-param_initial_guess[2]/2, param_initial_guess[2]*2], # DN, IPH
-                      [param_initial_guess[3]-0.5, param_initial_guess[3]+0.5], # H lyman alpha center in nm
-                      [param_initial_guess[4]-0.05, param_initial_guess[4]+0.05], # IPH ly a center in nm
-                      [param_initial_guess[5]-0.003, param_initial_guess[5]+0.003], # IPH width
-                      [param_initial_guess[6]-1e4, param_initial_guess[6]+1e4], # background slope
-                      [param_initial_guess[7]-1e4, param_initial_guess[7]+1e4] # Background offset
+        ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
+                      [-pig[1]/10, pig[1]*10],  # DN, D
+                      [-pig[2]/2, pig[2]*2], # DN, IPH
+                      [pig[3]-0.02, pig[3]+0.02], # H lyman alpha center in nm: 121.547 -- 121.587
+                      [pig[4]-0.03, pig[4]+0.03], # IPH ly a center in nm
+                      [pig[5]-0.003, pig[5]+0.003], # IPH width
+                      [pig[6]-1e4, pig[6]+1e4], # background slope
+                      [pig[7]-1e4, pig[7]+1e4] # Background offset
                      ] 
                    ]
 
-            print(f"Initial guess for the IPH will be: area {ptf_args[0][2]}, " \
-                    + f"center {ptf_args[0][4]}, width {ptf_args[0][5]}")
+        print(f"Initial guess for the IPH will be: area {ptf_args[0][2]}, " 
+                + f"center {ptf_args[0][4]}, width {ptf_args[0][5]}")
 
         if approach=="dynamic":
             dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), 
@@ -2619,7 +2629,7 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=1
 
     # Now do IPH.
     DN_IPH_guess = DN_H_guess * 0.05 # wild guess
-    lambda_IPH_lya_guess = 121.555 # Arbitary
+    lambda_IPH_lya_guess = 121.57 # Arbitary
     width_IPH_guess = 0.005 # Arbitrary. TODO: Can pass in after calculating based on sc ephemeris
 
     return [DN_H_guess, DN_D_guess, DN_IPH_guess, 
