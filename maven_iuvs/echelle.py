@@ -1294,10 +1294,10 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, calibration="new", ints_to_fit="all",
-                       save_arrays=False, place_for_arrays=None,
+                       save_arrays=False, place_for_arrays=None, remove_artifacts=True,
                        return_each_line_fit=False, do_BU_background_comparison=False, run_writeout=True, make_plots=True, 
                        idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
-                       clean_data_kwargs = {"clean_data": True, "clean_method": "new", "remove_rays": True, "remove_hotpix": True},
+                       clean_data_kwargs = {"clean_method": "new", "remove_rays": True, "remove_hotpix": True},
                        plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
                    
     """
@@ -1347,14 +1347,27 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # Collect binning and pixel information
     # ===============================================================================================
     binning_df = get_binning_df(calibration=calibration)
+
+    # Dark subtraction
+    # =========================================================================
+    dark_sub_data, _, i_bad = subtract_darks(light_fits, dark_fits)
+    i_nanlights, i_badlights, i_lights_with_nandark, i_nandark = i_bad  # unpack indices of problematic frames
+    i_badframes = list(set(i_nanlights + i_badlights + i_lights_with_nandark))
     
-    # Calibrate the data
-    # ===============================================================================================
-    nice_data = clean_data(light_fits, dark_fits, **clean_data_kwargs)
+    # Artifact removal / outlier rejection
+    # =========================================================================
+    if remove_artifacts:
+        processed_data = clean_data(dark_sub_data, i_badlights, **clean_data_kwargs)
+    else:
+        processed_data = dark_sub_data
 
     # Flatten the calibrated data (coadd in spatial dimension)
     # ===============================================================================================
-    spectrum, data_unc = flatten(light_fits, nice_data)
+    spectrum, data_unc = flatten(light_fits, processed_data)
+    # For some reason, data uncertainties are still nonzero even if the frame 
+    # is broken, so turn them off here so they don't plot.. 
+    for fi in i_badframes: 
+        data_unc[fi, :] = 0
 
     # An alternate fit using a BU-style background
     # ===============================================================================================   
@@ -1380,7 +1393,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # Standard fitting, with or without returning the individual fits for each line.
     # ===============================================================================================
     # Do basic fit in DN
-    I_fit, H_fit, D_fit, IPH_fit, fit_params, fit_uncertainties = fit_flat_data(light_fits, spectrum, data_unc, ints_to_fit=ints_to_fit, 
+    I_fit, H_fit, D_fit, IPH_fit, fit_params, fit_uncertainties = fit_flat_data(light_fits, spectrum, data_unc, bad_frames=i_badframes, ints_to_fit=ints_to_fit, 
                                                                                 return_each_line_fit=return_each_line_fit, **kwargs)
     # Construct a background array from the fit parameters, which can then be converted like the spectrum
     bg_fits = make_array_of_fitted_backgrounds(light_fits, fit_params)
@@ -1434,17 +1447,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     return
 
 
-def clean_data(light_fits, dark_fits, clean_data=True, clean_method="new", remove_rays=True, remove_hotpix=True):
+def clean_data(data, all_bad_lights, clean_method="new", remove_rays=True, remove_hotpix=True):
     """
     Performs dark subtraction and data cleanup. 
     Parameters
     ----------
-    light_fits : astropy.io.fits instance
-                File with light observation
-    dark_fits : astropy.io.fits instance
-                File with associated darks for light_fits
-    clean_data : boolean
-                 Whether to perform cosmic ray removal and hot pixel adjustment.
+    data : array
+           data cube, already dark-subtracted.
+    all_bad_lights : list
+                     list of indices of frames that are so broken they can't be fit.
     clean_method : string
                    "new" uses the vectorized methods developed here for Python.
                    "old" re-implmements what was done in IDL (slower)
@@ -1458,58 +1469,49 @@ def clean_data(light_fits, dark_fits, clean_data=True, clean_method="new", remov
     data : array
            cleaned up data cube, format (n_integrations) x (n_spa) x (n_spe)
     """
-    
-    # Dark subtraction
-    # ============================================================================================
-    data, _, i_bad = subtract_darks(light_fits, dark_fits)
-    nan_light_inds, bad_light_inds, light_frames_with_nan_dark, nan_dark_inds = i_bad  # unpack indices of problematic frames
-    all_bad_lights = list(set(nan_light_inds + bad_light_inds + light_frames_with_nan_dark))
 
-    # Data cleanup 
-    # ============================================================================================
-    if clean_data is True:
-        if clean_method=="new":
-            if remove_rays:
-                data = remove_cosmic_rays(data, std_or_mad="mad")
-            if remove_hotpix:
-                data = remove_hot_pixels(data, all_bad_lights) 
-        elif clean_method=="old":
-            Nwaves = get_binning_scheme(light_fits)["nspe"]
-            Nspaces = get_binning_scheme(light_fits)["nspa"]
-            Nint = get_n_int(light_fits)
-            # Cosmic rays
-            for w in range(0, Nwaves-1): 
-                for s in range(0, Nspaces-1):
-                    pixvalue = data[:, s, w]
-                    medval   = median_high(pixvalue) # As in IDL pipeline - median is called without the /EVEN keyword, biasing it toward high values. 
-                                                     # Possibly, IDL defaults changed at some point during the mission.
-                    sigma    = np.std(pixvalue, ddof=1)
-                    whererays    = np.where( (pixvalue > medval+2*sigma) | (pixvalue < medval-2*sigma) )
-                    pixvalue[whererays] = medval
-                    data[:, s, w] = pixvalue
+    if clean_method=="new":
+        if remove_rays:
+            data = remove_cosmic_rays(data, std_or_mad="mad")
+        if remove_hotpix:
+            data = remove_hot_pixels(data, all_bad_lights) 
+    elif clean_method=="old":
+        Nwaves = get_binning_scheme(light_fits)["nspe"]
+        Nspaces = get_binning_scheme(light_fits)["nspa"]
+        Nint = get_n_int(light_fits)
+        # Cosmic rays
+        for w in range(0, Nwaves-1): 
+            for s in range(0, Nspaces-1):
+                pixvalue = data[:, s, w]
+                medval   = median_high(pixvalue) # As in IDL pipeline - median is called without the /EVEN keyword, biasing it toward high values. 
+                                                    # Possibly, IDL defaults changed at some point during the mission.
+                sigma    = np.std(pixvalue, ddof=1)
+                whererays    = np.where( (pixvalue > medval+2*sigma) | (pixvalue < medval-2*sigma) )
+                pixvalue[whererays] = medval
+                data[:, s, w] = pixvalue
 
-            # Hot pixels
-            Wdt = 3
-            for i in range(0, Nint-1): 
-                for w in range(Wdt, Nwaves-1-Wdt):
-                    for s in range(Wdt, Nspaces-1-Wdt): 
-                        Farea = data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1]
-                        Fmed = np.median(Farea)
-                        Fsigma = np.sqrt( np.sum((Farea-Fmed)**2) / ((2.*Wdt+1)**2) )
-                        Fdif = data[i, s, w] - Fmed 
-                        if (Fdif > 3*Fsigma) | (Fdif < -3*Fsigma): 
-                            data[i, s, w] = np.median(data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1])
+        # Hot pixels
+        Wdt = 3
+        for i in range(0, Nint-1): 
+            for w in range(Wdt, Nwaves-1-Wdt):
+                for s in range(Wdt, Nspaces-1-Wdt): 
+                    Farea = data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1]
+                    Fmed = np.median(Farea)
+                    Fsigma = np.sqrt( np.sum((Farea-Fmed)**2) / ((2.*Wdt+1)**2) )
+                    Fdif = data[i, s, w] - Fmed 
+                    if (Fdif > 3*Fsigma) | (Fdif < -3*Fsigma): 
+                        data[i, s, w] = np.median(data[i, s-Wdt:s+Wdt+1, w-Wdt:w+Wdt+1])
 
     return data
 
 
-def flatten(light_fits, cleaned_data):
+def flatten(light_fits, processed_data):
     """
     Parameters
     ----------
     light_fits : astropy.io.fits instance
                 File with light observation
-    cleaned_data : array
+    processed_data : array
                    cleaned up data cube, format (n_integrations) x (n_spa) x (n_spe)
     
     Returns
@@ -1520,16 +1522,17 @@ def flatten(light_fits, cleaned_data):
     """
     # Uncertainty on the data 
     # ============================================================================================
-    ran_DN = ran_DN_uncertainty(light_fits, cleaned_data)
+    ran_DN = ran_DN_uncertainty(light_fits, processed_data)
     
     # WARNING: refactored get_spectrum. 
-    spec = get_spectrum(cleaned_data, light_fits, coadded=False, integration=None)  
+    spec = get_spectrum(processed_data, light_fits, coadded=False, integration=None)  
     unc = add_in_quadrature(ran_DN, light_fits, coadded=False, integration=None) 
 
     return spec, unc
 
 
-def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each_line_fit=False, ints_to_fit=1,  
+def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None, 
+                  calibration="new", return_each_line_fit=False, ints_to_fit=1,  
                   BU_bg=None, **kwargs):
     """
     Parameters
@@ -1538,6 +1541,9 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
                 File with light observation
     spectrum : array
     data_unc : array
+    bad_frames : list or None
+                 If provided contains indices of broken frames that can't 
+                 be fit.
     calibration : string
                   "new" or "old": whether to compare use the new or old LSF, and 
                   newer or older set of pixel and binning information.
@@ -1591,6 +1597,19 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
 
      # Loop over integrations to do the fits
     for i in range(0, ints_to_fit):
+        if bad_frames:
+            if i in bad_frames:
+                fit_params_dicts.append({"failed_fit": True, 
+                                         "area_H": 0, "area_D": 0, 
+                                         "area_IPH": 0, "lambdac_H": 121.567, 
+                                         "lambdac_IPH": 121.55, "width_IPH": 0, 
+                                         "M": 0, "B": 0})
+                fit_unc_dicts.append({"unc_H": 0, "unc_D": 0, 
+                                      "unc_IPH": 0, "unc_lambdac_H": 0, 
+                                      "unc_lambdac_IPH": 0, "unc_width_IPH": 0, 
+                                      "unc_M": 0, "unc_B": 0})
+                continue # we already filled the arrays with zeros so just skip the other tasks
+
         # PERFORM FIT
         # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
@@ -1621,9 +1640,16 @@ def fit_flat_data(light_fits, spectrum, data_unc, calibration="new", return_each
         fit_params_dicts.append(fit_params_dict)
         fit_unc_dicts.append(fit_unc_dict)
 
-    # Error control
-    if np.isnan(fit_params).any():
-        raise Exception("Fit failed")
+        # Error control
+        if np.isnan(fit_params).any(): 
+            print(f"Warning: Fit {i} has nans in uncertainties")
+
+        if np.isnan(fit_params).all():
+            print(f"Fit {i} REALLY failed")
+            raise Exception(f"Frame {i} is broken, i.e. all fit params are "
+                            + "nan. In theory this should have been handled "
+                            + "but wasn't")
+
 
     if not return_each_line_fit:
         H_fit_array = None
