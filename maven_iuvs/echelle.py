@@ -28,8 +28,10 @@ from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoeven
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
-    orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff
+    orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff, \
+    relative_path_from_fname
 from maven_iuvs.geometry import has_geometry_pvec
+from maven_iuvs.pds import get_pds_dates
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
@@ -323,8 +325,53 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
     return selected
 
 # Relating to dark vs. light observations -----------------------------
-def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lights_and_darks.csv", process_based_on="PDS", PDS=0, 
-                                 disallow_processing_past=True, **kwargs):
+
+def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx, 
+                                ld_folder=f"{idl_pipeline_dir}light-dark-pair-lists/"):
+    """
+    A wrapper for make_light_and_dark_pair_CSV() that, when called, adds new 
+    filest to the light/dark key. Does not update names. 
+
+    Parameters
+    ----------
+    key_filename : string
+                   filename (including extension) of light and dark pairings
+    ech_l1a_idx : dictionary
+                  includes metadata for all observations throughout mission.
+    dark_idx : dictionary
+               similar to ech_l1a_index but only includes dark files.
+    ld_folder : string
+                folder path where key_filename lives
+
+    Returns
+    ----------
+    null - updates and writes out a new CSV.
+    """
+    MASTER_KEY =  ld_folder + key_filename # "ONE_KEY_TO_RULE_THEM_ALL_nodups_v13.csv"
+    MASTER_KEY = pd.read_csv(MASTER_KEY)
+    
+    # Sort list by the datetime object column (should exist, but if not, it will be created)
+    MASTER_KEY_TIMESORT = sort_ldkey_by_date(MASTER_KEY)
+    
+    # Figure out point at which it was last updated
+    last_time_str = MASTER_KEY_TIMESORT.iloc[-1]["DTobj"]
+    last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
+
+    # Call the CSV maker which will update it (you can do it in place by giving 
+    # it the same fn if you want); this version append's today's date
+    final_filename = f"{key_filename[:-15]}_{datetime.datetime.now().date()}.csv"
+    make_light_and_dark_pair_CSV(ech_l1a_idx, dark_idx, l1a_dir,
+                                 csv_path=ld_folder + final_filename,
+                                 make_csv_for="selection",
+                                 starting_df=MASTER_KEY_TIMESORT, 
+                                 date=[last_time, -1])
+    return
+
+
+def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
+                                 csv_path="lights_and_darks.csv",  
+                                 make_csv_for="PDS", PDS=0, version="v13",
+                                 starting_df=None, **kwargs):
     """
     Parameters
     ----------
@@ -336,21 +383,13 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
               Root directory for l1a files; may differ based on file versions.
     csv_path : string
                Full path at which to write out the CSV file.
-    process_based_on : string
-                       "PDS": Will process all files falling within a certain PDS delivery.
-                       "selection": Will downselect ech_l1a_idx based on entries given to **kwargs.
-                       "whole-file": Will process for every entry in ech_l1a_idx. Use this option 
-                                     if you already hand-selected your lights.
+    make_csv_for : string
+                  "PDS": Will process all files falling within a certain PDS delivery.
+                  "selection": Will downselect ech_l1a_idx based on entries given to **kwargs.
+                  "whole-file": Will process for every entry in ech_l1a_idx. Use this option 
+                                if you already hand-selected your lights.
     PDS : int
           PDS number if processing by PDS.
-    orbit_range : list
-                  Format [start_orbit, end_orbit] (where the entries are integers).
-    date_range : list
-                 Format [start_date, end_date] where each entry is a datetime object of format datetime.datetime(Y, M, D, h, m, s).
-    disallow_processing_past : boolean
-                               if True, the code will throw an error if you are processing a PDS that is already past.
-                               Can be set to False to allow for reprocessing older lists (for example, if being used in a mission-long
-                               reprocess effort)
     **kwargs : dictionary
                keyword arugments passed to downselect_data().
     Returns
@@ -364,106 +403,78 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir, csv_path="lig
     if l1a_dir[-1] != "/":
         l1a_dir += "/"
     # For PDS, do the date/time setup checking
-    if process_based_on=="PDS": 
-        print(f"Processing lights/darks for PDS {PDS}")
-        # TODO: Store these in a spreadsheet and read them in. Plus that way it'll be a nice record of when everythign was done.
-        deadlines = {39: {"start_datetime": datetime.datetime(2024, 5, 15, 0, 0, 0),
-                          "end_datetime": datetime.datetime(2024, 8, 14, 23, 59, 59),
-                          "due_VM": datetime.datetime(2024, 10, 15, 0, 0, 0)},
-                    40: {"start_datetime": datetime.datetime(2024, 8, 15, 0, 0, 0),
-                         "end_datetime": datetime.datetime(2024, 11, 14, 23, 59, 59),
-                         "due_VM": datetime.datetime(2025, 1, 15, 0, 0, 0)},
-                    41: {"start_datetime": datetime.datetime(2024, 11, 15, 0, 0, 0),
-                         "end_datetime": datetime.datetime(2025, 2, 14, 23, 59, 59),
-                         "due_VM": datetime.datetime(2025, 4, 15, 0, 0, 0)},
-                    42: {"start_datetime": datetime.datetime(2025, 2, 15, 0, 0, 0),
-                         "end_datetime": datetime.datetime(2025, 5, 14, 23, 59, 59),
-                         "due_VM": datetime.datetime(2025, 7, 15, 0, 0, 0)},
-                    }
-
-        # Set the delivery due date, start date for the data range, and end date for data range.
-        # Currently these have to be adjusted manually but there may be a way to be smart about it?
-        due_datetime = deadlines[PDS]["due_VM"] # Date it is due to the VM (1 month before due date to PDS) 
-        start_datetime = deadlines[PDS]["start_datetime"] # Starting date of the data window 
-        end_datetime = deadlines[PDS]["end_datetime"] # Ending date of the data window 
-
-        # Check that the due date is in the future - this will obviously fail if I haven't updated the duedate.
-        if disallow_processing_past:
-            if due_datetime < datetime.datetime.now():
-                raise Exception("ERROR! Due date is in the past, please update the dates")
-            else: 
-                print("Running before due date - OK")
-
-            # Check for errors in start and end date entries
-            if (due_datetime-start_datetime).days / 7 > 22: # 22 will account for longer months 
-                raise Exception(f"Error: Start date seems wrong. Due date is {due_datetime} so " 
-                                f"the start date should be 5 months before that, which is {due_datetime - datetime.timedelta(weeks=5*4)}"
-                                " or the 15th in the same month, if previous date is not the 15th")
-            else:
-                print("Start date seems OK")
-
-            if (due_datetime-end_datetime).days / 7 > 9: 
-                raise Exception(f"Error: End date seems wrong. Due date is {due_datetime} so " 
-                                f"the start date should be 2 months before that, which is {due_datetime - datetime.timedelta(weeks=2*4)}"
-                                " or the 15th in the same month, if previous date is not the 15th")
-            else:
-                print("End date seems OK")
-
-        # Downselect to the right dates 
-        print(f"Downselecting to light files between {start_datetime} and {end_datetime}...")
-        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", date=[start_datetime, end_datetime])
-        
-    elif process_based_on=="selection":
+    if make_csv_for=="PDS":
+        assert PDS != None
+        di, df = get_pds_dates(PDS)
+        selected_l1a = downselect_data(ech_l1a_idx, light_dark="light",
+                                       date=[di, df])
+    elif make_csv_for=="selection":
         selected_l1a = downselect_data(ech_l1a_idx, light_dark="light", **kwargs)
-    elif process_based_on=="whole-file":
+    elif make_csv_for=="whole-file":
         selected_l1a = ech_l1a_idx
-
 
     # Pair lights and darks
     print("Finding darks for the lights")
     lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_index, verbose=False)
 
-    # The following prefixes "limb" and "disk" files but for some reason the light/dark pair files
-    # have a column that just lists "limb" or "disk" without the prefix. So we remove it for that column.
-    prefixes = ["in", "out"]
-    errors = []
+    # Convert the dictionary into just a list of filename pairs
+    LD_fns = {}
+    rowno = 0
+    for (k,v) in lights_and_darks.items():
+        LD_fns[rowno] = [k, v[1]['name']]
+        rowno += 1
+
+    # Convert into a dataframe
+    newfiles_df = pd.DataFrame.from_dict(LD_fns, orient="index", 
+                                         columns=["Light", "Dark"])
+    
+    # Add in the folder columns
+    lf_list = [relative_path_from_fname(L, v=version)
+               for L in newfiles_df["Light"]]
+    df_list = [relative_path_from_fname(D, v=version)
+               for D in newfiles_df["Dark"]]
+    newfiles_df["Light Folder"] = lf_list
+    newfiles_df["Dark Folder"] = df_list
+    newfiles_df["Segment"] = [iuvs_segment_from_fname(f) for f in newfiles_df["Light"]]
+    newfiles_df_sorted = sort_ldkey_by_date(newfiles_df)
+
+    # Add to existing frame (works even if starting_df = None)
+    complete_df = pd.concat([starting_df, newfiles_df_sorted], axis=0)
 
     print("Writing out light/dark pair file")
-    with open(csv_path, 'w', newline='') as csvfile:
-        wr = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        wr.writerow(["Light Folder", "Light", "Dark Folder", "Dark", "Segment"])
-        for k in lights_and_darks.keys():
-            lightfn = k
-            label = iuvs_segment_from_fname(lightfn)
-
-            # remove in/out from disk and limb because they're not in the IDL code.
-            for p in prefixes:
-                if p in label:
-                    label = label.replace(p, "", 1)
-                
-            orbit_num = iuvs_orbno_from_fname(lightfn)
-
-            try: 
-                darkfn = lights_and_darks[k][1]["name"]
-                # control for if dark is in a different folder
-                dark_orbit_num = iuvs_orbno_from_fname(darkfn)
-                wr.writerow([l1a_dir + orbit_folder(orbit_num) + "/",
-                             lightfn, 
-                             l1a_dir + orbit_folder(dark_orbit_num) + "/",
-                             darkfn,
-                             label])
-            except TypeError as e:
-                errors.append(k)
-                wr.writerow([lightfn, "ERROR!", label])
-                print(f"Caught error {e} for file {lightfn}")
-                continue
+    complete_df.to_csv(csv_path, index=False)
 
     if files_missing_dark:
         print("Warning: Some files didn't have a valid dark. Here they are:")
         print(files_missing_dark)
 
     print("Done!")
-    pass
+    return
+
+
+def sort_ldkey_by_date(pair_df):
+    """
+    Sort a dataframe of paired light and dark filenames by datetime of the 
+    observation, using the DTobj column.
+    Parameters
+    ----------
+    pair_df : pandas DataFrame
+              Dataframe containing paired light and dark filenames as well as
+              their encompassing parent folders.
+
+    Returns
+    ----------
+    pair_df_timesorted : pandas DataFrame
+                         The same dataframe, sorted by datetime of observation
+    """
+    if "DTobj" not in pair_df.columns:
+        lights = pair_df["Light"]
+        dt_objs = [iuvs_filename_to_datetime(f) for f in lights]
+        pair_df["DTobj"] = dt_objs
+
+    pair_df_timesorted = pair_df.sort_values("DTobj", ignore_index=True)
+
+    return pair_df_timesorted
 
 
 def get_dark_path(light_l1a_path, idx, drkidx, return_sep=False):
