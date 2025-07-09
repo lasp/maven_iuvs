@@ -19,6 +19,7 @@ import pandas as pd
 import subprocess
 from tqdm.auto import tqdm
 from numpy.lib.stride_tricks import sliding_window_view
+import maven_iuvs as iuvs
 from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
 from maven_iuvs.constants import D_offset
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
@@ -1923,20 +1924,29 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binnin
     ph_per_s_csv_path = idl_pipeline_folder + "ph_per_s.csv"
     brightness_writeout.to_csv(brightness_csv_path, index=False)
     bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
-    
+
     # Now call IDL
     if open_idl is True:
-        os.chdir(idl_pipeline_folder)
-        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, stdout=subprocess.PIPE, text="true")
-        proc.stdin.write(".com write_l1c_file_from_python.pro")
-        time.sleep(1) # Be sure it's compiled 
-        print("IDL is now open")
+        print("Opening IDL")
+        os.chdir(iuvs.__path__[0]) # idl_pipeline_folder)
+        outputfile = open(l1c_savepath + "IDLoutput.txt", "w")
+        errorfile = open(l1c_savepath + "IDLerrors.txt", "w")
+
+        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, 
+                                stdout=outputfile, stderr=errorfile, 
+                                text=True, bufsize=1)
+        proc.stdin.write(".com write_l1c_file_from_python.pro\n")
+        time.sleep(3) # Be sure it's compiled 
+        print("IDL is now open and the script should be compiled")
     else:
         if proc_passed_in is None:
             raise Exception("Please pass in the subprocess proc")
         proc = proc_passed_in
     
-    proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', '{dark_l1a_path}', '{l1c_savepath}', '{brightness_csv_path}', '{ph_per_s_csv_path}'\n")
+    proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
+                     '{dark_l1a_path}', '{l1c_savepath}', \
+                     '{brightness_csv_path}', '{ph_per_s_csv_path}'\n")
+    time.sleep(1)  # Allow enough time to complete the file writeout
     proc.stdin.flush()
 
     if open_idl is True:
