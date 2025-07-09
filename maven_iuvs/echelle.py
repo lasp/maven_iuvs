@@ -2068,7 +2068,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
 
         bestfit = sp.optimize.minimize(loglikelihood, pig, 
                                        args=(wavelengths, edges, CLSF, spec, \
-                                             unc, -1, BU_bg), 
+                                             unc, 1, BU_bg), 
                                        method=solver,
                                        bounds=[(None, None), (None, None), 
                                                (0, None), 
@@ -2089,7 +2089,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives. 
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
-            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, -1, BU_bg))
+            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, 1, BU_bg))
             
             fit_uncert = np.sqrt(np.diag(inv(hessian)))
 
@@ -2142,7 +2142,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             return x
 
         # List of arguments for loglikelihood
-        loglike_args = [wavelengths, edges, CLSF, spec, unc, 1, BU_bg]
+        loglike_args = [wavelengths, edges, CLSF, spec, unc, -1, BU_bg]
 
         # List of arguments for prior_transform
         ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
@@ -2238,9 +2238,10 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
                   DN uncertainty on the spectrum 
     s : integer
         Multiplies the log likelihood to determine if the value will be negative 
-        (to be minimized) or positive (to be maximized).
-        Note that if s is +1, the function returns negative log likelihood, and 
-        log likelihood if s = -1
+        (to be maximized, for use with Dynesty) or positive (i.e., chi squared, 
+        to be minimized and used with scipy.optimize.minimize).
+        Thus if s is -1, the function returns negative log likelihood, and 
+        positive log likelihood if s = +1
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
     
@@ -2256,7 +2257,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
     DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
-    L = -np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
+    L = np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
     
     return L * s
 
