@@ -2078,7 +2078,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
 
         bestfit = sp.optimize.minimize(loglikelihood, pig, 
                                        args=(wavelengths, edges, CLSF, spec, \
-                                             unc, 1, BU_bg), 
+                                             unc, BU_bg), 
                                        method=solver,
                                        bounds=[(None, None), (None, None), 
                                                (0, None), 
@@ -2099,7 +2099,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives. 
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
-            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, 1, BU_bg))
+            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, BU_bg))
             
             fit_uncert = np.sqrt(np.diag(inv(hessian)))
 
@@ -2152,7 +2152,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             return x
 
         # List of arguments for loglikelihood
-        loglike_args = [wavelengths, edges, CLSF, spec, unc, -1, BU_bg]
+        loglike_args = [wavelengths, edges, CLSF, spec, unc, BU_bg]
 
         # List of arguments for prior_transform
         ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
@@ -2170,10 +2170,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                 + f"center {ptf_args[0][4]}, width {ptf_args[0][5]}")
 
         if approach=="dynamic":
-            dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), 
+            dsampler = d.DynamicNestedSampler(negloglikelihood, prior_transform, len(ptf_args[0]), 
                                             logl_args=loglike_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
         elif approach=="static":
-            dsampler = d.NestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), nlive=livepts,
+            dsampler = d.NestedSampler(negloglikelihood, prior_transform, len(ptf_args[0]), nlive=livepts,
                                             logl_args=loglike_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
             
         dsampler.run_nested()
@@ -2219,7 +2219,16 @@ def badness_bg(params, wavelength_data, DN_data):
     return badness
 
 
-def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s, BU_bg):
+def negloglikelihood(params, wavelength_data, binedges, CLSF, data, 
+                     uncertainty, BU_bg):
+    """
+    Returns the negative of loglikelihood() (see that function for arguments).
+    """
+    return -loglikelihood(params, wavelength_data, binedges, CLSF, data, 
+                          uncertainty, BU_bg)
+
+
+def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, BU_bg):
     """
     Retrieves the model of the lineshape to fit and the associated log likelihood, denoted 
     L (assuming a Gaussian distributed quantity). If s=-1 is passed in, then L becomes the 
@@ -2246,12 +2255,6 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
            spectrum in DN that will be fit
     uncertainty : int or array
                   DN uncertainty on the spectrum 
-    s : integer
-        Multiplies the log likelihood to determine if the value will be negative 
-        (to be maximized, for use with Dynesty) or positive (i.e., chi squared, 
-        to be minimized and used with scipy.optimize.minimize).
-        Thus if s is -1, the function returns negative log likelihood, and 
-        positive log likelihood if s = +1
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
     
@@ -2261,7 +2264,6 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
         A single value which represents either the log-likelihood (if negative)
         or the fit "badness" if positive.
     """
-    s = s / abs(s)  # Enforce s to be -1 or 1 since python doesn't have sign.
 
     # Now do the model 
     DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg) 
@@ -2269,7 +2271,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, s,
     # Fit the model to the existing data assuming Gaussian distributed photo events 
     L = np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
     
-    return L * s
+    return L
 
 
 def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg):
