@@ -2076,7 +2076,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         if BU_bg is not None:
             pig = pig[0:-2] # skip the modeled background.
 
-        bestfit = sp.optimize.minimize(loglikelihood, pig, 
+        bestfit = sp.optimize.minimize(negloglikelihood, pig, 
                                        args=(wavelengths, edges, CLSF, spec, \
                                              unc, BU_bg), 
                                        method=solver,
@@ -2099,7 +2099,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives. 
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
-            hessian = approx_hess2(bestfit.x, loglikelihood, args=(wavelengths, edges, CLSF, spec, unc, BU_bg))
+            hessian = approx_hess2(bestfit.x, negloglikelihood, args=(wavelengths, edges, CLSF, spec, unc, BU_bg))
             
             fit_uncert = np.sqrt(np.diag(inv(hessian)))
 
@@ -2170,10 +2170,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                 + f"center {ptf_args[0][4]}, width {ptf_args[0][5]}")
 
         if approach=="dynamic":
-            dsampler = d.DynamicNestedSampler(negloglikelihood, prior_transform, len(ptf_args[0]), 
+            dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), 
                                             logl_args=loglike_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
         elif approach=="static":
-            dsampler = d.NestedSampler(negloglikelihood, prior_transform, len(ptf_args[0]), nlive=livepts,
+            dsampler = d.NestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), nlive=livepts,
                                             logl_args=loglike_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
             
         dsampler.run_nested()
@@ -2222,7 +2222,12 @@ def badness_bg(params, wavelength_data, DN_data):
 def negloglikelihood(params, wavelength_data, binedges, CLSF, data, 
                      uncertainty, BU_bg):
     """
-    Returns the negative of loglikelihood() (see that function for arguments).
+    Returns the negative of loglikelihood(). Since loglikelihood() includes
+    a negative sign by convention, this function, negloglikelihood(), returns
+    a positive value. For Gaussian-distributed quantities, this is functionally
+    the χ^2. Thus negloglikelihood() is typically minimized. 
+
+    See loglikelihood() for function arguments.
     """
     return -loglikelihood(params, wavelength_data, binedges, CLSF, data, 
                           uncertainty, BU_bg)
@@ -2231,10 +2236,12 @@ def negloglikelihood(params, wavelength_data, binedges, CLSF, data,
 def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, BU_bg):
     """
     Retrieves the model of the lineshape to fit and the associated log likelihood, denoted 
-    L (assuming a Gaussian distributed quantity). If s=-1 is passed in, then L becomes the 
-    "badness" of the fit, a quantity to be minimized in a parent function.
+    L (assuming a Gaussian distributed quantity). L is defined as:
+    L = -Σ_i^N ((d_i - m_i)^2 / (2(σ_i)^2))     {{note the minus sign!}}
+    
+    Thus, for a Gaussian quantity, L should be maximized, as it represents 
+    the maximum likelihood estimator (MLE). 
 
-    Equation: Σ_i^N ((d_i - m_i)^2 / (2(σ_i)^2))
     Where:
         d_i = DN counts in wavelength bin i
         m_i = Model-produced counts in wavelength bin i 
@@ -2269,7 +2276,7 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, BU
     DN_fit, *_ = lineshape_model(params, wavelength_data, binedges, CLSF, BU_bg) 
 
     # Fit the model to the existing data assuming Gaussian distributed photo events 
-    L = np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
+    L = -np.sum((data - DN_fit)**2 / (2*(uncertainty**2) ) )
     
     return L
 
