@@ -46,22 +46,40 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
                 if (n=="KERNELS") & (skip_kernels):
                     print("Skipping kernels because they're definitely different due to pipeline changes upstream")
                     continue
-                elif (n=="ORBIT_SEGMENT"):
-                    print("the orbit segment is:")
-                    print(f"{labels[0]}: {fits1[hduname].data[n]}")
-                    print(f"{labels[1]}: {fits2[hduname].data[n]}")
-                    print()
-                else:
-                    if (fits1[hduname].data[n] != fits2[hduname].data[n]).all():
-                        print(f"{n} discrepancy")
-                        print(f"{labels[0]}: {fits1[hduname].data[n]}")
-                        print(f"{labels[1]}: {fits2[hduname].data[n]}")
-                        print()
+                elif (n=="BRIGHT_H_ONESIGMA_KR") or (n=="BRIGHT_D_ONESIGMA_KR") or (n=="BRIGHT_ONESIGMA_KR"):
+                    # for comparing v15 (done with python) to earlier versions:
+                    print("Brightness uncertainty processing changed:")
+                    if n=="BRIGHT_ONESIGMA_KR":
+                        print(f"{labels[0]}: BRIGHT_ONESIGMA_KR:\n{fits1[hduname].data['BRIGHT_ONESIGMA_KR']}")
+                        print(f"{labels[1]}: BRIGHT_H_ONESIGMA_KR:\n{fits2[hduname].data['BRIGHT_H_ONESIGMA_KR']}\n" + \
+                              f"{labels[1]}: BRIGHT_D_ONESIGMA_KR:\n{fits2[hduname].data['BRIGHT_D_ONESIGMA_KR']}")
                     else:
+                        print(f"{labels[0]}: {n}:\n{fits1[hduname].data[n]}")
+                        print(f"{labels[1]}: BRIGHT_ONESIGMA_KR:\n{fits2[hduname].data['BRIGHT_ONESIGMA_KR']}")
+                    print()
+                elif n not in fits2[hduname].data.names:
+                    print(f"Header {n} has no equivalent in {labels[1]} products.")
+                else:
+                    if (fits1[hduname].data[n] == fits2[hduname].data[n]).all():
                         if verbose:
                             print(f"{n} entry is equal")
+                    else:
+                        if (n=="ORBIT_SEGMENT"): 
+                            if not (isinstance(fits1[hduname].data[n], str) and isinstance(fits2[hduname].data[n], str)):
+                                # In some files the segment is inexplicably a number instead of a string.
+                                print("the orbit segment is:")
+                                print(f"{labels[0]}: {fits1[hduname].data[n]}")
+                                print(f"{labels[1]}: {fits2[hduname].data[n]}")
+                                print()
                         else:
-                            pass 
+                            if (fits1[hduname].data[n] != fits2[hduname].data[n]).all():
+                                print(f"{n} discrepancy")
+                                print(f"{labels[0]}: {fits1[hduname].data[n]}")
+                                print(f"{labels[1]}: {fits2[hduname].data[n]}")
+                                print()
+                            else:
+                                print(f"{n} has discrepancies, but may just be floating point errors. Investigate further by hand.")
+                        
     print("Finished")
 
 

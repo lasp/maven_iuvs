@@ -1421,7 +1421,7 @@ def make_alt_plot(fitfile, slit_inds, ax=None, ax2=None, t=""):
     ax.set_xlabel("Integration", fontsize=20)
     ax.set_ylabel("Spatial-mean MRH", fontsize=20, color=ax0col)
     ax.set_title(f"Altitudes (km){t}", fontsize=20)
-    ax2.set_ylabel("MAVEN (km)", fontsize=20, color=ax1col)
+    ax2.set_ylabel("MAVEN", fontsize=20, color=ax1col)
     
 
     if new_ax:
