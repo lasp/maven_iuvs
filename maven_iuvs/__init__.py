@@ -19,7 +19,8 @@ from . import file_classes
 from . import binning
 from . import echelle
 from . import reprocessing
-
+from . import compare_pipelines
+from . import pds
 
 try:
     from .user_paths import auto_spice_load as _auto_spice_load
