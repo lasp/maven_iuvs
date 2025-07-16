@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 from numpy.lib.stride_tricks import sliding_window_view
 import maven_iuvs as iuvs
 from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
-from maven_iuvs.constants import D_offset
+from maven_iuvs.constants import D_offset, IPH_wv_spread
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
                                    get_wavelengths, \
@@ -41,6 +41,8 @@ from statsmodels.tools.numdiff import approx_hess1, approx_hess2, approx_hess3
 from numpy.linalg import inv
 import dynesty as d
 from dynesty import utils as dyfunc
+from maven_iuvs.spice import load_iuvs_spice
+import spiceypy as chilisnake
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -1607,6 +1609,9 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
     fit_params_dicts = []
     fit_unc_dicts = []
 
+    # Initial guesses for every integration. Shape: [n_ints, num_params]
+    initial_guesses = line_fit_initial_guess(light_fits, wavelengths, spectrum)
+
      # Loop over integrations to do the fits
     for i in range(0, ints_to_fit):
         if bad_frames:
@@ -1626,7 +1631,7 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
-        initial_guess = line_fit_initial_guess(wavelengths, spectrum[i, :])
+        initial_guess = initial_guesses[i, :]
 
         if BU_bg is not None:
             BU_bg_i = BU_bg[i, :]
@@ -2080,11 +2085,15 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                                        args=(wavelengths, edges, CLSF, spec, \
                                              unc, BU_bg), 
                                        method=solver,
-                                       bounds=[(None, None), (None, None), 
-                                               (0, None), 
-                                               (121.55, 121.58), IPH_bounds, 
-                                               (0.0001, 0.02), 
-                                               (None, None), (None, None)]
+                                       bounds=[(None, None), # DN_H
+                                               (None, None),  # DN_D
+                                               (0, None), # DN_IPH
+                                               (121.55, 121.58),  # λ H
+                                               (pig[4]-IPH_wv_spread/2, 
+                                                pig[4]+IPH_wv_spread/2), # IPH λ - found by solving doppler eq for 5 km/s.  
+                                               (0.0001, 0.02), # IPH width
+                                               (None, None), # bg slope
+                                               (None, None)] # bg intercept
                                       )
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, wavelengths, edges, CLSF, BU_bg)
         modeled_params = [*[bestfit.x[p] for p in range(0, len(pig))], bestfit.fun]
@@ -2159,7 +2168,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                       [-pig[1]/10, pig[1]*10],  # DN, D
                       [-pig[2]/2, pig[2]*2], # DN, IPH
                       [pig[3]-0.02, pig[3]+0.02], # H lyman alpha center in nm: 121.547 -- 121.587
-                      [pig[4]-0.03, pig[4]+0.03], # IPH ly a center in nm
+                      [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # IPH ly a center in nm
                       [pig[5]-0.003, pig[5]+0.003], # IPH width
                       [pig[6]-1e4, pig[6]+1e4], # background slope
                       [pig[7]-1e4, pig[7]+1e4] # Background offset
@@ -2617,7 +2626,7 @@ def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=None
     return total_uncert
 
 
-def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=100):
+def line_fit_initial_guess(light_fits, wavelengths, spectra, H_a=20, H_b=170, D_a=80, D_b=100):
     """
     Parameters
     ----------
@@ -2632,41 +2641,97 @@ def line_fit_initial_guess(wavelengths, spectrum, H_a=20, H_b=170, D_a=80, D_b=1
     """
     # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
+    guesses = np.zeros((get_n_int(light_fits), 8))
+    
+    # Line center of IPH is predicted based on the obs geometry; 
+    # length is number of integrations.
+    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
+    # print(f"IPH ly a guess: {lambda_IPH_lya_guess}")
 
     #Account for files where H may not be located at usual location
-    if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
-        H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
-        H_b = min(np.argmax(spectrum) + 50, len(spectrum))
-        D_a = max(0, np.argmax(spectrum) - 30)
-        D_b = min(np.argmax(spectrum) - 10, len(spectrum))
-        # Now control for either of these both somehow being accidentally set to 0
-        if D_a == D_b == 0:
-            D_b += 20
+    for i in range(get_n_int(light_fits)):
+        spectrum = spectra[i, :]
+        if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
+            H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
+            H_b = min(np.argmax(spectrum) + 50, len(spectrum))
+            D_a = max(0, np.argmax(spectrum) - 30)
+            D_b = min(np.argmax(spectrum) - 10, len(spectrum))
+            # Now control for either of these both somehow being accidentally set to 0
+            if D_a == D_b == 0:
+                D_b += 20
     
-    # Now integrate to get an initial area guess
-    DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
-    DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
+        # Now integrate to get an initial area guess
+        DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
+        DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
+        
+        # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
+        # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
+        lambda_H_lya_guess = 121.567
+        # Account for cases with huge wavelength shift
+        if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
+            lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
+
+        # Now do IPH.
+        DN_IPH_guess = DN_H_guess * 0.05 # wild guess
+        width_IPH_guess = 0.005 # Arbitrary. TODO: Can pass in after calculating based on sc ephemeris
+
+        # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
+        bg_m_guess = 0
+        bg_b_guess = np.median(spectrum)
+
+        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess, 
+                         lambda_H_lya_guess, lambda_IPH_lya_guess[i], 
+                         width_IPH_guess, 
+                         bg_m_guess, bg_b_guess]
+
+    return guesses
+
+
+def predict_IPH_linecenter(light_fits):
+    """
+    Exact location of upstream direction not completely certain. 
+    Not accounted for: decelreation of IPH across solar system, assumed to be the same.
+    """
+    load_iuvs_spice()
     
-    # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
-    # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
-    lambda_H_lya_guess = 121.567
-    # Account for cases with huge wavelength shift
-    if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
-        lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
+    # Set up the IPH parameters
+    iph_velocity = 23 # km/s (average)
+    iph_allowable_velocity_delta = 5  # km/s. this gets applied wherever the "ptfargs" # width: 12-20 km. per Mike's conversion of Quemerais plot.
+            # Should account for the uncertainties here. 
+    iph_upwind_ecliptic_lat = 8.7  # technically ± a couple degrees
+    iph_upwind_ecliptic_lon = 252.3  # technically ± a couple degrees 
+    v_iph_wrt_sun_eclipj2000 = chilisnake.latrec(-iph_velocity, # flow toward viewer = negative
+                                            np.deg2rad(iph_upwind_ecliptic_lon), 
+                                            np.deg2rad(iph_upwind_ecliptic_lat))
+    v_sun_wrt_iph_eclipj2000 = -v_iph_wrt_sun_eclipj2000
 
-    # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
-    bg_m_guess = 0
-    bg_b_guess = np.median(spectrum)
+    # Get mars velocity WRT IPH (because spacecraft doppler shift WRT Mars H line is already fit by allowing H Ly a line center to shift,
+    # thus remaining Doppler shift of IPH relative to fitted line center must be WRT Mars)
+    v_mars_wrt_sun_eclipj2000 = np.array(chilisnake.spkezr('Mars', 
+                                                    light_fits['Integration'].data['ET'],
+                                                    'ECLIPJ2000', 
+                                                    'NONE', 
+                                                    'Sun')[0])[:,-3:]
+    v_mars_wrt_iph_eclipj2000 = v_mars_wrt_sun_eclipj2000 + v_sun_wrt_iph_eclipj2000
 
-    # Now do IPH.
-    DN_IPH_guess = DN_H_guess * 0.05 # wild guess
-    lambda_IPH_lya_guess = 121.57 # Arbitary
-    width_IPH_guess = 0.005 # Arbitrary. TODO: Can pass in after calculating based on sc ephemeris
+    # Project the mars velocity WRT IPH along instrument line of sight
+    pixel_ra = np.nanmean(light_fits['PixelGeometry'].data['PIXEL_CORNER_RA'][:,:,4], axis=1)
+    pixel_dec = np.nanmean(light_fits['PixelGeometry'].data['PIXEL_CORNER_DEC'][:,:,4], axis=1)
 
-    return [DN_H_guess, DN_D_guess, DN_IPH_guess, 
-            lambda_H_lya_guess, lambda_IPH_lya_guess, 
-            width_IPH_guess, 
-            bg_m_guess, bg_b_guess]
+    pixel_vec_j2000 = np.array([chilisnake.latrec(1.0, # unit vector
+                                             np.deg2rad(r), 
+                                             np.deg2rad(d)) for r, d in zip(pixel_ra, pixel_dec)])
+    rmat_j2000_to_eclipj2000 = chilisnake.pxform('J2000', 'ECLIPJ2000', chilisnake.str2et('2000 Jan 01')) #epoch does not matter for J2000->eclipJ2000
+    pixel_vec_eclipj2000 = np.array([np.matmul(rmat_j2000_to_eclipj2000,
+                                               v)
+                                     for v in pixel_vec_j2000])
+    v_iph_wrt_mars_eclipj2000 = -v_mars_wrt_iph_eclipj2000
+    v_iph_along_los = np.array([np.dot(v_iph, los_vec) for v_iph, los_vec in zip(v_iph_wrt_mars_eclipj2000, pixel_vec_eclipj2000)])
+    
+    delta_lambda_iph = v_iph_along_los/3e5*121.567 # doppler shift in nm
+    
+    return delta_lambda_iph # Line shift per integration
+    
 
 # Cosmic ray and hot pixel removal -------------------------------------------
 
