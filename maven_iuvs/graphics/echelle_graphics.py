@@ -674,8 +674,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
 
 # LINE FITTING PLOTS ========================================================
-def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params, fit_unc, H_fit=None, D_fit=None,
-                   
+def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params, fit_unc, H_fit=None, D_fit=None, fit_IPH_component=None,
                    do_BU_background_comparison=False, print_fn_on_plot=True, plot_bg_separately=False, plot_subtract_bg=False, make_example_plot=False,
                    BU_stuff=None, fig_savepath=None):
     """
@@ -694,6 +693,12 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
                  Contains model fit parameters for each integration in light_fits, in kR per nm.
     fit_unc : list of dictionaries
               Contains model fit uncertainties for each integration in light_fits, in kR per nm.
+    H_fit :  array
+             Individual line fit for H; should be supplied if make_example_plot is true
+    D_fit : array
+            Individual line fit for D; should be supplied if make_example_plot is true
+    fit_IPH_component : array of bools with length = n_integrations
+            whether an IPH component was fit for this observation
     print_fn_on_plot : boolean
                        Whether to write the source filename as a subtitle on the plot
     make_example_plot : boolean
@@ -704,27 +709,23 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
                        Whether to make the fit plot by first subtracting the background from the data and model
     do_BU_background_comparison : boolean
                                   if True, will plot a two-panel figure showing the fit with a linear background and the background as per Mayyasi+2023
-    H_fit :  array
-             Individual line fit for H; should be supplied if make_example_plot is true
-    D_fit : array
-            Individual line fit for D; should be supplied if make_example_plot is true
     BU_stuff : list
                The same as arrays_for_plotting, plus fit_params and fit_unc for the fit done using the Mayyasi+2023 style background.
-    
+
     Returns
     ----------
     Cool plots
     """
     # Unpack
     spec, data_unc, I_fit, bg_fits = arrays_for_plotting
-    
+
     if do_BU_background_comparison:
         spec_BUbg, data_unc_BUbg, I_fit_BUbg, bg_array_BUbg, fit_params_BUbg, fit_unc_BUbg = BU_stuff
 
     for (i, fp) in enumerate(fit_params):
         fit_params_for_printing = fp | fit_unc[i]
         fit_params_for_printing["lambdac_D"] = fp["lambdac_H"]-D_offset
-            
+
         # Plot fit
         # ============================================================================================
         titletext = f"Orbit {re.search(orbno_RE, light_l1a_path).group(0)} - Integration {i} - v15"
@@ -733,17 +734,19 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
             thefnonly =  re.search(fn_RE, light_l1a_path).group(0)
         else:
             thefnonly = ""
-            
-        plot_line_fit(wavelengths, spec[i, :], I_fit[i, :], fit_params_for_printing, data_unc=data_unc[i, :], 
-                            t=titletext, fn_for_subtitle=thefnonly, plot_bg=bg_fits[i, :], plot_subtract_bg=plot_subtract_bg, 
-                            plot_bg_separately=plot_bg_separately, fig_savepath=fig_savepath + f"frame{i}")
+
+        plot_line_fit(wavelengths, spec[i, :], I_fit[i, :], fit_params_for_printing, data_unc=data_unc[i, :],
+                      t=titletext, fn_for_subtitle=thefnonly, plot_bg=bg_fits[i, :], plot_subtract_bg=plot_subtract_bg,
+                      plot_bg_separately=plot_bg_separately, fig_savepath=(fig_savepath + f"frame{i}" if fig_savepath is not None else None),
+                      fit_IPH_component=(True if len(fit_IPH_component)==1 else fit_IPH_component[i]))
 
         if do_BU_background_comparison:
             fit_params_for_printing_BUbg = fit_params_BUbg[i] | fit_unc_BUbg[i]
             fit_params_for_printing_BUbg["lambdac_D"] = fit_params_for_printing_BUbg["lambdac_H"]-D_offset
 
-            plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :], fit_params_for_printing, fit_params_for_printing_BUbg, 
-                                     bg_array_BUbg[i, :], bg_fits[i, :], data_unc_new=data_unc[i, :], data_unc_BU=data_unc_BUbg[i, :], 
+            plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :],
+                                     fit_params_for_printing, fit_params_for_printing_BUbg,
+                                     bg_array_BUbg[i, :], bg_fits[i, :], data_unc_new=data_unc[i, :], data_unc_BU=data_unc_BUbg[i, :],
                                      titles=["Linear background", "Mayyasi+2023 background"])
 
         if make_example_plot:
@@ -797,7 +800,7 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
                   t="Fit", fittext_x=[0.6, 0.6, 0.6], fittext_y=[0.5, 0.4, 0.3], fn_for_subtitle="", 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False, fig_savepath=None,
-                  img_dpi=92, extra_print_on_plot=None, restrict_x=True):
+                  img_dpi=92, extra_print_on_plot=None, restrict_x=True, fit_IPH_component=True):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -833,7 +836,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                           if provided, this extra text will be printed on the plot to the left of the fit lines.
     unit : string
            description of the unit to write on the y-axis label. Typically "DN" or "kR" with a /s/nm possibly appended.
-         
+    fit_IPH_component : bool
+            whether an IPH component was fit for this observation
     """
 
     mpl.rcParams["font.sans-serif"] = "Louis George Cafe"
@@ -877,7 +881,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
             mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=4, color=bg_color)
         med_bg = np.median(plot_bg)
         mainax.text(0, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes)
-        
+
     # Plot the data and fit and a guideline for the central wavelength
     mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0, elinewidth=1, zorder=3)
     mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=4, alpha=0.7)
@@ -885,7 +889,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     # VERTICAL LINES......................
     guideline_color = "xkcd:cool gray"
-    
+
     # Optional plot bin edges, can be helpful
     if wavelength_bin_edges:
         for e in wavelength_bin_edges:
@@ -912,34 +916,37 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                    f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['unc_H'], 1)})")
     printme.append(f"D: {round(fit_params_for_printing['area_D'], 2)} ± {round(fit_params_for_printing['unc_D'], 2)} "+
                    f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['unc_D'], 1)})")
-    printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} kR"
-                    + f" (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
-    printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['lambdac_IPH'], 4)}, ")
-    printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
+    if fit_IPH_component:
+        printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} kR"
+                       + f" (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
+        printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['lambdac_IPH'], 4)}, ")
+        printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
+    else:
+        printme.append(f"IPH component not fit")
+        printme.append(f"   (MRH alt < 100 km)")
 
-                       
     talign = ["left"] * len(printme)
     fittext_x=[0.6] * len(printme)
     fittext_y=[0.8-0.1*i for i in range(len(printme))]
 
     for (i, p) in enumerate(printme):
         mainax.text(fittext_x[i], fittext_y[i], p, transform=mainax.transAxes, ha=talign[i])
-    
+
     mainax.set_ylabel("Brightness (kR/nm)")
     if logview:
         mainax.set_yscale("log")
     mainax.legend(bbox_to_anchor=(1,1))
-    
+
     if not restrict_x:
         x0 = min(data_wavelengths)-0.02
         x1 = max(data_wavelengths)+0.02
     else:
         x0 = 121.5
         x1 = 121.65
-    
+
     mainax.set_xlim(x0, x1)
     residax.set_xlim(x0, x1)
-    
+
     # Print some extra messages
     if extra_print_on_plot:
         for m in range(len(extra_print_on_plot)):
@@ -955,7 +962,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
     bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
     residax.set_ylim(-bound, bound)
-    
+
     if plot_bg_separately:
         fig2, ax2 = plt.subplots()
         ax2.plot(data_wavelengths, plot_bg)
