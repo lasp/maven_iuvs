@@ -2149,7 +2149,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                 # non-IPH parameters only
                 hessian = np.delete(np.delete(hessian, _fit_parameter_IPH_idxs, axis=0), _fit_parameter_IPH_idxs, axis=1)
                 fit_uncert = np.full_like(bestfit.x, np.nan)
-                print(f"{np.diag(inv(hessian)) = }")
+                # print(f"{np.diag(inv(hessian)) = }")
                 fit_uncert[_fit_parameter_non_IPH_idxs] = np.sqrt(np.diag(inv(hessian)))
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
