@@ -2214,9 +2214,6 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                      ] 
                    ]
 
-        print(f"Initial guess for the IPH will be: area {ptf_args[0][2]}, " 
-                + f"center {ptf_args[0][4]}, width {ptf_args[0][5]}")
-
         if approach=="dynamic":
             dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, len(ptf_args[0]),
                                               logl_args=objfn_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
@@ -2238,8 +2235,8 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
 
         if not fit_IPH_component:
             # replace IPH fit values with nans
-            modeled_params[_fit_parameter_IPH_idxs] = np.nan
-            fit_uncert[_fit_parameter_IPH_idxs] = np.nan
+            modeled_params = [p if i not in _fit_parameter_IPH_idxs else np.nan for i,p in enumerate(modeled_params)]
+            fit_uncert = [p if i not in _fit_parameter_IPH_idxs else np.nan for i,p in enumerate(fit_uncert)]
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
 
