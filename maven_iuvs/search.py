@@ -1,7 +1,6 @@
 import os
 import warnings
 import glob
-
 import fnmatch
 import itertools
 
@@ -321,6 +320,9 @@ def get_file_version(orbit_number, data_directory,
                            segment=segment,
                            channel=channel,
                            data_directory=data_directory)
+        # TODO: The above call returns a list of strings, but the 
+        # following line assumes the list items are of class IUVSFITS
+        # as defined in file_classes.py. Needs to be updated.
         version_str = files[0].basename.split('_')[-2:]
         data_version = '%s_%s' % (version_str[0], version_str[1][0:3])
     except IndexError:
@@ -336,6 +338,8 @@ def get_latest_files(files):
 
     Prefers highest version number, then production files to stage files,
     and finally highest revision number.
+
+    NOTE: This only works if multiple versions of the files are in the list.
 
     Preserves order of initial list.
 

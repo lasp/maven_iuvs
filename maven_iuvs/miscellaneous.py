@@ -240,12 +240,10 @@ def relative_path_from_fname(l1a_fname, v="v13"):
 
     # Get orbit folder
     orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
-    if v=="v13":
-        return l1a_dir + orbfold + "/"
-    elif v=="v14":
+    if v=="v14":
         return l1a_full_mission_reprocess_dir + orbfold + "/"
-    else:
-        raise Exception("Invalid version number for data products! Please choose 'v13' or 'v14'")
+    
+    return l1a_dir + orbfold + "/"
 
 
 def findDiff(d1, d2, path=""):

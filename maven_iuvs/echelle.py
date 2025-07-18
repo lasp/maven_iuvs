@@ -545,13 +545,15 @@ def coadd_lights(data, n_good):
            detector image data, size (frames, spatial, wavelength)
     n_good : int
              number of valid frames of data used, calculated by subtract_darks.
-
+    exclude_frames : list
+                     list of page indices to ignore in the data cube because 
+                     they are saturated or broken in some way
     Returns
     ----------
     coadded_lights : array
                      Essentially the mean-frame of the detector
     """
-
+    
     # Do the co-adding
     coadded_lights = np.nansum(data, axis=0)
 
@@ -676,6 +678,7 @@ def subtract_darks(light_fits, dark_fits):
     else:
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
 
+    # Set any light frames with problems to entirely nan. TODO: This may not be the best thing to do
     dark_subtracted[i_bad, :, :] = np.nan
 
     # Throw an error if there are no acceptable light frames
@@ -2028,9 +2031,10 @@ def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
     Identify and return the appropriate conversion factors for the data.
     """
-    Aeff =  32.327455  # Acquired by testing on one file in the IDL pipeline, 16910 outdisk. 
-                       # DOES change with different files but is small.
-                       # TODO: account for this changing
+    Aeff =  32.327455  # Median and mode value of effective area of the 
+                       # instrument. In reality the value shouldn't change, 
+                       # but does somewhat probably due to other variations in
+                       # the IDL pipeline process.
 
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
@@ -3006,7 +3010,8 @@ def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"):
     medhighval = np.min(np.ma.masked_array(data, mask=(data<medval)), axis=0).data
 
     if std_or_mad=="std":
-        sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1
+        sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. 
+                                             # This sets the normalization constant of the variance to 1/(N-1)
     else:
         sigma = sp.stats.median_abs_deviation(data, axis=0)
     

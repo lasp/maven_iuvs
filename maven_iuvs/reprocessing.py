@@ -8,10 +8,10 @@ from maven_iuvs.miscellaneous import orbit_folder, fn_RE, orbno_RE, gen_error_RE
 def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True, verbose=False):
     """
     Compare the common HDUs between two fits files to find differences. 
-    Typical use case is to compare the same file in two versions; in that scenario,
-    there should be no or minimal differences because you are trying to preserve information. 
-    (Differences may exist for things like the filename and such).
-
+    The fits files should be for the same observation, differing only in 
+    version, so there should be no or minimal differences, other than fields
+    like filename, etc. 
+    
     Parameters
     ----------
     fits1 : astropy fits instance 
@@ -42,7 +42,6 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
             print(f"{hduname} HDU")
             print("============================================")
             for n in fits1[hduname].data.names:
-                # print(f"Now checking {n}:")
                 if (n=="KERNELS") & (skip_kernels):
                     print("Skipping kernels because they're definitely different due to pipeline changes upstream")
                     continue
@@ -83,7 +82,7 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
     print("Finished")
 
 
-# Function to compare full results of the reprocess wit PDS files ---------------------
+# Function to compare full results of the reprocess with PDS-archived files ---
 def compare_PDS_with_reprocess(l1c_root, pds_filelist, maxorbit=50000):
     """
     Parameters
@@ -227,7 +226,7 @@ def determine_if_l1a_is_missing(missed_files, l1a_folder):
     return no_l1a, l1a_found
 
 
-def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data", with_this="FMR_l1av13_to_l1cv14"):
+def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data", with_this="l1c_ech_data/FMR_l1av13_to_l1cv14"):
     """
     Generates l1c folder paths from l1a folder paths by casting replace over the whole list.
 
