@@ -679,8 +679,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 # LINE FITTING PLOTS ========================================================
 def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params, fit_unc, H_fit=None, D_fit=None, fit_IPH_component=None,
                    do_BU_background_comparison=False, print_fn_on_plot=True, plot_bg_separately=False, plot_subtract_bg=False, make_example_plot=False,
-                   BU_stuff=None, fig_savepath=None, restrict_x=True,
-                   IPH_bounds=(None, None)):
+                   BU_stuff=None, fig_savepath=None, restrict_x=True):
     """
     Given data and model information in physical units this makes some nice plots.
     Everything should be in physical units or you'll be sad.
@@ -804,7 +803,7 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
                   mainax=None, residax=None, t="Fit", fn_for_subtitle="", 
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False, fig_savepath=None,
-                  img_dpi=92, extra_print_on_plot=None, restrict_x=True, residax_ylim=None, IPH_bounds=(None, None), fit_IPH_component=True):
+                  img_dpi=92, extra_print_on_plot=None, restrict_x=True, residax_ylim=None, fit_IPH_component=True):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -902,35 +901,60 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     # PLOT GUIDELINES
     # =========================================================================
     guideline_color = "xkcd:cool gray"
-
+    hshift = 0.0005
+    
     # Plot the fit line centers on both residual and main axes
-    mainax.axvline(fit_params_for_printing['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    residax.axvline(fit_params_for_printing['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    trans = transforms.blended_transform_factory(mainax.transData, mainax.transAxes)
-    mainax.text(fit_params_for_printing['lambdac_H'], 0, "H", color=guideline_color, transform=mainax.transData, va="top", ha="right")
-
+    mainax.axvline(fit_params_for_printing['lambdac_H'], 
+                   color=guideline_color, zorder=2, lw=1)
+    residax.axvline(fit_params_for_printing['lambdac_H'], 
+                    color=guideline_color, zorder=2, lw=1)
+    
     # get index of lambda for D so we can find the value there
     if fit_params_for_printing["lambdac_D"] is not np.nan:
-        mainax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['lambdac_D'], color=guideline_color, zorder=2, lw=1)
-        mainax.text(fit_params_for_printing['lambdac_D'], 0, "D", color=guideline_color, transform=mainax.transData, va="top", ha="right")
+        mainax.axvline(fit_params_for_printing['lambdac_D'], 
+                       color=guideline_color, zorder=2, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_D'], 
+                        color=guideline_color, zorder=2, lw=1)
+        mainax.text(fit_params_for_printing['lambdac_D']-hshift, 0, "D", 
+                    color=guideline_color, transform=mainax.transData, 
+                    va="top", ha="right")
 
-    if "lambdac_IPH" in fit_params_for_printing.keys():
-        mainax.axvline(fit_params_for_printing['lambdac_IPH'], color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['lambdac_IPH'], color=guideline_color, zorder=2, lw=1)
-        mainax.text(fit_params_for_printing['lambdac_IPH'], 0, "IPH", color=guideline_color, transform=mainax.transData, va="top", ha="right")
+    # Handle the labels, which may overlap
+    H_dx = -hshift
+    H_ha = "right"
+
+    if "lambdac_IPH" in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing["lambdac_IPH"]):
+        mainax.axvline(fit_params_for_printing['lambdac_IPH'], 
+                       color=guideline_color, zorder=2, lw=1)
+        residax.axvline(fit_params_for_printing['lambdac_IPH'], 
+                        color=guideline_color, zorder=2, lw=1)
+
+        # Handle the labels, which may overlap
+        IPH_dx = -hshift
+        IPH_ha = "right"
+        if abs(fit_params_for_printing['lambdac_IPH'] - fit_params_for_printing['lambdac_H']) <= 0.01:
+            # Redshifted: IPH on right
+            if fit_params_for_printing['lambdac_IPH'] >= fit_params_for_printing['lambdac_H']:
+                IPH_dx *= -1
+                IPH_ha = "left"
+            else:  # Blueshifted
+                H_dx *= -1
+                H_ha = "left"
+
+        mainax.text(fit_params_for_printing['lambdac_IPH']+IPH_dx, 0, "IPH",
+                    color=guideline_color, transform=mainax.transData,
+                    va="top", ha=IPH_ha)
+    
+    # Finally set the H label, which needs to adjust based oN IPH
+    mainax.text(fit_params_for_printing['lambdac_H']+H_dx, 0, "H",
+                color=guideline_color, transform=mainax.transData,
+                va="top", ha=H_ha)
     
     # Residual axis 0-line
     residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
 
     # Optional plot accoutrements 
     # =========================================================================
-    # Make IPH shaded region if needed
-    mainax_ylim = mainax.get_ylim() # Here because we also use this later
-    if IPH_bounds != (None, None):
-        mainax.fill_betweenx([mainax_ylim[0]-100, mainax_ylim[1]+100], 
-                             IPH_bounds[0], x2=IPH_bounds[1], 
-                             color="gray", edgecolor=None, alpha=0.5, zorder=4)
 
     # plot the bin edges if you need to visualize, can be helpful
     if wavelength_bin_edges:
@@ -989,10 +1013,11 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     residax.set_ylabel(f"Residuals\n (data-model)")
     if logview:
         mainax.set_yscale("log")
-    mainax.set_ylim(*mainax_ylim)
 
     if residax_ylim == None:
         bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
+        if bound==0:
+            bound = 5 # Ensure we always have a ylim
     else:
         bound = residax_ylim
     residax.set_ylim(-bound, bound)
