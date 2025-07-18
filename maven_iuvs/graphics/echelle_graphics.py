@@ -420,14 +420,14 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         fit_params_dict = make_fit_param_dict(fit_params, "params")
         fit_unc_dict = make_fit_param_dict(fit_1sigma, "uncertainty")
 
-        bg_fit = background(wl, fit_params_dict["M"], fit_params_dict["lambdac_H"], fit_params_dict["B"])
+        bg_fit = background(wl, fit_params_dict['background_m'], fit_params_dict['central_wavelength_H'], fit_params_dict['background_b'])
          # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
         I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
         bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict["area_H"]) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict["area_D"]) * conv_to_kR 
-        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict["unc_H"]) * conv_to_kR
-        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict["unc_D"]) * conv_to_kR 
+        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict['total_brightness_H']) * conv_to_kR 
+        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict['total_brightness_D']) * conv_to_kR 
+        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict['total_brightness_H']) * conv_to_kR
+        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict['total_brightness_D']) * conv_to_kR 
     except Exception as e:
         print(f"Couldn't fit: {e}")
         fit_succeeded = False
@@ -727,7 +727,7 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
 
     for (i, fp) in enumerate(fit_params):
         fit_params_for_printing = fp | fit_unc[i] # Merge the parameter dictionaries
-        fit_params_for_printing["lambdac_D"] = fp["lambdac_H"]-D_offset
+        fit_params_for_printing["central_wavelength_D"] = fp['central_wavelength_H']-D_offset
 
         # Plot fit
         # ============================================================================================
@@ -745,7 +745,7 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
 
         if do_BU_background_comparison:
             fit_params_for_printing_BUbg = fit_params_BUbg[i] | fit_unc_BUbg[i]
-            fit_params_for_printing_BUbg["lambdac_D"] = fit_params_for_printing_BUbg["lambdac_H"]-D_offset
+            fit_params_for_printing_BUbg["central_wavelength_D"] = fit_params_for_printing_BUbg['central_wavelength_H']-D_offset
 
             plot_line_fit_comparison(wavelengths, spec[i, :], spec_BUbg[i, :], I_fit[i, :], I_fit_BUbg[i, :],
                                      fit_params_for_printing, fit_params_for_printing_BUbg,
@@ -816,8 +816,10 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     model_fit : array
                 Fit of the LSF to the H and D emissions
     fit_params_for_printing : dictionary
-                 A custom dictionary object for easily accessing the parameter fits by name.
-                 Keys: area_H, area_D, lambdac_H, lambdac_D, M, B.
+                 A dictionary of parameter fits by name.
+                 Keys: total_brightness_H, total_brightness_D, 
+                 central_wavelength_H, central_wavelength_D, 
+                 background_m, background_b.
     wavelength_bin_edges : array or None
                            If provided, this array of values will be plotted as vertical lines on the plot.
     data_unc : array
@@ -904,18 +906,18 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     hshift = 0.0005
     
     # Plot the fit line centers on both residual and main axes
-    mainax.axvline(fit_params_for_printing['lambdac_H'], 
+    mainax.axvline(fit_params_for_printing['central_wavelength_H'], 
                    color=guideline_color, zorder=2, lw=1)
-    residax.axvline(fit_params_for_printing['lambdac_H'], 
+    residax.axvline(fit_params_for_printing['central_wavelength_H'], 
                     color=guideline_color, zorder=2, lw=1)
     
     # get index of lambda for D so we can find the value there
-    if fit_params_for_printing["lambdac_D"] is not np.nan:
-        mainax.axvline(fit_params_for_printing['lambdac_D'], 
+    if fit_params_for_printing["central_wavelength_D"] is not np.nan:
+        mainax.axvline(fit_params_for_printing['central_wavelength_D'], 
                        color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['lambdac_D'], 
+        residax.axvline(fit_params_for_printing['central_wavelength_D'], 
                         color=guideline_color, zorder=2, lw=1)
-        mainax.text(fit_params_for_printing['lambdac_D']-hshift, 0, "D", 
+        mainax.text(fit_params_for_printing['central_wavelength_D']-hshift, 0, "D", 
                     color=guideline_color, transform=mainax.transData, 
                     va="top", ha="right")
 
@@ -923,30 +925,30 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     H_dx = -hshift
     H_ha = "right"
 
-    if "lambdac_IPH" in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing["lambdac_IPH"]):
-        mainax.axvline(fit_params_for_printing['lambdac_IPH'], 
+    if 'central_wavelength_IPH' in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing['central_wavelength_IPH']):
+        mainax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
                        color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['lambdac_IPH'], 
+        residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
                         color=guideline_color, zorder=2, lw=1)
 
         # Handle the labels, which may overlap
         IPH_dx = -hshift
         IPH_ha = "right"
-        if abs(fit_params_for_printing['lambdac_IPH'] - fit_params_for_printing['lambdac_H']) <= 0.01:
+        if abs(fit_params_for_printing['central_wavelength_IPH'] - fit_params_for_printing['central_wavelength_H']) <= 0.01:
             # Redshifted: IPH on right
-            if fit_params_for_printing['lambdac_IPH'] >= fit_params_for_printing['lambdac_H']:
+            if fit_params_for_printing['central_wavelength_IPH'] >= fit_params_for_printing['central_wavelength_H']:
                 IPH_dx *= -1
                 IPH_ha = "left"
             else:  # Blueshifted
                 H_dx *= -1
                 H_ha = "left"
 
-        mainax.text(fit_params_for_printing['lambdac_IPH']+IPH_dx, 0, "IPH",
+        mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, 0, "IPH",
                     color=guideline_color, transform=mainax.transData,
                     va="top", ha=IPH_ha)
     
     # Finally set the H label, which needs to adjust based oN IPH
-    mainax.text(fit_params_for_printing['lambdac_H']+H_dx, 0, "H",
+    mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, 0, "H",
                 color=guideline_color, transform=mainax.transData,
                 va="top", ha=H_ha)
     
@@ -972,14 +974,14 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         if "minchisq" in fit_params_for_printing: 
             printme.append(r"$\tilde{\chi}^2$: " + f"{round(fit_params_for_printing['minchisq'], 2)}")
 
-        printme.append(f"H: {round(fit_params_for_printing['area_H'], 2)} ± {round(fit_params_for_printing['unc_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['area_H'] / fit_params_for_printing['unc_H'], 1)})")
-        printme.append(f"D: {round(fit_params_for_printing['area_D'], 2)} ± {round(fit_params_for_printing['unc_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['area_D'] / fit_params_for_printing['unc_D'], 1)})")
+        printme.append(f"H: {round(fit_params_for_printing['total_brightness_H'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_for_printing['total_brightness_H'] / fit_params_for_printing['unc_total_brightness_H'], 1)})")
+        printme.append(f"D: {round(fit_params_for_printing['total_brightness_D'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_for_printing['total_brightness_D'] / fit_params_for_printing['unc_total_brightness_D'], 1)})")
         if fit_IPH_component:
-            printme.append(f"IPH: {round(fit_params_for_printing['area_IPH'], 2)} ± {round(fit_params_for_printing['unc_IPH'], 2)} kR"
-                           + f" (SNR: {round(fit_params_for_printing['area_IPH'] / fit_params_for_printing['unc_IPH'], 1)})")
-            printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['lambdac_IPH'], 4)}, ")
+            printme.append(f"IPH: {round(fit_params_for_printing['total_brightness_IPH'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_IPH'], 2)} kR"
+                           + f" (SNR: {round(fit_params_for_printing['total_brightness_IPH'] / fit_params_for_printing['unc_total_brightness_IPH'], 1)})")
+            printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['central_wavelength_IPH'], 4)}, ")
             printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
         else:
             printme.append(f"IPH component not fit")
@@ -1053,8 +1055,11 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
     model_fit : array
                 Fit of the LSF to the H and D emissions
     fit_params_for_printing : dictionary
-                 A custom dictionary object for easily accessing the parameter fits by name.
-                 Keys: area_H, area_D, lambdac_H, lambdac_D, M, B.
+                 A dictionary object accessing the parameter fits by name.
+                 Keys: total_brightness_H, total_brightness_D, 
+                 total_brightness_IPH, central_wavelength_H, 
+                 central_wavelength_D, central_wavelength_IPH, 
+                 background_m, background_b.
     H_a, H_b, D_a, D_b : ints
                          indices of data_wavelengths over which the line area was integrated.
                          Used here to call fill_betweenx in the event we want to show it on the plot.
@@ -1138,10 +1143,10 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
 
     #  Plot the fit line centers on both residual and main axes
     guideline_color = "xkcd:cool gray"
-    mainax.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    mainax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    residax.axvline(fit_params_new['lambdac_H'], color=guideline_color, zorder=2, lw=1)
-    residax_BU.axvline(fit_params_BU['lambdac_H'], color=guideline_color, zorder=2, lw=1)
+    mainax.axvline(fit_params_new['central_wavelength_H'], color=guideline_color, zorder=2, lw=1)
+    mainax_BU.axvline(fit_params_BU['central_wavelength_H'], color=guideline_color, zorder=2, lw=1)
+    residax.axvline(fit_params_new['central_wavelength_H'], color=guideline_color, zorder=2, lw=1)
+    residax_BU.axvline(fit_params_BU['central_wavelength_H'], color=guideline_color, zorder=2, lw=1)
     
     # Print text
     printme_new = []
@@ -1149,17 +1154,17 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
 
     if "maxLL" in fit_params_new:
         printme_new.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
-    printme_new.append(f"H: {round(fit_params_new['area_H'], 2)} ± {round(fit_params_new['unc_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_new['area_H'] / fit_params_new['unc_H'], 1)})")
-    printme_new.append(f"D: {round(fit_params_new['area_D'], 2)} ± {round(fit_params_new['unc_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_new['area_D'] / fit_params_new['unc_D'], 1)})")
+    printme_new.append(f"H: {round(fit_params_new['total_brightness_H'], 2)} ± {round(fit_params_new['unc_total_brightness_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['total_brightness_H'] / fit_params_new['unc_total_brightness_H'], 1)})")
+    printme_new.append(f"D: {round(fit_params_new['total_brightness_D'], 2)} ± {round(fit_params_new['unc_total_brightness_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_new['total_brightness_D'] / fit_params_new['unc_total_brightness_D'], 1)})")
 
     if "maxLL" in fit_params_BU:
         printme_BU.append(f"Max log likelihood: {round(fit_params_new['maxLL'])}")
-    printme_BU.append(f"H: {round(fit_params_BU['area_H'], 2)} ± {round(fit_params_BU['unc_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['area_H'] / fit_params_BU['unc_H'], 1)})")
-    printme_BU.append(f"D: {round(fit_params_BU['area_D'], 2)} ± {round(fit_params_BU['unc_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_BU['area_D'] / fit_params_BU['unc_D'], 1)})")
+    printme_BU.append(f"H: {round(fit_params_BU['total_brightness_H'], 2)} ± {round(fit_params_BU['unc_total_brightness_H'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['total_brightness_H'] / fit_params_BU['unc_total_brightness_H'], 1)})")
+    printme_BU.append(f"D: {round(fit_params_BU['total_brightness_D'], 2)} ± {round(fit_params_BU['unc_total_brightness_D'], 2)} "+
+                       f"kR (SNR: {round(fit_params_BU['total_brightness_D'] / fit_params_BU['unc_total_brightness_D'], 1)})")
 
     textx = [0.53, 0.53, 0.53]
     texty = [0.5, 0.4, 0.3]

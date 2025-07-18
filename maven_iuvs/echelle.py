@@ -1554,7 +1554,16 @@ _fit_parameter_names = ['total_brightness_H',  # DN
                         'width_IPH',  # nm
                         'background_m',
                         'background_b']
-_fit_parameter_IPH_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'IPH' in name]
+_unc_parameter_names = ['unc_total_brightness_H', 
+                        'unc_total_brightness_D', 
+                        'unc_total_brightness_IPH', 
+                        'unc_central_wavelength_H', 
+                        'unc_central_wavelength_IPH', 
+                        'unc_width_IPH', 
+                        'unc_background_m', 
+                        'unc_background_b', 
+                        ]
+_fit_parameter_IPH_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'IPH' in name] 
 _fit_parameter_non_IPH_idxs = np.setdiff1d(range(0, len(_fit_parameter_names)), _fit_parameter_IPH_idxs)
 _fit_parameter_background_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'background' in name]
 _fit_parameter_non_background_idxs = np.setdiff1d(range(0, len(_fit_parameter_names)), _fit_parameter_background_idxs)
@@ -1631,14 +1640,14 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         if bad_frames:
             if i in bad_frames:
                 fit_params_dicts.append({"failed_fit": True, 
-                                         "area_H": 0, "area_D": 0, 
-                                         "area_IPH": 0, "lambdac_H": 121.567, 
-                                         "lambdac_IPH": 121.55, "width_IPH": 0, 
-                                         "M": 0, "B": 0})
-                fit_unc_dicts.append({"unc_H": 0, "unc_D": 0, 
-                                      "unc_IPH": 0, "unc_lambdac_H": 0, 
-                                      "unc_lambdac_IPH": 0, "unc_width_IPH": 0, 
-                                      "unc_M": 0, "unc_B": 0})
+                                         'total_brightness_H': 0, 'total_brightness_D': 0, 
+                                         'total_brightness_IPH': 0, 'central_wavelength_H': 121.567, 
+                                         'central_wavelength_IPH': 121.55, "width_IPH": 0, 
+                                         "background_m": 0, "background_b": 0})
+                fit_unc_dicts.append({'unc_total_brightness_H': 0, 'unc_total_brightness_D': 0, 
+                                      'unc_total_brightness_IPH': 0, 'unc_central_wavelength_H': 0, 
+                                      'unc_central_wavelength_IPH': 0, "unc_width_IPH": 0, 
+                                      'unc_background_m': 0, 'unc_background_b': 0})
                 continue # we already filled the arrays with zeros so just skip the other tasks
 
         # PERFORM FIT
@@ -1671,8 +1680,9 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
             fit_params, I_fit, fit_1sigma, *_ = result_vec
 
         # Make a fit_params dictionary 
-        fit_params_dict = make_fit_param_dict(fit_params, "params", BU_bg=BU_bg)
-        fit_unc_dict = make_fit_param_dict(fit_1sigma, "uncertainty", BU_bg=BU_bg)
+        fit_params_dict = make_fit_param_dict(fit_params, BU_bg=BU_bg)
+        fit_params_dict['maxLL'] = fit_params[-1] # the max log likeilhood gets appended
+        fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False, BU_bg=BU_bg)
 
         # Append everything to lists, one entry for each integration
         I_fit_array[i, :] = I_fit
@@ -1697,62 +1707,44 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
     return I_fit_array, H_fit_array, D_fit_array, IPH_fit_array, fit_params_dicts, fit_unc_dicts
 
 
-def make_fit_param_dict(thelist, params_or_unc, BU_bg=None):
+def make_fit_param_dict(thelist, is_fitparams=True, BU_bg=None):
     """ 
-    Convert a list of the best-match fit parameters to a dictionary for ease of access.
+    Convert a list of either modeled parameters or uncertainties 
+    to a dictionary for ease of access.
 
     Parameters
     ----------
     thelist : list
                 List of either fit parameters or fit parameter uncertainties found by the 
-                optimizer. Assumes the following order (as in initial guess) for the
-                parameter list // uncertainty list:
-                0. total area of H line in DN // its uncertainty,
-                1. total area of D line in DN // its uncertainty,
-                2. central wavelength of H Ly alpha // its uncertainty,
-                3. background M // its uncertainty,
-                4. background B // its uncertainty,
-                5. total area of IPH line in DN (optional) // its uncertainty,
-                6. central wavelength of IPH line (optional) // its uncertainty,
-                7. width of the IPH line (σ assuming a Gaussian) (optional) // its uncertainty,
-                8. maximum log likelihood (i.e. minimized negative log likelihood) (optional)
-    params_or_unc : string; 
-                   "params" or "uncertainty" -- determines which keys to use. 
+                optimizer. Names are defined in the global scope variables:
+                _fit_parameter_names, _unc_parameter_names.
+    is_fitparams : bool 
+                   if True, _fit_parameter_names will be used. If False, 
+                   _unc_parameter_names.
+    BU_bg : None or array
+            if a prescribed background is provided, the list entries that relate
+            to a model-fitted background will be ignored.
     
     Returns
     ----------
-    d: dict
-       Dictionary with each of these parameters mapped to a useful keyword
+    param_dict: dict
+                Dictionary with parameters mapped to a useful keyword
 
     """
-    if params_or_unc == "params":
-        d = {"maxLL": thelist[-1],
-            "area_H": thelist[0], 
-            "area_D": thelist[1], 
-            "area_IPH": thelist[2],
-            "lambdac_H": thelist[3], 
-            "lambdac_D": thelist[3]-D_offset,
-            "lambdac_IPH": thelist[4],
-            "width_IPH": thelist[5]
-            }
-        if BU_bg is None:
-            d["M"] = thelist[6]
-            d["B"] = thelist[7]
-    elif params_or_unc=="uncertainty": 
-        d = {"unc_H": thelist[0], 
-            "unc_D": thelist[1], 
-            "unc_IPH": thelist[2],
-            "unc_lambdac_H": thelist[3], 
-            "unc_lambdac_IPH": thelist[4],
-            "unc_width_IPH": thelist[5]
-            }
-        if BU_bg is None: # TODO: If this is a possibility and IPH will alway s be fit, we need to make these the last entries.
-            d["unc_M"] = thelist[6]
-            d["unc_B"] = thelist[7]
-    else: 
-        raise ValueError("Error: please enter 'params' or 'uncert' when creating a dictionary of fit result values")
+    param_dict = dict()
+    name_list = None
 
-    return d
+    if is_fitparams:
+        inds = [i for i,p in enumerate(_fit_parameter_names)] if BU_bg is None else _parameter_non_background_idxs
+        for i in inds:
+            param_dict[_fit_parameter_names[i]] = thelist[i]
+        param_dict['central_wavelength_D'] = param_dict['central_wavelength_H'] - D_offset # nm
+    else:
+        inds = [i for i,p in enumerate(_unc_parameter_names)] if BU_bg is None else _parameter_non_background_idxs
+        for i in inds:
+            param_dict[_unc_parameter_names[i]] = thelist[i]
+
+    return param_dict
 
 
 def make_array_of_fitted_backgrounds(light_fits, fit_params):
@@ -1779,7 +1771,7 @@ def make_array_of_fitted_backgrounds(light_fits, fit_params):
     bg_fits = np.ndarray((n_integrations, len(wavelengths))) # check this
     
     for i in range(len(fit_params)):
-        bg_fits[i, :] = background(wavelengths, fit_params[i]['M'], fit_params[i]['lambdac_H'], fit_params[i]['B'])
+        bg_fits[i, :] = background(wavelengths, fit_params[i]['background_m'], fit_params[i]['central_wavelength_H'], fit_params[i]['background_b'])
 
     return bg_fits
 
@@ -1820,7 +1812,7 @@ def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
         # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
         popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s[i, :],
                                            p0=[-1, 121.567, 1], bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-        bg_ph_s = background(wavelengths, popt[0], fit_params[i]['lambdac_H'], popt[2])
+        bg_ph_s = background(wavelengths, popt[0], fit_params[i]['central_wavelength_H'], popt[2])
         bright_data_ph_per_s[i, :] = spec_ph_s[i, :] - bg_ph_s
         
     return bright_data_ph_per_s
@@ -1869,13 +1861,13 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
     fit_unc_converted = copy.deepcopy(fit_uncertainties)
     
     for i in range(len(fit_params)):  # Because it's now a list of dicts
-        fit_params_converted[i]["area_H"] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]["area_H"]) * conv_to_kR # H brightness
-        fit_params_converted[i]["area_D"] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]["area_D"]) * conv_to_kR # D brightness
-        fit_unc_converted[i]["unc_H"] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]["unc_H"]) * conv_to_kR
-        fit_unc_converted[i]["unc_D"] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]["unc_D"]) * conv_to_kR
+        fit_params_converted[i]['total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_H']) * conv_to_kR # H brightness
+        fit_params_converted[i]['total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_D']) * conv_to_kR # D brightness
+        fit_unc_converted[i]['unc_total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_H']) * conv_to_kR
+        fit_unc_converted[i]['unc_total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_D']) * conv_to_kR
         
-        fit_params_converted[i]["area_IPH"] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]["area_IPH"]) * conv_to_kR
-        fit_unc_converted[i]["unc_IPH"] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]["unc_IPH"]) * conv_to_kR
+        fit_params_converted[i]['total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_IPH']) * conv_to_kR
+        fit_unc_converted[i]['unc_total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_IPH']) * conv_to_kR
 
     return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
 
@@ -1918,10 +1910,10 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binnin
     yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
     yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value like IDL does.
 
-    H_brightnesses = [fit_params_list[i]["area_H"] for i in range(n_int)]
-    D_brightnesses = [fit_params_list[i]["area_D"] for i in range(n_int)]
-    H_1sig = [fit_unc_list[i]["unc_H"] for i in range(n_int)]
-    D_1sig = [fit_unc_list[i]["unc_D"] for i in range(n_int)]
+    H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
+    D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
+    H_1sig = [fit_unc_list[i]['unc_total_brightness_H'] for i in range(n_int)]
+    D_1sig = [fit_unc_list[i]['unc_total_brightness_D'] for i in range(n_int)]
     
     dict_for_writeout = {
         "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
@@ -2355,20 +2347,7 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     I_bin : array
             brightness per bin 
     """
-    param_dict = dict()
-    for i in _fit_parameter_non_background_idxs:
-        param_dict[_fit_parameter_names[i]] = params[i]
-    param_dict['central_wavelength_D'] = param_dict['central_wavelength_H'] - D_offset # nm
-    # total_brightness_H = params[0] # DN
-    # total_brightness_D = params[1] 
-    # total_brightness_IPH = params[2] 
-    # central_wavelength_H = params[3] # nm
-    # central_wavelength_D = params[3] - D_offset # nm
-    # central_wavelength_IPH = params[4]  # TODO: Can calculate based on 
-    #                                      # spacecraft ephemeris and pass in for 
-    #                                      # the starting guess/requirement.
-    # width_IPH = params[5]  # TODO: Should also be able to calculate this, 
-    #                         # which is the width of the Gaussian. 
+    param_dict = make_fit_param_dict(params, BU_bg=BU_bg)
 
     # For H and D, interpolate the CLSF for a given central wavelength 
     interpolated_CLSF_H = interpolate_CLSF(param_dict['central_wavelength_H'], binedges,
@@ -2402,10 +2381,6 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
                  BU_bg
                  )
     else:
-        for i in _fit_parameter_background_idxs:
-            param_dict[_fit_parameter_names[i]] = params[i]
-        # background_m = params[6]
-        # background_b = params[7]
         I_bin = (fitsum +
                  background(wavelength_data,
                             param_dict['background_m'],
