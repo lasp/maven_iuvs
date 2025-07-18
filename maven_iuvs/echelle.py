@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 from numpy.lib.stride_tricks import sliding_window_view
 import maven_iuvs as iuvs
 from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
-from maven_iuvs.constants import D_offset, IPH_wv_spread
+from maven_iuvs.constants import D_offset, IPH_wv_spread, IPH_minw, IPH_maxw
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
                                    get_wavelengths, \
@@ -2112,16 +2112,16 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         if BU_bg is not None:
             pig = pig[0:-2] # skip the modeled background.
 
-        bestfit = sp.optimize.minimize(negloglikelihood, pig, 
-                                       args=objfn_args, 
+        bestfit = sp.optimize.minimize(negloglikelihood, pig,
+                                       args=objfn_args,
                                        method=solver,
                                        bounds=[(None, None), # DN_H
                                                (None, None),  # DN_D
                                                (0, None), # DN_IPH
                                                (121.55, 121.58),  # λ H
                                                (pig[4]-IPH_wv_spread/2, 
-                                                pig[4]+IPH_wv_spread/2), # IPH λ - found by solving doppler eq for 5 km/s.  
-                                               (0.0001, 0.02), # IPH width
+                                                pig[4]+IPH_wv_spread/2), # IPH λ
+                                               (IPH_minw, IPH_maxw), # IPH width
                                                (None, None), # bg slope
                                                (None, None)] # bg intercept
                                       )
@@ -2129,7 +2129,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         modeled_params = np.array([*[bestfit.x[p] for p in range(0, len(pig))], bestfit.fun])
         if not fit_IPH_component:
             # replace IPH fit values with nans
-            modeled_params[_fit_parameter_IPH_idxs] = np.nan  # TODO: decide if a different value is appropriate
+            modeled_params[_fit_parameter_IPH_idxs] = np.nan
 
         # Get the uncertainties on the fit
         try:
@@ -2151,7 +2151,6 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                 # non-IPH parameters only
                 hessian = np.delete(np.delete(hessian, _fit_parameter_IPH_idxs, axis=0), _fit_parameter_IPH_idxs, axis=1)
                 fit_uncert = np.full_like(bestfit.x, np.nan)
-                # print(f"{np.diag(inv(hessian)) = }")
                 fit_uncert[_fit_parameter_non_IPH_idxs] = np.sqrt(np.diag(inv(hessian)))
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
@@ -2205,10 +2204,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         # List of arguments for prior_transform
         ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
                       [-pig[1]/10, pig[1]*10],  # DN, D
-                      [-pig[2]/2, pig[2]*2], # DN, IPH
-                      [pig[3]-0.02, pig[3]+0.02], # H lyman alpha center in nm: 121.547 -- 121.587
-                      [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # IPH ly a center in nm
-                      [pig[5]-0.003, pig[5]+0.003], # IPH width
+                      [0, pig[2]*2], # DN, IPH
+                      [pig[3]-0.02, pig[3]+0.02], # λ Ly a center, H
+                      [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # IPH λ
+                      [IPH_minw, IPH_maxw], # IPH width
                       [pig[6]-1e4, pig[6]+1e4], # background slope
                       [pig[7]-1e4, pig[7]+1e4] # Background offset
                      ] 
