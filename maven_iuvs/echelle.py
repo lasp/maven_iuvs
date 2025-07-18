@@ -2056,8 +2056,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
     Parameters
     ----------
     pig : list or array
-                          includes initial guess of values for each fit parameter: total integrated DN for the H and D lines,
-                          central wavelength of H in nm, background slope (DN), and background offset (DN).
+          includes initial guess of values for each fit parameter: 
+          total integrated DN for the H and D lines, central λ of H in nm,
+           IPH brightness, IPH  λ, IPH width, 
+          background slope (DN), and background offset (DN).
     wavelengths : array
             Array of wavelengths for fitting, in nm.
     spec : array
