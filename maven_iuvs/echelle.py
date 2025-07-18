@@ -2109,7 +2109,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                                        method=solver,
                                        bounds=[(None, None), # DN_H
                                                (None, None),  # DN_D
-                                               (0, None), # DN_IPH
+                                               (None, None), # DN_IPH
                                                (121.55, 121.58),  # λ H
                                                (pig[4]-IPH_wv_spread/2, 
                                                 pig[4]+IPH_wv_spread/2), # IPH λ
@@ -2196,7 +2196,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         # List of arguments for prior_transform
         ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
                       [-pig[1]/10, pig[1]*10],  # DN, D
-                      [0, pig[2]*2], # DN, IPH
+                      [-pig[2]/2, pig[2]*2], # DN, IPH
                       [pig[3]-0.02, pig[3]+0.02], # λ Ly a center, H
                       [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # IPH λ
                       [IPH_minw, IPH_maxw], # IPH width
