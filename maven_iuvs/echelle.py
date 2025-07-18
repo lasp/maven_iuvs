@@ -334,6 +334,55 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 
 # Relating to dark vs. light observations -----------------------------
 
+def update_filenames_in_light_dark_key():
+    # TODO: FINISH THIS
+    raise Exception("Code below not worked yet ")
+
+    # Now that everything is sorted, check to see if any filenames need updating.
+    lu = 0
+    du = 0
+    oldfns = []
+    newfns = []
+    replace_darks = {}
+
+    print("Checking if names need to be updated")
+    for i, row in tqdm(complete_df.iterrows()):
+        l_fn = re.search(fn_no_version_RE, row["Light"]).group(0)
+        l_fn_current = glob.glob(f"{l_fn}*", 
+                                root_dir=relative_path_from_fname(l_fn))[0]
+        if l_fn_current != row["Light"]:
+            lu += 1
+            oldfns.append(row["Light"])
+            newfns.append(l_fn_current)
+            row["Light"] = l_fn_current
+
+        d_fn = re.search(fn_no_version_RE, row["Dark"]).group(0)
+        try:
+            d_fn_current = glob.glob(f"{d_fn}*", 
+                                    root_dir=relative_path_from_fname(d_fn))[0]
+        except:
+            ndpath, ndf = get_dark_path(row["Light Folder"]+row["Light"], 
+                                    ech_l1a_idx, dark_index, return_sep=True)
+            d_fn_current = ndf
+            replace_darks[row["Light"]] = ndf
+        
+        # print(f"Current dark name {d_fn_current}")
+        if d_fn_current != row["Dark"]:
+            du += 1
+            oldfns.append(row["Dark"])
+            newfns.append(d_fn_current)
+            row["Dark"] = d_fn_current
+        # print()
+
+    if ((lu > 0) or (du > 0)) and (verbose==True):
+        print(f"Updated filenames for {lu} lights, {du} darks to current version:")
+        for o, n in zip(oldfns, newfns):
+            print(f"{o} ---> {n}")
+            print()
+
+    return 
+
+
 def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx, 
                                 ld_folder=f"{idl_pipeline_dir}light-dark-pair-lists/"):
     """
