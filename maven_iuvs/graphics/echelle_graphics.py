@@ -19,8 +19,10 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
     subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
     get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors, \
-    get_ech_slit_indices, make_fit_param_dict
-from maven_iuvs.graphics import color_dict, make_sza_plot, make_tangent_lat_lon_plot, make_alt_plot
+    get_ech_slit_indices, make_fit_param_dict, check_whether_IPH_fittable, \
+    convert_to_physical_units
+from maven_iuvs.graphics import color_dict, make_sza_plot, \
+     make_tangent_lat_lon_plot, make_alt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
 from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
     iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, orbno_RE, fn_noext_RE, fn_RE
@@ -32,6 +34,7 @@ from maven_iuvs.user_paths import l1a_dir
 model_color = "#1b9e77"
 data_color = "#d95f02"
 bg_color = "xkcd:cerulean"
+guideline_color = "xkcd:cool gray"
 
 # QUICKLOOK CODE =========================================================================================
 
@@ -403,9 +406,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     coadded_unc_spec = add_in_quadrature(coadded_unc, light_fits, coadded=True)  # added over spatial for a spectrum uncertainty
 
     # Do a fit to the coadded image -------------------------------------------------------------------
-    conv_to_kR_per_nm, _, conv_to_kR = get_conversion_factors(light_fits["Primary"].header["INT_TIME"], 
-                                                                                    np.diff(get_bin_edges(light_fits)), 
-                                                                                    calibration="new")
+
     wl = get_wavelengths(light_fits) 
     coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
 
@@ -421,31 +422,30 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     initial_guess = np.ndarray.flatten(initial_guess)
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
+    fit_IPH_component = check_whether_IPH_fittable(light_fits)
+    fit_IPH = True if any(fit_IPH_component) else False
 
     # This keeps track of whether fitting H and D succeeded - not whether the whole quicklook process succeeds
     fit_succeeded = True
     try:
-        fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl, coadded_spec, light_fits, theCLSF,
+        fit_params, I_fit, fit_1sigma, *_ = fit_H_and_D(initial_guess, wl,
+                                                        coadded_spec,
+                                                        light_fits, theCLSF,
+                                                        fit_IPH_component=fit_IPH,
                                                         unc=coadded_unc_spec, solver="Powell", fitter="scipy", hush_warning=True)
-        fit_params_dict = make_fit_param_dict(fit_params, "params")
-        fit_unc_dict = make_fit_param_dict(fit_1sigma, "uncertainty")
+        fit_params_dict = make_fit_param_dict(fit_params)
+        fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False)
 
         bg_fit = background(wl, fit_params_dict['background_m'], fit_params_dict['central_wavelength_H'], fit_params_dict['background_b'])
-         # You would think we need to adjust Aeff in the conversions below but we don't because we're basically using an average 
-        I_fit_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, I_fit) * conv_to_kR_per_nm 
-        bg_array_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, bg_fit) * conv_to_kR_per_nm
-        H_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict['total_brightness_H']) * conv_to_kR 
-        D_kR = convert_spectrum_DN_to_photoevents(light_fits, fit_params_dict['total_brightness_D']) * conv_to_kR 
-        H_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict['total_brightness_H']) * conv_to_kR
-        D_kR_1sig = convert_spectrum_DN_to_photoevents(light_fits, fit_unc_dict['total_brightness_D']) * conv_to_kR 
+         # You would think we need to adjust Aeff in the conversions but we don't because we're basically using an average
+
+        arrays_in_DN = [coadded_spec, coadded_unc_spec, I_fit, bg_fit]
+        arrays_in_kR_pernm, fit_params_kR, fit_unc_kR  = convert_to_physical_units(light_fits, arrays_in_DN, [fit_params_dict], [fit_unc_dict])
+        spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bg_array_kR_pernm = arrays_in_kR_pernm
     except Exception as e:
         print(f"Couldn't fit: {e}")
         fit_succeeded = False
-    finally:
-        spec_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_spec) * conv_to_kR_per_nm
-        data_unc_kR_pernm = convert_spectrum_DN_to_photoevents(light_fits, coadded_unc_spec) * conv_to_kR_per_nm
-        
-   
+
     # DARK PROCESSING ===================================================================================
     # Retrieve the dark frames here also for plotting purposes 
     darks = get_dark_frames(dark_fits)
@@ -522,27 +522,60 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     # Plot Lyman alpha spectrum --------------------------------------------------------------------------------------
     DetAxes[0].set_title("Spatially-added spectrum across slit", fontsize=14+fontsizes[fs])
-    DetAxes[0].errorbar(wl, spec_kR_pernm, yerr=data_unc_kR_pernm, color=data_color, linewidth=0,elinewidth=1, zorder=3)
-    DetAxes[0].step(wl, spec_kR_pernm, where="mid", color=data_color, label="data", zorder=3, alpha=0.7)
 
     textLA = 1.05
     if fit_succeeded:
-        DetAxes[0].step(wl, I_fit_kR_pernm, where="mid", color=model_color, label="model", linewidth=2, zorder=2)
-        DetAxes[0].step(wl, bg_array_kR_pernm, where="mid", color=bg_color, label="background", linewidth=2, zorder=2)
+        fit_params_collected = fit_params_kR[0] | fit_unc_kR[0]
+        plot_line_fit(wl, spec_kR_pernm, I_fit_kR_pernm, fit_params_collected, 
+                      data_unc=data_unc_kR_pernm, 
+                      mainax=DetAxes[0],make_residual_axis=False, t="", 
+                      fn_for_subtitle="", print_on_axes=False,
+                      plot_bg=bg_array_kR_pernm, guideline_lbl_y=1.1,
+                      restrict_x=False,fit_IPH_component=True)
+
+        # Report brightnesses at right of plot
         DetAxes[0].text(textLA, 1, r"Mean best fit Lyman $\alpha$ brightnesses:", transform=DetAxes[0].transAxes, fontsize=18+fontsizes[fs])
-        DetAxes[0].text(textLA, 0.8, f"H: {round(H_kR,2)} ± {round(H_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-        DetAxes[0].text(textLA, 0.6, f"D: {round(D_kR,2)} ± {round(D_kR_1sig,2)} kR", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-        DetAxes[0].text(textLA, 0.4, "NOTE: Coadded fit is a 'quick look' at D emission.\nBest practice is to fit each integration separately.", 
-                        color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+        DetAxes[0].text(textLA, 0.8, f"H: {round(fit_params_collected['total_brightness_H'],2)} ± {round(fit_params_collected['unc_total_brightness_H'],2)} kR", 
+                        transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+        DetAxes[0].text(textLA, 0.6, f"D: {round(fit_params_collected['total_brightness_D'],2)} ± {round(fit_params_collected['unc_total_brightness_D'],2)} kR", 
+                        transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
+
+        if ~np.isnan(fit_params_collected['total_brightness_IPH']):
+            # IPH text
+            lya_IPH = fit_params_collected['central_wavelength_IPH']
+
+            # Make the wavelength of IPH colored according to whether it's 
+            # blueshifted or redshifted, oooh!
+            IPH_msg_color = "#658EAF" if lya_IPH < fit_params_collected['central_wavelength_H'] else "#D55661"
+            text = DetAxes[0].text(1.05, 0.4, 
+                                   f"IPH: {round(fit_params_collected['total_brightness_IPH'],2)} ± " \
+                                    f" {round(fit_params_collected['unc_total_brightness_IPH'],2)} kR at ", 
+                                    color="black", transform=DetAxes[0].transAxes,
+                                    fontsize=16+fontsizes[fs])
+            text = DetAxes[0].annotate(r"$\lambda$" + f"={round(lya_IPH, 3)}", 
+                                        xycoords=text, 
+                                        xy=(1, 0), 
+                                        verticalalignment="bottom",
+                                        color=IPH_msg_color, transform=DetAxes[0].transAxes,
+                                        fontsize=16+fontsizes[fs])
+        else:
+            DetAxes[0].text(textLA, 0.4, "IPH not observable with this " \
+                            "viewing geometry", transform=DetAxes[0].transAxes, 
+                            fontsize=16+fontsizes[fs])
+            
+        DetAxes[0].text(textLA, 0.35, "WARNING: Coadded brightnesses should only be used to estimate an emission's presence.\nUncertainty may be unreliable or nan.",
+                        color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes['large'])
     else:
-        DetAxes[0].text(textLA, 0.4, "Model fit to data failed, no fit reported", 
+        DetAxes[0].text(textLA, 1, "Model fit to data failed, no fit reported", 
                         color="#777", va="top", transform=DetAxes[0].transAxes, fontsize=16+fontsizes[fs])
-    DetAxes[0].set_ylim(bottom=0)
+    
+    # Do other labels at the right size 
+    DetAxes[0].set_ylim(bottom=-5)
     DetAxes[0].axes.get_xaxis().set_visible(True)   
     DetAxes[0].tick_params(axis="both", labelsize=12+fontsizes[fs], bottom=True, labelbottom=True)
     DetAxes[0].set_xlabel("Wavelength (nm)", fontsize=14+fontsizes[fs])
     DetAxes[0].set_ylabel("kR/nm", fontsize=14+fontsizes[fs]) 
-    DetAxes[0].legend(fontsize=8+fontsizes[fs])  
+    DetAxes[0].legend(fontsize=6+fontsizes[fs])
     
     # Plot the main detector image -------------------------------------------------------------------------
     detector_image_echelle(light_fits, detector_image_to_plot, light_spapixrng, light_spepixrng,
@@ -737,7 +770,6 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
 
     for (i, fp) in enumerate(fit_params):
         fit_params_for_printing = fp | fit_unc[i] # Merge the parameter dictionaries
-        fit_params_for_printing["central_wavelength_D"] = fp['central_wavelength_H']-D_offset
 
         # Plot fit
         # ============================================================================================
@@ -751,7 +783,8 @@ def make_fit_plots(light_l1a_path, wavelengths, arrays_for_plotting, fit_params,
         plot_line_fit(wavelengths, spec[i, :], I_fit[i, :], fit_params_for_printing, data_unc=data_unc[i, :],
                       t=titletext, fn_for_subtitle=thefnonly, plot_bg=bg_fits[i, :], plot_subtract_bg=plot_subtract_bg,
                       plot_bg_separately=plot_bg_separately, fig_savepath=(fig_savepath + f"frame{i}" if fig_savepath is not None else None), restrict_x=restrict_x, 
-                      fit_IPH_component=(True if len(fit_IPH_component)==1 else fit_IPH_component[i]))
+                      fit_IPH_component=(True if len(fit_IPH_component)==1 else fit_IPH_component[i]), 
+                      guideline_lbl_y=0.05)
 
         if do_BU_background_comparison:
             fit_params_for_printing_BUbg = fit_params_BUbg[i] | fit_unc_BUbg[i]
@@ -811,9 +844,10 @@ def example_fit_plot(data_wavelengths, data_vals, data_unc, model_fit, bg=None, 
     
 
 def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printing, wavelength_bin_edges=None, data_unc=None, 
-                  mainax=None, residax=None, t="Fit", fn_for_subtitle="", 
+                  mainax=None, residax=None, t="Fit", fn_for_subtitle="", make_residual_axis=True, print_on_axes=True,
                   logview=False, plot_bg=None, plot_subtract_bg=True, plot_bg_separately=False, fig_savepath=None,
-                  img_dpi=92, extra_print_on_plot=None, restrict_x=True, residax_ylim=None, fit_IPH_component=True):
+                  img_dpi=92, extra_print_on_plot=None, restrict_x=True, residax_ylim=None, fit_IPH_component=True,
+                  guideline_lbl_y=0):
     """
     Plots the fit defined by data_vals to the data, data_wavelengths and data_vals.
 
@@ -871,14 +905,18 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     for side in ["left", "right", "top", "bottom"]:
         mainax.spines[side].set_visible(False)
-        residax.spines[side].set_visible(False)
+        if make_residual_axis:
+            residax.spines[side].set_visible(False)
+
     mainax.tick_params(labelbottom=False)
-    residax.tick_params(labelbottom=True)
     mainax.set_facecolor("gainsboro")
     mainax.grid(zorder=1, color="white", which="major")
-    residax.set_facecolor("gainsboro")
-    residax.grid(zorder=1, color="white", which="major")
-    residual_color = "xkcd:dark lilac"
+
+    if make_residual_axis:
+        residax.tick_params(labelbottom=True)
+        residax.set_facecolor("gainsboro")
+        residax.grid(zorder=1, color="white", which="major")
+        residual_color = "xkcd:dark lilac"
 
     if fn_for_subtitle=="":
         mainax.set_title(t)
@@ -897,7 +935,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
             plot_model = model_fit
             mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=4, color=bg_color)
         med_bg = np.median(plot_bg)
-        mainax.text(0.99, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes, ha="right")
+        if print_on_axes:
+            mainax.text(0.99, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes, ha="right")
         
     residual = (data_vals - model_fit) 
         
@@ -906,30 +945,32 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0, elinewidth=1, zorder=3)
     mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=4, alpha=0.7)
     mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=4)
-
-    residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color, zorder=3)
-    residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
+    if make_residual_axis:
+        residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color, zorder=3)
+        residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
 
     # PLOT GUIDELINES
     # =========================================================================
-    guideline_color = "xkcd:cool gray"
     hshift = 0.0005
-    
+    t = transforms.blended_transform_factory(mainax.transData, mainax.transAxes)
     # Plot the fit line centers on both residual and main axes
     mainax.axvline(fit_params_for_printing['central_wavelength_H'], 
                    color=guideline_color, zorder=2, lw=1)
-    residax.axvline(fit_params_for_printing['central_wavelength_H'], 
-                    color=guideline_color, zorder=2, lw=1)
+
+    if make_residual_axis:
+        residax.axvline(fit_params_for_printing['central_wavelength_H'], 
+                        color=guideline_color, zorder=2, lw=1)
     
     # get index of lambda for D so we can find the value there
     if fit_params_for_printing["central_wavelength_D"] is not np.nan:
         mainax.axvline(fit_params_for_printing['central_wavelength_D'], 
                        color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['central_wavelength_D'], 
-                        color=guideline_color, zorder=2, lw=1)
-        mainax.text(fit_params_for_printing['central_wavelength_D']-hshift, 0, "D", 
-                    color=guideline_color, transform=mainax.transData, 
+        mainax.text(fit_params_for_printing['central_wavelength_D']-hshift, guideline_lbl_y, "D", 
+                    color=guideline_color, transform=t, 
                     va="top", ha="right")
+        if make_residual_axis:
+            residax.axvline(fit_params_for_printing['central_wavelength_D'], 
+                            color=guideline_color, zorder=2, lw=1)
 
     # Handle the labels, which may overlap
     H_dx = -hshift
@@ -938,8 +979,9 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     if 'central_wavelength_IPH' in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing['central_wavelength_IPH']):
         mainax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
                        color=guideline_color, zorder=2, lw=1)
-        residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
-                        color=guideline_color, zorder=2, lw=1)
+        if make_residual_axis:
+            residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
+                            color=guideline_color, zorder=2, lw=1)
 
         # Handle the labels, which may overlap
         IPH_dx = -hshift
@@ -953,17 +995,18 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                 H_dx *= -1
                 H_ha = "left"
 
-        mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, 0, "IPH",
-                    color=guideline_color, transform=mainax.transData,
+        mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, guideline_lbl_y, "IPH",
+                    color=guideline_color, transform=t,
                     va="top", ha=IPH_ha)
     
     # Finally set the H label, which needs to adjust based oN IPH
-    mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, 0, "H",
-                color=guideline_color, transform=mainax.transData,
+    mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, guideline_lbl_y, "H",
+                color=guideline_color, transform=t,
                 va="top", ha=H_ha)
     
     # Residual axis 0-line
-    residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
+    if make_residual_axis:
+        residax.axhline(0, color="xkcd:charcoal gray", linewidth=1, zorder=2)
 
     # Optional plot accoutrements 
     # =========================================================================
@@ -976,33 +1019,34 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     # TEXT AND MARKUP
     # =========================================================================
     printme = []
-    if "failed_fit" in fit_params_for_printing:
-        printme.append("Bad frame - no fit.")
-    else:
-        if "maxLL" in fit_params_for_printing:
-            printme.append(f"Min chi sq.: {round(fit_params_for_printing['maxLL']) * 2}") # * 2 because we want to show chi squared
-        if "minchisq" in fit_params_for_printing: 
-            printme.append(r"$\tilde{\chi}^2$: " + f"{round(fit_params_for_printing['minchisq'], 2)}")
-
-        printme.append(f"H: {round(fit_params_for_printing['total_brightness_H'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_H'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['total_brightness_H'] / fit_params_for_printing['unc_total_brightness_H'], 1)})")
-        printme.append(f"D: {round(fit_params_for_printing['total_brightness_D'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_D'], 2)} "+
-                       f"kR (SNR: {round(fit_params_for_printing['total_brightness_D'] / fit_params_for_printing['unc_total_brightness_D'], 1)})")
-        if fit_IPH_component:
-            printme.append(f"IPH: {round(fit_params_for_printing['total_brightness_IPH'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_IPH'], 2)} kR"
-                           + f" (SNR: {round(fit_params_for_printing['total_brightness_IPH'] / fit_params_for_printing['unc_total_brightness_IPH'], 1)})")
-            printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['central_wavelength_IPH'], 4)}, ")
-            printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
+    if print_on_axes:
+        if "failed_fit" in fit_params_for_printing:
+            printme.append("Bad frame - no fit.")
         else:
-            printme.append(f"IPH component not fit")
-            printme.append(f"   (MRH alt < 100 km)")
+            if "maxLL" in fit_params_for_printing:
+                printme.append(f"Min chi sq.: {round(fit_params_for_printing['maxLL']) * 2}") # * 2 because we want to show chi squared
+            if "minchisq" in fit_params_for_printing: 
+                printme.append(r"$\tilde{\chi}^2$: " + f"{round(fit_params_for_printing['minchisq'], 2)}")
 
-    talign = ["left"] * len(printme)
-    fittext_x=[0.6] * len(printme)
-    fittext_y=[0.95-0.1*i for i in range(len(printme))]
+            printme.append(f"H: {round(fit_params_for_printing['total_brightness_H'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_H'], 2)} "+
+                        f"kR (SNR: {round(fit_params_for_printing['total_brightness_H'] / fit_params_for_printing['unc_total_brightness_H'], 1)})")
+            printme.append(f"D: {round(fit_params_for_printing['total_brightness_D'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_D'], 2)} "+
+                        f"kR (SNR: {round(fit_params_for_printing['total_brightness_D'] / fit_params_for_printing['unc_total_brightness_D'], 1)})")
+            if fit_IPH_component:
+                printme.append(f"IPH: {round(fit_params_for_printing['total_brightness_IPH'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_IPH'], 2)} kR"
+                            + f" (SNR: {round(fit_params_for_printing['total_brightness_IPH'] / fit_params_for_printing['unc_total_brightness_IPH'], 1)})")
+                printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['central_wavelength_IPH'], 4)}, ")
+                printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
+            else:
+                printme.append(f"IPH component not fit")
+                printme.append(f"   (MRH alt < 100 km)")
 
-    for (i, p) in enumerate(printme):
-        mainax.text(fittext_x[i], fittext_y[i], p, transform=mainax.transAxes, ha=talign[i], va="top")
+        talign = ["left"] * len(printme)
+        fittext_x=[0.6] * len(printme)
+        fittext_y=[0.95-0.1*i for i in range(len(printme))]
+
+        for (i, p) in enumerate(printme):
+            mainax.text(fittext_x[i], fittext_y[i], p, transform=mainax.transAxes, ha=talign[i], va="top")
     
     # FINAL ADJUSTMENTS TO AXES
     # =========================================================================
@@ -1017,22 +1061,23 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         x1 = 121.65
 
     mainax.set_xlim(x0, x1)
-    residax.set_xlim(x0, x1)
-    residax.set_xlabel("Wavelength (nm)")
+    if make_residual_axis:
+        residax.set_xlim(x0, x1)
+        residax.set_xlabel("Wavelength (nm)")
     
     # Y-AXIS
     mainax.set_ylabel("Brightness (kR/nm)")
-    residax.set_ylabel(f"Residuals\n (data-model)")
     if logview:
         mainax.set_yscale("log")
-
-    if residax_ylim == None:
-        bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
-        if bound==0:
-            bound = 5 # Ensure we always have a ylim
-    else:
-        bound = residax_ylim
-    residax.set_ylim(-bound, bound)
+    if make_residual_axis:
+        residax.set_ylabel(f"Residuals\n (data-model)")
+        if residax_ylim == None:
+            bound = np.ceil(np.max([abs(np.min(residual)), np.max(residual)])) * 1.5
+            if bound==0:
+                bound = 5 # Ensure we always have a ylim
+        else:
+            bound = residax_ylim
+        residax.set_ylim(-bound, bound)
 
     # Print some extra messages
     if extra_print_on_plot:
@@ -1046,7 +1091,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
 
     if fig_savepath is not None:
         plt.savefig(fig_savepath, dpi=img_dpi, bbox_inches="tight")
-    else:
+    if new_ax:
         return fig
 
 

@@ -1577,7 +1577,9 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
     light_fits : astropy.io.fits instance
                 File with light observation
     spectrum : array
-    data_unc : array
+               Data cube in DN. 
+    data_unc : array 
+               Data cube for the data uncertainties
     bad_frames : list or None
                  If provided contains indices of broken frames that can't 
                  be fit.
@@ -1662,14 +1664,10 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
             BU_bg_i = None
 
         # Determine whether line-of-sight minimum ray height is large enough to fit an IPH component
-        integration_mrh_alt = light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']
-        integration_mrh_alt = integration_mrh_alt[:, :, -1]  # select center of pixel
-        integration_mrh_alt = np.nanmean(integration_mrh_alt, axis=1)  # average along slit (could do better)
-        integration_mrh_alt = integration_mrh_alt[i]  # only this integration matters
-        fit_IPH_component = (integration_mrh_alt > 100) # km
+        fit_IPH_component = check_whether_IPH_fittable(light_fits)
 
         result_vec = fit_H_and_D(initial_guess, wavelengths, spectrum[i, :], light_fits, theCLSF, unc=data_unc[i, :], \
-                                 BU_bg=BU_bg_i, fit_IPH_component=fit_IPH_component, **kwargs)
+                                 BU_bg=BU_bg_i, fit_IPH_component=fit_IPH_component[i], **kwargs)
 
         if return_each_line_fit:
             fit_params, I_fit, fit_1sigma, H_fit, D_fit, IPH_fit = result_vec
@@ -2038,6 +2036,34 @@ def get_binning_df(calibration="new"):
 
 # Line fitting =============================================================
     
+def check_whether_IPH_fittable(light_fits, z_min=100):
+    """
+    Computes the mean minimum ray height altitude in an observation at the
+    center of the pixel, and uses this to determine if the IPH is likely to be 
+    contaminating the observation. 
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                File with light observation.
+
+    Returns
+    ----------
+    fit_IPH_component: array of bools
+                       Whether IPH can be expected to be present in the data.
+                       Shape is (n_int,) where n_int is number of integrations 
+                       in the observation.
+    z_min : int
+            Altitude in km above which IPH can be fit.
+    """
+    integration_mrh_alt = light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']
+    integration_mrh_alt = integration_mrh_alt[:, :, -1]  # select center of pixel
+    integration_mrh_alt = np.nanmean(integration_mrh_alt, axis=1)  # average along slit (could do better)
+    # integration_mrh_alt = integration_mrh_alt[i]  # only this integration matters
+    fit_IPH_component = (integration_mrh_alt > z_min)
+    return fit_IPH_component
+
+
 def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(None, None), fit_IPH_component=False,
                 solver="Powell", fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
                 hush_warning=True):
