@@ -2706,7 +2706,7 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, H_a=20, H_b=170, D_
 
         # Now do IPH.
         DN_IPH_guess = DN_H_guess * 0.05 # wild guess
-        width_IPH_guess = 0.005 # Arbitrary. TODO: Can pass in after calculating based on sc ephemeris
+        width_IPH_guess = (IPH_maxw + IPH_minw) / 2
 
         # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
         bg_m_guess = 0
