@@ -408,7 +408,17 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                                                                                     calibration="new")
     wl = get_wavelengths(light_fits) 
     coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
-    initial_guess = line_fit_initial_guess(light_fits, wl, coadded_spec)
+
+    initial_guess = line_fit_initial_guess(light_fits, wl, 
+                                           # Following line is necessary to 
+                                           # work correctly with new version of
+                                           # line_fit_initial_guess, which 
+                                           # typically makes initial guess for 
+                                           # whole obs file at once. 
+                                           np.atleast_2d(coadded_spec), 
+                                           coadded=True)
+    # Now must transform it back to a 1D vector rather than a 2D array.
+    initial_guess = np.ndarray.flatten(initial_guess)
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 

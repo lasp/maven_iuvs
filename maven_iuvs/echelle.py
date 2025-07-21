@@ -2657,7 +2657,8 @@ def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=None
     return total_uncert
 
 
-def line_fit_initial_guess(light_fits, wavelengths, spectra, H_a=20, H_b=170, D_a=80, D_b=100):
+def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
+                           H_a=20, H_b=170, D_a=80, D_b=100):
     """
     Parameters
     ----------
@@ -2674,15 +2675,16 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, H_a=20, H_b=170, D_
 
     # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
-    guesses = np.zeros((get_n_int(light_fits), num_params))
-    
-    # Line center of IPH is predicted based on the obs geometry; 
+    rows = get_n_int(light_fits) if coadded is False else 1
+    guesses = np.zeros((rows, num_params))
+    # Line center of IPH is predicted based on the obs geometry;
     # length is number of integrations.
     lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
-    # print(f"IPH ly a guess: {lambda_IPH_lya_guess}")
+    if coadded:
+        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
 
     #Account for files where H may not be located at usual location
-    for i in range(get_n_int(light_fits)):
+    for i in range(rows):
         spectrum = spectra[i, :]
         if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
             H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
