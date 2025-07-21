@@ -408,7 +408,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                                                                                     calibration="new")
     wl = get_wavelengths(light_fits) 
     coadded_spec = get_spectrum(coadded_lights, light_fits, coadded=True)
-    initial_guess = line_fit_initial_guess(wl, coadded_spec)
+    initial_guess = line_fit_initial_guess(light_fits, wl, coadded_spec)
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
 

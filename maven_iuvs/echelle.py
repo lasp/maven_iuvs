@@ -2670,9 +2670,11 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, H_a=20, H_b=170, D_
     ----------
     Vector of initial guess values
     """
+    num_params = 8
+
     # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
-    guesses = np.zeros((get_n_int(light_fits), 8))
+    guesses = np.zeros((get_n_int(light_fits), num_params))
     
     # Line center of IPH is predicted based on the obs geometry; 
     # length is number of integrations.
