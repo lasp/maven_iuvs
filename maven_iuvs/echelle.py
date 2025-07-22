@@ -1664,10 +1664,10 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
             BU_bg_i = None
 
         # Determine whether line-of-sight minimum ray height is large enough to fit an IPH component
-        fit_IPH_component = check_whether_IPH_fittable(light_fits)
+        fit_IPH_component = check_whether_IPH_fittable(light_fits, integration=i)
 
         result_vec = fit_H_and_D(initial_guess, wavelengths, spectrum[i, :], light_fits, theCLSF, unc=data_unc[i, :], \
-                                 BU_bg=BU_bg_i, fit_IPH_component=fit_IPH_component[i], **kwargs)
+                                 BU_bg=BU_bg_i, fit_IPH_component=fit_IPH_component, **kwargs)
 
         if return_each_line_fit:
             fit_params, I_fit, fit_1sigma, H_fit, D_fit, IPH_fit = result_vec
@@ -2036,7 +2036,7 @@ def get_binning_df(calibration="new"):
 
 # Line fitting =============================================================
     
-def check_whether_IPH_fittable(light_fits, z_min=100):
+def check_whether_IPH_fittable(light_fits, z_min=100, integration=None):
     """
     Computes the mean minimum ray height altitude in an observation at the
     center of the pixel, and uses this to determine if the IPH is likely to be 
@@ -2049,17 +2049,21 @@ def check_whether_IPH_fittable(light_fits, z_min=100):
 
     Returns
     ----------
-    fit_IPH_component: array of bools
+    fit_IPH_component: array of bools or bool
                        Whether IPH can be expected to be present in the data.
                        Shape is (n_int,) where n_int is number of integrations 
-                       in the observation.
+                       in the observation, unless integration is passed, in 
+                       which case it's just a single bool.
     z_min : int
             Altitude in km above which IPH can be fit.
+    integration : int
+                  integration/frame number
     """
     integration_mrh_alt = light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']
     integration_mrh_alt = integration_mrh_alt[:, :, -1]  # select center of pixel
     integration_mrh_alt = np.nanmean(integration_mrh_alt, axis=1)  # average along slit (could do better)
-    # integration_mrh_alt = integration_mrh_alt[i]  # only this integration matters
+    if integration is not None:
+        integration_mrh_alt = integration_mrh_alt[integration]
     fit_IPH_component = (integration_mrh_alt > z_min)
     return fit_IPH_component
 
