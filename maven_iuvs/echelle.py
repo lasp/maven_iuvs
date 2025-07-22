@@ -1554,15 +1554,8 @@ _fit_parameter_names = ['total_brightness_H',  # DN
                         'width_IPH',  # nm
                         'background_m',
                         'background_b']
-_unc_parameter_names = ['unc_total_brightness_H', 
-                        'unc_total_brightness_D', 
-                        'unc_total_brightness_IPH', 
-                        'unc_central_wavelength_H', 
-                        'unc_central_wavelength_IPH', 
-                        'unc_width_IPH', 
-                        'unc_background_m', 
-                        'unc_background_b', 
-                        ]
+_unc_parameter_names = ['unc_' + pname for pname in _fit_parameter_names]
+
 _fit_parameter_IPH_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'IPH' in name] 
 _fit_parameter_non_IPH_idxs = np.setdiff1d(range(0, len(_fit_parameter_names)), _fit_parameter_IPH_idxs)
 _fit_parameter_background_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'background' in name]
