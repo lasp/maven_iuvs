@@ -1903,14 +1903,18 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binnin
 
     H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
     D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
+    IPH_brightnesses = [fit_params_list[i]['total_brightness_IPH'] for i in range(n_int)]
     H_1sig = [fit_unc_list[i]['unc_total_brightness_H'] for i in range(n_int)]
     D_1sig = [fit_unc_list[i]['unc_total_brightness_D'] for i in range(n_int)]
+    IPH_1sig = [fit_unc_list[i]['unc_total_brightness_IPH'] for i in range(n_int)]
     
     dict_for_writeout = {
         "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
         "BRIGHT_D_kR": D_brightnesses, # D brightness (BkR_D) in kR
+        "BRIGHT_IPH_kR": IPH_brightnesses, # D brightness (BkR_D) in kR
         "BRIGHT_H_OneSIGMA_kR": H_1sig,  # 1 sigma uncertainty in H brightness (BkR_U) in kR
         "BRIGHT_D_OneSIGMA_kR": D_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
+        "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
         "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
         "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
         "ET": light_fits["Integration"].data["ET"], 
