@@ -2065,8 +2065,10 @@ def check_whether_IPH_fittable(light_fits, z_min=100, integration=None):
     return fit_IPH_component
 
 
-def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(None, None), fit_IPH_component=False,
-                solver="Powell", fitter="scipy", approach="dynamic", livepts=500, BU_bg=None,
+def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, 
+                IPH_bounds=(None, None), fit_IPH_component=False, BU_bg=None,
+                fitter="scipy", solver="Powell", 
+                approach="dynamic", livepts=500, bound="multi", bootstrap=0,
                 hush_warning=True):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
@@ -2101,6 +2103,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
                "static" or "dynamic" - version of NestedSampler from dynesty to use
     livepts : int
               Number of live points to use with dynesty.NestedSampler (static version)
+    bound : string
+            bound paramater passed to dynesty. sometimes 'single' speeds things up.
+    bootstrap : int
+                bootstrap parameter passed to dynesty. Typically 0 is fine.
     BU_bg : array
             An alternate background, constructed as described in Mayyasi+2023. 
     hush_warning : boolean
@@ -2134,6 +2140,8 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
         bestfit = sp.optimize.minimize(negloglikelihood, pig,
                                        args=objfn_args,
                                        method=solver,
+                                       options={"xtol":1e-5, # at least 1e-3 required. 1e-4 is default
+                                                "ftol":1e-5},
                                        bounds=[(None, None), # DN_H
                                                (None, None),  # DN_D
                                                (None, None), # DN_IPH
@@ -2160,11 +2168,19 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives. 
             # We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
-            hessian = approx_hess2(bestfit.x, negloglikelihood, args=objfn_args)
+            hessian = approx_hess2(bestfit.x, negloglikelihood, 
+                                   args=objfn_args)
 
             if fit_IPH_component:
                 fit_uncert = np.sqrt(np.diag(inv(hessian)))
-            else:
+                # Sometimes we get nans if the epsilon of approx_hess2 is chosen 
+                # automatically. Check and recalculate if need be.
+                if np.isnan(fit_uncert).any():
+                    new_hessian = approx_hess2(bestfit.x, negloglikelihood, 
+                                   epsilon=1e-2, # Seems to be the magic number...
+                                   args=objfn_args)
+                    fit_uncert = np.sqrt(np.diag(inv(new_hessian)))               
+            else: 
                 # the hessian including the IPH components is almost
                 # certain to be singular, invert the matrix for the
                 # non-IPH parameters only
@@ -2221,23 +2237,37 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1, IPH_bounds=(Non
             return x
 
         # List of arguments for prior_transform
-        ptf_args = [ [[pig[0]/10, pig[0]*10], # Total DN, H
-                      [-pig[1]/10, pig[1]*10],  # DN, D
+        a = 0.5
+        b = 1.5
+        ptf_args = [ [[pig[0]*a, pig[0]*b], # Total DN, H
+                      [-pig[1]*a, pig[1]*b],  # DN, D
                       [-pig[2]/2, pig[2]*2], # DN, IPH
                       [pig[3]-0.02, pig[3]+0.02], # λ Ly a center, H
                       [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # IPH λ
                       [IPH_minw, IPH_maxw], # IPH width
-                      [pig[6]-1e4, pig[6]+1e4], # background slope
-                      [pig[7]-1e4, pig[7]+1e4] # Background offset
+                      [pig[6]-5e3, pig[6]+5e3], # background slope
+                      [pig[7]-5e3, pig[7]+5e3] # Background offset
                      ] 
                    ]
 
         if approach=="dynamic":
-            dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, len(ptf_args[0]),
-                                              logl_args=objfn_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
+            dsampler = d.DynamicNestedSampler(loglikelihood, prior_transform, 
+                                              len(ptf_args[0]),
+                                              logl_args=objfn_args, 
+                                              ptform_args=ptf_args, 
+                                              bound=bound, 
+                                              nlive=livepts,
+                                              bootstrap=bootstrap
+                                              )
         elif approach=="static":
-            dsampler = d.NestedSampler(loglikelihood, prior_transform, len(ptf_args[0]), nlive=livepts,
-                                       logl_args=objfn_args, ptform_args=ptf_args, bound="multi", bootstrap=0)
+            dsampler = d.NestedSampler(loglikelihood, prior_transform, 
+                                       len(ptf_args[0]), 
+                                       logl_args=objfn_args, 
+                                       ptform_args=ptf_args,
+                                       nlive=livepts,
+                                       bound=bound, 
+                                       bootstrap=bootstrap
+                                       )
             
         dsampler.run_nested()
         dresults = dsampler.results
