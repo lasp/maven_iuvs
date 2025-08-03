@@ -1458,7 +1458,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # Write out the l1c file
     # ===============================================================================================
     if run_writeout:
-        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_kR, fit_unc_kR, bright_data_ph_per_s, **idl_process_kwargs)
+        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, 
+                        light_fits, fit_params_kR, fit_unc_kR, 
+                        bright_data_ph_per_s, **idl_process_kwargs)
 
     return
 
@@ -1863,17 +1865,21 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
     return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
 
 
-def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binning_df, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
+def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
                  idl_pipeline_folder=idl_pipeline_dir, open_idl=True, proc_passed_in=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
 
     Parameters
     ----------
+    light_l1a_path : string
+                     Location of the source l1a data product on the local computer
+    dark_l1a_path : string
+                    Location of the associated dark file on the local computer
+    l1c_savepath : string
+                   Path to which to save the l1c file
     light_fits : astropy.io.fits instance
                 File with light observation
-    binning_df : Pandas dataframe
-                 Output of get_binning_df().
     fit_params_list : list of dictionaries
                       Contains model fit parameters for each integration in light_fits, in kR per nm.
     fit_unc_list : list of dictionaries
@@ -1882,24 +1888,24 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, binnin
                            data values in photons/sec, needed to maintain continuity with earlier data products.
     idl_pipeline_folder : string
                           Location of the IDL pipeline code on the local computer 
-    light_l1a_path : string
-                     Location of the source l1a data product on the local computer
-    l1c_savepath : string
-                   Path to which to save the l1c file
+    open_idl : bool
+               if True, the IDL process will be started inside this function.
+    proc_passed_in : subprocess instance
+                     subprocess process instance, will be written to if open_idl 
+                     is False.
     
     Returns
     ----------
     an l1c .fits.gz file, written out from IDL.
     """
-    
+
     n_int = get_n_int(light_fits)
     # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
     center_idx = 4
-    spatial_match = (binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"])
-    spec_match = (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])
-    this_dict = binning_df.loc[spatial_match & spec_match]
-    yMRH = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
-    yMRH = math.floor((yMRH-this_dict['ycH'].values[0])/this_dict['NbinsY'].values[0]) #  to get an integer value like IDL does.
+    yMRH_row = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
+    spapix0 = iuvs.binning.get_binning_scheme(light_fits)['spapix0']
+    spabinw = iuvs.binning.get_binning_scheme(light_fits)['spabinwidth']
+    yMRH = math.floor((yMRH_row-spapix0)/spabinw) #  to get an integer value like IDL does.
 
     H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
     D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
