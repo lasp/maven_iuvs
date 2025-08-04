@@ -31,7 +31,7 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
     orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff, \
     relative_path_from_fname
-from maven_iuvs.geometry import has_geometry_pvec
+from maven_iuvs.geometry import has_geometry_pvec, get_mean_mrh
 from maven_iuvs.pds import get_pds_dates
 from maven_iuvs.search import get_latest_files, find_files
 from maven_iuvs.integration import get_avg_pixel_count_rate
@@ -2057,32 +2057,11 @@ def get_binning_df(calibration="new"):
                                             [0, 13, 34, 40], 
                                             [27, 346-11, 535+11, 535+43]] # 1024x1024 not defined in old calibration, this row won't be used
                         })
-    
+
 
 # Line fitting =============================================================
 
-def get_mean_mrh(light_fits):
-    """
-    Given some fits file, get the mean MRH (minimum ray height) in the spatial
-    direction of the slit at the center of the pixel, producing one mean MRH
-    per integration.
-
-    Parameters
-    ----------
-    light_fits : astropy.io.fits instance
-                File with light observation.
-
-    Returns
-    ----------
-    integration_mrh_alt : array
-                          shape (n,), where n = integrations in light_fits.
-
-    """
-    integration_mrh_alt = light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']
-    integration_mrh_alt = integration_mrh_alt[:, :, -1]  # select center of pixel
-    integration_mrh_alt = np.nanmean(integration_mrh_alt, axis=1)  # average along slit (could do better)
-    return integration_mrh_alt
-    
+   
 def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
     """
     Computes the mean minimum ray height altitude in an observation at the

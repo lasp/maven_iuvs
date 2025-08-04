@@ -19,8 +19,9 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
     subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
     get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors, \
-    get_ech_slit_indices, make_fit_param_dict, check_whether_IPH_fittable, get_mean_mrh, \
+    get_ech_slit_indices, make_fit_param_dict, check_whether_IPH_fittable, \
     convert_to_physical_units
+from maven_iuvs.geometry import get_mean_mrh
 from maven_iuvs.graphics import color_dict, make_sza_plot, \
      make_tangent_lat_lon_plot, make_alt_plot
 from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
