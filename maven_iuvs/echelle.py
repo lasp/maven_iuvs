@@ -2181,11 +2181,11 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                 fit_uncert = np.sqrt(np.diag(inv(hessian)))
                 # Sometimes we get nans if the epsilon of approx_hess2 is chosen 
                 # automatically. Check and recalculate if need be.
-                if np.isnan(fit_uncert).any():
+                if np.isnan(fit_uncert[:-2]).any():
                     new_hessian = approx_hess2(bestfit.x, negloglikelihood, 
                                    epsilon=1e-2, # Seems to be the magic number...
                                    args=objfn_args)
-                    fit_uncert = np.sqrt(np.diag(inv(new_hessian)))               
+                    fit_uncert = np.sqrt(np.diag(inv(new_hessian)))
             else: 
                 # the hessian including the IPH components is almost
                 # certain to be singular, invert the matrix for the
