@@ -19,7 +19,7 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
     pair_lights_and_darks, coadd_lights, find_files_missing_geometry, get_dark_frames, \
     subtract_darks, remove_cosmic_rays, remove_hot_pixels, fit_H_and_D, line_fit_initial_guess, \
     get_wavelengths, get_spectrum, load_lsf, CLSF_from_LSF, ran_DN_uncertainty, get_conversion_factors, \
-    get_ech_slit_indices, make_fit_param_dict, check_whether_IPH_fittable, \
+    get_ech_slit_indices, make_fit_param_dict, check_whether_IPH_fittable, get_mean_mrh, \
     convert_to_physical_units
 from maven_iuvs.graphics import color_dict, make_sza_plot, \
      make_tangent_lat_lon_plot, make_alt_plot
@@ -422,7 +422,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     initial_guess = np.ndarray.flatten(initial_guess)
     lsfx_nm, lsf_f = load_lsf(calibration="new")
     theCLSF = CLSF_from_LSF(lsfx_nm, lsf_f)
-    fit_IPH_component = check_whether_IPH_fittable(light_fits)
+    mean_mrh = get_mean_mrh(light_fits)
+    fit_IPH_component = [check_whether_IPH_fittable(mean_mrh, i) for i in range(n_ints)]
     fit_IPH = True if any(fit_IPH_component) else False
 
     # This keeps track of whether fitting H and D succeeded - not whether the whole quicklook process succeeds
