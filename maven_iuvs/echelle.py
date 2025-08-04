@@ -1636,15 +1636,16 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
     for i in range(0, ints_to_fit):
         if bad_frames:
             if i in bad_frames:
-                fit_params_dicts.append({"failed_fit": True, 
-                                         'total_brightness_H': 0, 'total_brightness_D': 0, 
-                                         'total_brightness_IPH': 0, 'central_wavelength_H': 121.567, 
-                                         'central_wavelength_IPH': 121.55, "width_IPH": 0, 
-                                         "background_m": 0, "background_b": 0})
-                fit_unc_dicts.append({'unc_total_brightness_H': 0, 'unc_total_brightness_D': 0, 
-                                      'unc_total_brightness_IPH': 0, 'unc_central_wavelength_H': 0, 
-                                      'unc_central_wavelength_IPH': 0, "unc_width_IPH": 0, 
-                                      'unc_background_m': 0, 'unc_background_b': 0})
+
+                # Even if the frame is bad, we need dictionaries for the fit 
+                # parameters. Some values must be filled by hand.
+                fpd = {n:0 for n in _fit_parameter_names}
+                fpd["failed_fit"] = True
+                fpd['central_wavelength_H'] = 121.567 # Filler
+                fpd['central_wavelength_D'] = 121.534 # Filler
+                fpd['central_wavelength_IPH'] = 121.55 # Filler
+                fit_params_dicts.append(fpd)
+                fit_unc_dicts.append({n:0 for n in _unc_parameter_names})
                 continue # we already filled the arrays with zeros so just skip the other tasks
 
         # PERFORM FIT
