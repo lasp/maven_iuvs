@@ -1960,7 +1960,7 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
     # Now call IDL
     if open_idl is True:
         print("Opening IDL")
-        os.chdir(iuvs.__path__[0]) # idl_pipeline_folder)
+        os.chdir(idl_pipeline_folder) # iuvs.__path__[0]
         outputfile = open(l1c_savepath + "IDLoutput.txt", "w")
         errorfile = open(l1c_savepath + "IDLerrors.txt", "w")
 
