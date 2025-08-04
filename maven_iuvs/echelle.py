@@ -1310,9 +1310,12 @@ def get_ech_slit_indices(light_fits):
 
 # L1c processing ===========================================================
 
-def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, calibration="new", ints_to_fit="all",
-                       save_arrays=False, place_for_arrays=None, remove_artifacts=True,
-                       return_each_line_fit=True, do_BU_background_comparison=False, run_writeout=True, make_plots=True, 
+def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, 
+                       calibration="new", ints_to_fit="all", remove_artifacts=True,
+                       save_arrays=False, place_for_arrays=None, 
+                       return_each_line_fit=True, do_BU_background_comparison=False, 
+                       run_writeout=True, overwrite=False, 
+                       make_plots=True, 
                        idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
                        clean_data_kwargs = {"clean_method": "new", "remove_rays": True, "remove_hotpix": True},
                        plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
@@ -1354,7 +1357,15 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     ----------
     Null - writes out an l1c file if the option is turned on.
     """
+    
+    # Check if file is previous done
+    new_filepath = l1c_savepath + (light_l1a_path.split('/')[-1]).replace('v14', 'v15').replace('l1a', 'l1c')
 
+    if os.path.isfile(new_filepath) and (overwrite==False):
+        print(f"Looking to see if {new_filepath} exists")
+        print("file already exists, skipping write out")
+        return 
+        
     # Set number of integration frames to fit 
     # ===============================================================================================
     ints_to_fit = {"first": 1}.get(ints_to_fit, get_n_int(light_fits))
