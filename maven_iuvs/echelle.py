@@ -2114,8 +2114,8 @@ def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
 
 def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                 IPH_bounds=(None, None), fit_IPH_component=False, BU_bg=np.nan,
-                fitter="scipy", solver="Powell",
-                approach="dynamic", livepts=500, bound="multi", bootstrap=0,
+                fitter="dynesty", solver="Powell",
+                approach="static", livepts=100, bound="single", bootstrap=0,
                 hush_warning=True):
     """
     Given an initial guess for fit parameters and observational data, this fits the model to the data 
@@ -2292,7 +2292,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
         ptf_args = [
             [[pig[0]*a, pig[0]*b],  # Total DN, H
              [pig[1]*a, pig[1]*b],  # DN, D
-             [-pig[2]/2, pig[2]*2],  # DN, IPH
+             [-pig[2]/5, pig[2]*5],  # DN, IPH
              [pig[3]-0.02, pig[3]+0.02],  # λ Ly a center, H
              [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2],  # IPH λ
              [IPH_minw, IPH_maxw],  # IPH width
