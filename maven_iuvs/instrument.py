@@ -312,8 +312,11 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     fit_function = 40 / (2**((700-volt)/50))
     
     # This is the correct shape, not sure if it's reasonable values though:
-    ran_DN = np.sqrt(dark_subtracted_and_cleaned_data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
-    ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
+    ran_DN_sq = dark_subtracted_and_cleaned_data * fit_function + sigma_background**2
+    # if np.any(ran_DN_sq < 0.):
+    #     raise ValueError("negative values in ran_DN_sq")
+    ran_DN = np.sqrt(ran_DN_sq)  # TODO: check if it's okay to do this on the cleaned data. Probably not
+    ran_DN[np.where(np.isnan(ran_DN))] = 0  # TODO: this is not acceptable lol
 
     return ran_DN
 
