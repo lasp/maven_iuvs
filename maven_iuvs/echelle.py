@@ -387,7 +387,9 @@ def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx,
                                 ld_folder=f"{idl_pipeline_dir}light-dark-pair-lists/"):
     """
     A wrapper for make_light_and_dark_pair_CSV() that, when called, adds new 
-    filest to the light/dark key. Does not update names. 
+    filest to the light/dark key. Does not update names. This function is 
+    intended to be run periodically as new data come down -- it only ensures 
+    the key is up to date. it does not update older files in any way.
 
     Parameters
     ----------
@@ -404,14 +406,14 @@ def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx,
     ----------
     null - updates and writes out a new CSV.
     """
-    MASTER_KEY =  ld_folder + key_filename # "ONE_KEY_TO_RULE_THEM_ALL_nodups_v13.csv"
+    MASTER_KEY =  ld_folder + key_filename 
     MASTER_KEY = pd.read_csv(MASTER_KEY)
     
     # Sort list by the datetime object column (should exist, but if not, it will be created)
     MASTER_KEY_TIMESORT = sort_ldkey_by_date(MASTER_KEY)
     
     # Figure out point at which it was last updated
-    last_time_str = MASTER_KEY_TIMESORT.iloc[-1]["DTobj"]
+    last_time_str = str(MASTER_KEY_TIMESORT.iloc[-1]["DTobj"])
     last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
 
     # Call the CSV maker which will update it (you can do it in place by giving 
@@ -426,7 +428,7 @@ def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx,
 
 
 def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
-                                 csv_path="lights_and_darks.csv",  
+                                 csv_name="lights_and_darks.csv", 
                                  make_csv_for="PDS", PDS=0, version="v13",
                                  starting_df=None, **kwargs):
     """
@@ -455,6 +457,9 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
     
     writes out a CSV file with lights and matching darks. 
     """
+    # csv path
+    csv_folder = idl_pipeline_dir + "light-dark-pair-lists/"
+    csv_path = csv_folder + csv_name
 
     # Enforce slash.
     if l1a_dir[-1] != "/":
@@ -498,12 +503,17 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
     # Add to existing frame (works even if starting_df = None)
     complete_df = pd.concat([starting_df, newfiles_df_sorted], axis=0)
 
+    # Sort it one last time just in case
+    complete_df_sorted = sort_ldkey_by_date(complete_df)
+
     print("Writing out light/dark pair file")
-    complete_df.to_csv(csv_path, index=False)
+    complete_df_sorted.to_csv(csv_path, index=False)
 
     if files_missing_dark:
-        print("Warning: Some files didn't have a valid dark. Here they are:")
-        print(files_missing_dark)
+        print(f"Warning: {len(files_missing_dark)} files did not have a matching dark.")
+        filenames_no_dark = [f['name'] for f in files_missing_dark]
+        no_dark_df = pd.DataFrame({"Filename": filenames_no_dark})
+        no_dark_df.to_csv(csv_folder + "missing_dark.csv", index=False)
 
     print("Done!")
     return
@@ -529,6 +539,9 @@ def sort_ldkey_by_date(pair_df):
         dt_objs = [iuvs_filename_to_datetime(f) for f in lights]
         pair_df["DTobj"] = dt_objs
 
+    # Ensure everything is a dtobj
+    dt_objs = [iuvs_filename_to_datetime(f) for f in pair_df["Light"]]
+    pair_df["DTobj"] = dt_objs
     pair_df_timesorted = pair_df.sort_values("DTobj", ignore_index=True)
 
     return pair_df_timesorted
