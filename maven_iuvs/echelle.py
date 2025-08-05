@@ -24,7 +24,6 @@ from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
 from maven_iuvs.constants import D_offset, IPH_wv_spread, IPH_minw, IPH_maxw
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
-                                   get_wavelengths, \
                                    ech_Lya_slit_start, ech_Lya_slit_end, \
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
@@ -2648,6 +2647,25 @@ def load_lsf(calibration="new"):
     lsf_f = lsf[sav_var_names[1]]
 
     return lsfx_nm, lsf_f
+
+
+def get_wavelengths(light_fits):
+    """
+    Retrieves wavelengths for use from a given light file. This is done in more than one place,
+    so it was useful to make a dedicated function.
+
+    Parameters:
+    -----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns:
+    -----------
+    wavelength array as defined in the light_fits file.
+    """
+
+    # TODO: build in code that will account for the possible case where wavelengths shift per integration
+    return light_fits["Observation"].data["Wavelength"][0, 1, :] # int, slit row, wavelengths
 
 
 def get_spectrum(data, light_fits, average=False, coadded=False, integration=None): 

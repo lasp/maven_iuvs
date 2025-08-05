@@ -1,5 +1,5 @@
 import numpy as np
-from maven_iuvs.instrument import get_wavelengths 
+from maven_iuvs.echelle import get_wavelengths 
 
 def get_bin_edges(light_fits):
     """
@@ -127,7 +127,8 @@ def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
 def get_pix_range(myfits, which="spatial"):
     """
     Given a fits observation, gets the range of pixels
-    for either the spatial or spectral dimension.
+    for either the spatial or spectral dimension. Should work for both
+    linear and nonlinear binning.
     
     Parameters
     ----------
@@ -143,9 +144,6 @@ def get_pix_range(myfits, which="spatial"):
     pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
     pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
 
-    if not (set((pixhi[:-1]+1)-pixlo[1:]) == {0}):
-        raise ValueError("Error in bin table")
-
     pixrange = np.concatenate([[pixlo[0]], pixhi+1])
 
     return pixrange
@@ -153,6 +151,7 @@ def get_pix_range(myfits, which="spatial"):
 
 def get_npix_per_bin(myfits):
     """Calculates total pixels per bin.
+    Should work for both linear and nonlinear.
 
     Parameters
     ----------
