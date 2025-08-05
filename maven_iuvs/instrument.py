@@ -309,7 +309,7 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     
     # Get pix per bin, which is  called 'nbins' in Matteo's original workup
     npix_eachbin = get_npix_per_bin(light_fits)
-    # spe_size * spa_size # I believe this is pixels per square bin, spatial x spectral.
+    # This is spe_size * spa_size, pixels per bin in spatial x spectral space.
 
     if ~(np.diff(npix_eachbin) == 0).all():
         raise ValueError("Some problem with the binning scheme. Unhandled nonlinearly binned file?")
