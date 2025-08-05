@@ -1,5 +1,4 @@
 import numpy as np
-from maven_iuvs.echelle import get_wavelengths 
 
 def get_bin_edges(light_fits):
     """
@@ -21,6 +20,7 @@ def get_bin_edges(light_fits):
     """    
 
     # Grab the wavelengths 
+    from maven_iuvs.echelle import get_wavelengths 
     wavelengths = get_wavelengths(light_fits)
 
     # First calculate the differences between wavelengths
