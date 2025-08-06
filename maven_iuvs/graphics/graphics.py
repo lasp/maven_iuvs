@@ -11,7 +11,7 @@ from matplotlib.image import imread
 from shapely.geometry import box, Polygon
 from shapely.geometry.polygon import LinearRing
 from tempfile import NamedTemporaryFile
-import pkg_resources
+import importlib_resources
 import matplotlib as mpl
 from maven_iuvs.instrument import calculate_calibration_curve
 from maven_iuvs.geometry import beta_flip, haversine, rotation_matrix
@@ -375,14 +375,17 @@ def get_flatfield(n_integrations, n_spatial):
 
     # load the flatfield, interpolate if required using the 133-bin flatfield
     if n_spatial == 133:
-        detector_flat = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
-                                             'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
+        detector_flat = np.load(importlib_resources.files('maven_iuvs')
+                                / 'ancillary'
+                                / 'mvn_iuv_flatfield-133spa-muv.npy')[:, :18]
     elif n_spatial == 50:
-        detector_flat = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
-                                             'mvn_iuv_flatfield-50spa-muv.npy'))[:, :18]
+        detector_flat = np.load(importlib_resources.files('maven_iuvs')
+                                / 'ancillary'
+                                / 'mvn_iuv_flatfield-50spa-muv.npy')[:, :18]
     else:
-        detector_full = np.load(_os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
-                                             'mvn_iuv_flatfield-133spa-muv.npy'))[:, :18]
+        detector_full = np.load(importlib_resources.files('maven_iuvs')
+                                / 'ancillary'
+                                / 'mvn_iuv_flatfield-133spa-muv.npy')[:, :18]
         detector_flat = np.zeros((n_spatial, 18))
         for i in range(18):
             detector_flat[:, i] = np.interp(np.linspace(0, 132, n_spatial), np.arange(133), detector_full[:, i])

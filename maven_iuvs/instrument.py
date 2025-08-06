@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import math
-import pkg_resources
 from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
 
 # instrument variables

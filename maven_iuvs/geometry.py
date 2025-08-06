@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import spiceypy as spice
 from skimage.transform import resize
-import pkg_resources
+import importlib_resources
 from maven_iuvs.instrument import slit_width_deg
 
 
@@ -185,8 +185,7 @@ def highres_swath_geometry(hdul, res=200, twilight='discrete'):
     context_map = np.zeros((hifi_int, hifi_spa, 3))*np.nan
 
     # load Mars surface map and switch longitude domain from [-180,180) to [0, 360)
-    mars_surface_map = plt.imread(os.path.join(pkg_resources.resource_filename('maven_iuvs', 'ancillary/'),
-                                               'mars_surface_map.jpg'))
+    mars_surface_map = plt.imread(importlib_resources.files('maven_iuvs') / 'ancillary' / 'mars_surface_map.jpg')
     offset_map = np.zeros_like(mars_surface_map)
     offset_map[:, :1800, :] = mars_surface_map[:, 1800:, :]
     offset_map[:, 1800:, :] = mars_surface_map[:, :1800, :]
