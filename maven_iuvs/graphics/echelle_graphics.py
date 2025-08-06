@@ -12,7 +12,7 @@ import re
 import gc
 from tqdm.auto import tqdm
 from pathlib import Path
-from maven_iuvs.binning import get_pix_range, get_bin_edges
+from maven_iuvs.binning import get_pix_range, get_bin_edges, get_binning_scheme
 from maven_iuvs.constants import D_offset
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end, convert_spectrum_DN_to_photoevents
 from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadrature, background, \
@@ -672,6 +672,29 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below; listed altitude is mean minimum ray height altitude across spatial dimension on slit):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
+    # Block out the nonlinear bin portions on all the detector images
+    if "NON LINEAR" in get_binning_scheme(light_fits)['bintbl']:
+        bindat = light_fits['binning'].data
+        spabintrans = bindat['spabintransmit']
+        # Remove leading/trailing zeros...
+        spabintrans_trimmed = np.trim_zeros(spabintrans[0])
+        zi = np.array(np.where(spabintrans_trimmed==0))  # Find remaining zeros
+        untransmitted_rng = [bindat['spapixhi'][0, zi-1][0, 0] + 1, 
+                             bindat['spapixhi'][0, zi-1][0, 1]]
+        
+        # Gray-out the untransmitted bins on each detector image
+        axes_list = [DetAxes[1], *[DarkAxes[i] for i in range(3)], 
+                     *[ThumbAxes[i] for i in range(n_ints)]]
+        for a in axes_list:
+            a.fill_between(light_spepixrng, untransmitted_rng[0], 
+                            untransmitted_rng[1], 
+                            color="gray")
+            
+        # Add a text note on the coadded detector image axis
+        DetAxes[1].text(light_spepixrng[0], np.mean(untransmitted_rng),
+                        "Untransmitted bins", color="black", 
+                        fontsize=17+fontsizes[fs])
+        
     # Explanatory text printing ----------------------------------------------------------------------------------
     utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
     sol, My = utc_to_sol(utc_obj)
