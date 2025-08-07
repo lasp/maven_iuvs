@@ -1571,8 +1571,10 @@ _fit_parameter_names = ['total_brightness_H',  # DN
                         'central_wavelength_H',  # nm
                         'central_wavelength_IPH',  # nm  
                         'width_IPH',  # nm
+                        'background_b',
                         'background_m',
-                        'background_b']
+                        'background_m2',
+                        'background_m3']
 _unc_parameter_names = ['unc_' + pname for pname in _fit_parameter_names]
 
 _fit_parameter_IPH_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'IPH' in name] 
@@ -1785,7 +1787,7 @@ def make_array_of_fitted_backgrounds(light_fits, fit_params):
     bg_fits = np.ndarray((n_integrations, len(wavelengths))) # check this
     
     for i in range(len(fit_params)):
-        bg_fits[i, :] = background(wavelengths, fit_params[i]['background_m'], fit_params[i]['central_wavelength_H'], fit_params[i]['background_b'])
+        bg_fits[i, :] = background(wavelengths, fit_params[i]['central_wavelength_H'], fit_params[i]['background_b'], fit_params[i]['background_m'], fit_params[i]['background_m2'], fit_params[i]['background_m3'])
 
     return bg_fits
 
@@ -1806,18 +1808,16 @@ def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
                  in light_fits. 
     bg_fits : array, shape (n_ints, n_wavelengths)
               Each row is the fitted background for a particular spectrum. Output from make_array_of_fitted_backgrounds.
-    
     Returns
     ----------
     bright_data_ph_per_s : array, shape (n_ints, n_wavelengths)
                            Data at each recorded wavelength, in units of photons/sec with the background subtracted off.
-    
     """
     t_int = light_fits["Primary"].header["INT_TIME"] 
     wavelengths = get_wavelengths(light_fits)
     n_int = get_n_int(light_fits)
     bright_data_ph_per_s = np.zeros((n_int, wavelengths.shape[0]))
-    
+
     # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
     spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spectrum) / (t_int)
     background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fits) / (t_int)
@@ -1825,10 +1825,12 @@ def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
     for i in range(len(fit_params)):
         # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
         popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s[i, :],
-                                           p0=[-1, 121.567, 1], bounds=([-np.inf, 121.5, 0], [np.inf, 121.6, 50]))
-        bg_ph_s = background(wavelengths, popt[0], fit_params[i]['central_wavelength_H'], popt[2])
+                                           p0=[121.567, 0, 0, 0, 0],
+                                           bounds=([121.5, -np.inf, -np.inf, -np.inf, -np.inf],
+                                                   [121.6, np.inf, np.inf, np.inf, np.inf]))
+        bg_ph_s = background(wavelengths, *popt)
         bright_data_ph_per_s[i, :] = spec_ph_s[i, :] - bg_ph_s
-        
+
     return bright_data_ph_per_s
 
 
@@ -2176,8 +2178,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                                                (pig[4]-IPH_wv_spread/2,
                                                 pig[4]+IPH_wv_spread/2),  # IPH λ
                                                (IPH_minw, IPH_maxw),  # IPH width
+                                               (None, None), # bg intercept
                                                (None, None),  # bg slope
-                                               (None, None)]  # bg intercept
+                                               (None, None),  # bg quadratic term
+                                               (None, None)]  # bg cubic term
                                        )
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, *lineshape_model_args)
         modeled_params = np.array([*[bestfit.x[p] for p in range(0, len(pig))], bestfit.fun])
@@ -2274,8 +2278,10 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
              [pig[3]-0.02, pig[3]+0.02],  # λ Ly a center, H
              [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2],  # IPH λ
              [IPH_minw, IPH_maxw],  # IPH width
-             [pig[6]-5e3, pig[6]+5e3],  # background slope
-             [pig[7]-5e3, pig[7]+5e3]  # Background offset
+             [-1e5, 1e5],  # Background offset
+             [-1e5, 1e5],  # background slope
+             [-1e5, 1e5],  # background quadratic term
+             [-1e5, 1e5],  # background cubic term
              ]
         ]
 
@@ -2284,7 +2290,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                                               len(ptf_args[0]),
                                               logl_args=objfn_args,
                                               ptform_args=ptf_args,
-                                              bound=bound, 
+                                              bound=bound,
                                               nlive=livepts,
                                               bootstrap=bootstrap
                                               )
@@ -2321,9 +2327,9 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
 def badness_bg(params, wavelength_data, DN_data):
     """
     Similar to badness, but for a linear fit to the background on the detector.
-    Used so we can fit the background in off-slit regions and dark files for 
+    Used so we can fit the background in off-slit regions and dark files for
     determining how good the fit is at representing the background.
-    
+
     Parameters
     ----------
     params : array
@@ -2338,7 +2344,7 @@ def badness_bg(params, wavelength_data, DN_data):
     bg_m_guess, bg_b_guess, bg_lamc_guess = params
 
     # "model"
-    DN_model = background(bg_m_guess, wavelength_data, bg_lamc_guess, bg_b_guess)
+    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess, bg_m3_guess)
 
     # "badness"
     badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
@@ -2470,16 +2476,18 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     fit_background = jnp.where(jnp.logical_not(jnp.isnan(BU_bg)),
                                BU_bg,
                                background(wavelength_data,
-                                          param_dict['background_m'],
                                           param_dict['central_wavelength_H'],
-                                          param_dict['background_b']))
+                                          param_dict['background_b'],
+                                          param_dict['background_m'],
+                                          param_dict['background_m2'],
+                                          param_dict['background_m3']))
     # Return the flux per bin
     I_bin = fitsum + fit_background
 
     return I_bin, H_fit, D_fit, IPH_fit
 
 
-def background(lamda, m, lamda_c, b):
+def background(lamda, lamda_c, b, m, m2=0, m3=0):
     """
     Construct the functional form of the background emissions for the detector, given the parameters controlling it.
     Currently just a linear fit. Separated out so it can be called in more than one place.
@@ -2499,7 +2507,14 @@ def background(lamda, m, lamda_c, b):
     ----------
     Array of DN per wavelength for the background.
     """
-    return (m * (lamda - lamda_c) + b)
+    lamda = jnp.array(lamda)
+    lrange = 0.5*(jnp.max(lamda) - jnp.min(lamda))
+    wavefrac = (lamda - lamda_c)/lrange
+
+    return (b
+            + m * wavefrac
+            + m2 * wavefrac * wavefrac
+            + m3 * wavefrac * wavefrac * wavefrac)
 
 
 def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
@@ -2777,7 +2792,7 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
     ----------
     Vector of initial guess values
     """
-    num_params = 8
+    num_params = len(_fit_parameter_names)
 
     # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
     # in a parent function overlap the D, but that's okay for an initial guess.
@@ -2800,11 +2815,11 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
             # Now control for either of these both somehow being accidentally set to 0
             if D_a == D_b == 0:
                 D_b += 20
-    
+
         # Now integrate to get an initial area guess
         DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
         DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
-        
+
         # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
         # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
         lambda_H_lya_guess = 121.567
@@ -2817,13 +2832,15 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
         width_IPH_guess = (IPH_maxw + IPH_minw) / 2
 
         # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
-        bg_m_guess = 0
         bg_b_guess = np.median(spectrum)
+        bg_m_guess = 0
+        bg_m2_guess = 0
+        bg_m3_guess = 0
 
-        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess, 
-                         lambda_H_lya_guess, lambda_IPH_lya_guess[i], 
-                         width_IPH_guess, 
-                         bg_m_guess, bg_b_guess]
+        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
+                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
+                         width_IPH_guess,
+                         bg_b_guess, bg_m_guess, bg_m2_guess, bg_m3_guess]
 
     return guesses
 

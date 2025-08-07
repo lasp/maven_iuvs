@@ -438,7 +438,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         fit_params_dict = make_fit_param_dict(fit_params)
         fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False)
 
-        bg_fit = background(wl, fit_params_dict['background_m'], fit_params_dict['central_wavelength_H'], fit_params_dict['background_b'])
+        bg_fit = background(wl, fit_params_dict['central_wavelength_H'], fit_params_dict['background_b'], fit_params_dict['background_m'], fit_params_dict['background_m2'], fit_params_dict['background_m3'])
          # You would think we need to adjust Aeff in the conversions but we don't because we're basically using an average
 
         arrays_in_DN = [coadded_spec, coadded_unc_spec, I_fit, bg_fit]
@@ -1102,6 +1102,8 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
                 bound = 5 # Ensure we always have a ylim
         else:
             bound = residax_ylim
+        if np.isnan(bound):
+            bound = 0.1
         residax.set_ylim(-bound, bound)
 
     # Print some extra messages
