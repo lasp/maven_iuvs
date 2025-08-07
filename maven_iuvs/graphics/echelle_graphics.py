@@ -673,7 +673,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below; listed altitude is mean minimum ray height altitude across spatial dimension on slit):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
     # Block out the nonlinear bin portions on all the detector images
-    if "NON LINEAR" in get_binning_scheme(light_fits)['bintbl']:
+    if 'bintbl' in get_binning_scheme(light_fits).keys():
         bindat = light_fits['binning'].data
         spabintrans = bindat['spabintransmit']
         # Remove leading/trailing zeros...
