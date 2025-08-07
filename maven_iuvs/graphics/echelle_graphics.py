@@ -1103,7 +1103,7 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         else:
             bound = residax_ylim
         if np.isnan(bound):
-            bound = 0.1
+            bound = 5
         residax.set_ylim(-bound, bound)
 
     # Print some extra messages

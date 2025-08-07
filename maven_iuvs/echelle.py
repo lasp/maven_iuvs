@@ -668,7 +668,8 @@ def subtract_darks(light_fits, dark_fits):
     # their associated light frame will be caught and set to nan in the line that sets nans below.
     dark_subtracted[0, :, :] = light_data[0] - first_dark  
 
-    # Here, we should account for the possibility that no second dark exists (get_dark_frames() would have set it to all nan). 
+    # Here, we should account for the possibility that no second dark exists 
+    # (get_dark_frames() would have set it to all nan). 
     # In that case, let's use the first dark frame for all frames.
     if not second_dark_exists:
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - first_dark
@@ -677,7 +678,7 @@ def subtract_darks(light_fits, dark_fits):
 
     dark_subtracted[i_bad, :, :] = np.nan
 
-    # Throw an error if there are no acceptable frames
+    # Throw an error if there are no acceptable light frames
     if np.isnan(dark_subtracted).all(): 
         raise Exception(f"Missing critical observation data: no valid lights")
 
@@ -1427,6 +1428,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # Do basic fit in DN
     I_fit, H_fit, D_fit, IPH_fit, fit_params, fit_uncertainties = fit_flat_data(light_fits, spectrum, data_unc, bad_frames=i_badframes, ints_to_fit=ints_to_fit,
                                                                                 return_each_line_fit=return_each_line_fit, **kwargs)
+    
     # Construct a background array from the fit parameters, which can then be converted like the spectrum
     bg_fits = make_array_of_fitted_backgrounds(light_fits, fit_params)
 
@@ -1435,6 +1437,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
 
     # Convert to physical units
     arrays_in_DN = [spectrum, data_unc, I_fit, bg_fits]
+
     if return_each_line_fit:
         arrays_in_DN.append(H_fit)
         arrays_in_DN.append(D_fit)
@@ -1583,6 +1586,7 @@ _fit_parameter_non_IPH_idxs = np.setdiff1d(range(0, len(_fit_parameter_names)), 
 _fit_parameter_background_idxs = [i for i, name in enumerate(_fit_parameter_names) if 'background' in name]
 _fit_parameter_non_background_idxs = np.setdiff1d(range(0, len(_fit_parameter_names)), _fit_parameter_background_idxs)
 
+
 def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
                   calibration="new", return_each_line_fit=True, ints_to_fit=1,
                   BU_bg=np.nan, **kwargs):
@@ -1657,20 +1661,6 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
 
     # Loop over integrations to do the fits
     for i in range(0, ints_to_fit):
-        if bad_frames:
-            if i in bad_frames:
-
-                # Even if the frame is bad, we need dictionaries for the fit 
-                # parameters. Some values must be filled by hand.
-                fpd = {n:0 for n in _fit_parameter_names}
-                fpd["failed_fit"] = True
-                fpd['central_wavelength_H'] = 121.567 # Filler
-                fpd['central_wavelength_D'] = 121.534 # Filler
-                fpd['central_wavelength_IPH'] = 121.55 # Filler
-                fit_params_dicts.append(fpd)
-                fit_unc_dicts.append({n:0 for n in _unc_parameter_names})
-                continue # we already filled the arrays with zeros so just skip the other tasks
-
         # PERFORM FIT
         # ============================================================================================
         # Through experimentation, we found that the best solvers to use are in descending order: 
@@ -1696,10 +1686,31 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         else:
             fit_params, I_fit, fit_1sigma, *_ = result_vec
 
-        # Make a fit_params dictionary 
+        # Set up bad frames tracker
+        if bad_frames is None: 
+            bad_frames = []
+
+        # Handle case where frame is unusable and not caught by other logic
+        if (np.isnan(I_fit).all()) and (np.isnan(fit_params).all()):
+            bad_frames.append(i)
+
+        # Make a dictionary containing the results for fit parameters 
+        # =====================================================================
+        
+        if i in bad_frames:
+            # If the frame is bad, we must manually provide some values so the 
+            # plots will still run if plots have been asked for.
+            fit_params = [0 for i in fit_params]
+            fit_params[_fit_parameter_names.index('central_wavelength_H')] = 121.567
+            fit_1sigma = [0 for i in fit_params]
+
+        # Now make into dictionaries
         fit_params_dict = make_fit_param_dict(fit_params, BU_bg=BU_bg)
         fit_params_dict['maxLL'] = fit_params[-1] # the max log likeilhood gets appended
         fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False, BU_bg=BU_bg)
+       
+        if i in bad_frames:
+            fit_params_dict["failed_fit"] = True
 
         # Append everything to lists, one entry for each integration
         I_fit_array[i, :] = I_fit
@@ -1709,12 +1720,6 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         # Error control
         if len(np.setdiff1d(np.where(np.isnan(fit_params)), _fit_parameter_IPH_idxs)) > 0:
             print(f"Warning: Fit {i} has nans in fit parameters")
-
-        if np.isnan(fit_params).all():
-            print(f"Fit {i} REALLY failed")
-            raise Exception(f"Frame {i} is broken, i.e. all fit params are "
-                            + "nan. In theory this should have been handled "
-                            + "but wasn't")
 
     if not return_each_line_fit:
         H_fit_array = None
@@ -2094,7 +2099,7 @@ def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
 
 
 def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
-                IPH_bounds=(None, None), fit_IPH_component=False, BU_bg=np.nan,
+                fit_IPH_component=False, BU_bg=np.nan,
                 fitter="dynesty", solver="Powell",
                 approach="static", livepts=100, bound="single", bootstrap=0,
                 hush_warning=True):
@@ -2119,8 +2124,6 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
            CLSF object based on the LSF of the instrument. 
     unc : int or array
           uncertainty on spec. Determined in a parent function based on the l1a file, or defaults to 1.
-    IPH_bounds : 2-tuple of floats
-         bounds on fitted IPH brightness
     fit_IPH_component : bool
          whether to fit an IPH component to this spectrum in addition to Mars H and D
     solver : string
@@ -2152,6 +2155,18 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                  uncertainty on the fit parameters, in the same order as pig.
     """
 
+    def nan_results(spec, pig):
+        """
+        Produce nan arrays if something goes really wrong.
+        """
+        I_bin = np.full_like(spec, np.nan)
+        H_bin = np.full_like(spec, np.nan)
+        D_bin = np.full_like(spec, np.nan)
+        IPH_bin = np.full_like(spec, np.nan)
+        modeled_params = [np.nan for p in range(len(pig)+1)]
+        fit_uncert = [np.nan for p in range(len(pig))]
+        return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
+
     # Get bin edges in nm.
     edges = get_bin_edges(light_fits)
 
@@ -2164,28 +2179,33 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
         # If doing things with the BU background
         if not np.isnan(BU_bg):
             pig = pig[0:-2] # skip the modeled background.
+        try:
+            bestfit = sp.optimize.minimize(negloglikelihood_jit, pig,
+                                           # jac=negloglikelihood_jacobian_jit,
+                                           # hess=negloglikelihood_hessian_jit,
+                                           args=objfn_args,
+                                           method=solver,
+                                           options={"xtol":1e-5,  # at least 1e-3 required. 1e-4 is default
+                                                   "ftol":1e-5},
+                                           bounds=[(None, None),  # DN_H
+                                                   (None, None),  # DN_D
+                                                   (None, None),  # DN_IPH
+                                                   (121.55, 121.58),  # λ H 
+                                                   (pig[4]-IPH_wv_spread/2,
+                                                    pig[4]+IPH_wv_spread/2),  # IPH λ
+                                                   (IPH_minw, IPH_maxw),  # IPH width
+                                                   (None, None), # bg intercept
+                                                   (None, None),  # bg slope
+                                                   (None, None)]  # bg quadratic term
+                                           )
 
-        bestfit = sp.optimize.minimize(negloglikelihood_jit, pig,
-                                       # jac=negloglikelihood_jacobian_jit,
-                                       # hess=negloglikelihood_hessian_jit,
-                                       args=objfn_args,
-                                       method=solver,
-                                       options={"xtol":1e-5,  # at least 1e-3 required. 1e-4 is default
-                                                "ftol":1e-5},
-                                       bounds=[(None, None),  # DN_H
-                                               (None, None),  # DN_D
-                                               (None, None),  # DN_IPH
-                                               (121.55, 121.58),  # λ H
-                                               (pig[4]-IPH_wv_spread/2,
-                                                pig[4]+IPH_wv_spread/2),  # IPH λ
-                                               (IPH_minw, IPH_maxw),  # IPH width
-                                               (None, None), # bg intercept
-                                               (None, None),  # bg slope
-                                               (None, None)]  # bg quadratic term
-                                               # (None, None)]  # bg cubic term
-                                       )
+        except ValueError:
+            return nan_results(spec, pig)
+        
+        # Continue on if everything is ok
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(bestfit.x, *lineshape_model_args)
         modeled_params = np.array([*[bestfit.x[p] for p in range(0, len(pig))], bestfit.fun])
+
         if not fit_IPH_component:
             # replace IPH fit values with nans
             modeled_params[_fit_parameter_IPH_idxs] = np.nan
@@ -2198,7 +2218,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             if not hush_warning:
                 print(f"Warning: algorithm {solver} doesn't return an inverse hessian. The uncertainties will be estimated using an approximate hessian.")
             # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives.
-            # Old method: We can estimate the Hessian using stattools per this link.
+            # Old fallback method: We can estimate the Hessian using stattools per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
             # hessian = approx_hess2(bestfit.x, negloglikelihood,
             #                        args=objfn_args)
@@ -2212,7 +2232,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                 # # automatically. Check and recalculate if need be.
                 # if np.isnan(fit_uncert[:-2]).any():
                 #     new_hessian = approx_hess2(bestfit.x, negloglikelihood,
-                #                                epsilon=1e-2*bestfit.x,  # Seems to be the magic number...
+                #                                epsilon=1e-2*bestfit.x,
                 #                                args=objfn_args)
                 #     fit_uncert = np.sqrt(np.diag(inv(new_hessian)))
             else:
@@ -2287,25 +2307,36 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
         ]
 
         if approach == "dynamic":
-            dsampler = d.DynamicNestedSampler(loglikelihood_jit, prior_transform,
-                                              len(ptf_args[0]),
-                                              logl_args=objfn_args,
-                                              ptform_args=ptf_args,
-                                              bound=bound,
-                                              nlive=livepts,
-                                              bootstrap=bootstrap
-                                              )
+            try:
+                dsampler = d.DynamicNestedSampler(loglikelihood_jit, prior_transform,
+                                                  len(ptf_args[0]),
+                                                  logl_args=objfn_args,
+                                                  ptform_args=ptf_args,
+                                                  bound=bound, 
+                                                  nlive=livepts,
+                                                  bootstrap=bootstrap
+                                                )
+            except (ValueError, RuntimeError):
+                return nan_results(spec, pig)
         elif approach == "static":
-            dsampler = d.NestedSampler(loglikelihood_jit, prior_transform,
-                                       len(ptf_args[0]),
-                                       logl_args=objfn_args,
-                                       ptform_args=ptf_args,
-                                       nlive=livepts,
-                                       bound=bound,
-                                       bootstrap=bootstrap
-                                       )
+            try: 
+                dsampler = d.NestedSampler(loglikelihood_jit, prior_transform,
+                                        len(ptf_args[0]),
+                                        logl_args=objfn_args,
+                                        ptform_args=ptf_args,
+                                        nlive=livepts,
+                                        bound=bound,
+                                        bootstrap=bootstrap
+                                        )
+            except (ValueError, RuntimeError):
+                return nan_results(spec, pig)
 
-        dsampler.run_nested()
+        try:
+            dsampler.run_nested()
+        except (ValueError, RuntimeError):
+            return nan_results(spec, pig)
+
+        # Continue on if all is ok
         dresults = dsampler.results
 
         samples = dresults.samples
@@ -2708,8 +2739,6 @@ def get_spectrum(data, light_fits, average=False, coadded=False, integration=Non
     integration : None or int
                   Integration frame to use for the specrum. Used if coadded=False.
                   If None, integration dimension will be preserved.
-    clean_data : boolean 
-                 whether to perform the data cleaning routines
 
     Returns:
     ----------
