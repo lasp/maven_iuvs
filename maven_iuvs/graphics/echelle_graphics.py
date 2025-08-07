@@ -544,7 +544,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
         if ~np.isnan(fit_params_collected['total_brightness_IPH']):
             # IPH text
-            lya_IPH = fit_params_collected['central_wavelength_IPH']
+            lya_IPH = fit_params_collected['delta_wavelength_IPH'] \
+                      + fit_params_collected['central_wavelength_H']
 
             # Make the wavelength of IPH colored according to whether it's 
             # blueshifted or redshifted, oooh!
@@ -1001,28 +1002,33 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
     H_dx = -hshift
     H_ha = "right"
 
-    if 'central_wavelength_IPH' in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing['central_wavelength_IPH']):
-        mainax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
+    if ~np.isnan(fit_params_for_printing['delta_wavelength_IPH']):
+        mainax.axvline(fit_params_for_printing['delta_wavelength_IPH']
+                       + fit_params_for_printing['central_wavelength_H'],
                        color=guideline_color, zorder=2, lw=1)
         if make_residual_axis:
-            residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
+            residax.axvline(fit_params_for_printing['delta_wavelength_IPH']
+                            + fit_params_for_printing['central_wavelength_H'],
                             color=guideline_color, zorder=2, lw=1)
 
         # Handle the labels, which may overlap
         IPH_dx = -hshift
         IPH_ha = "right"
-        if abs(fit_params_for_printing['central_wavelength_IPH'] - fit_params_for_printing['central_wavelength_H']) <= 0.01:
+        # Check if the IPH label will overlap with H label if they're too close
+        if abs(fit_params_for_printing['delta_wavelength_IPH']) <= 0.01:
             # Redshifted: IPH on right
-            if fit_params_for_printing['central_wavelength_IPH'] >= fit_params_for_printing['central_wavelength_H']:
+            if fit_params_for_printing['delta_wavelength_IPH'] >= 0:
                 IPH_dx *= -1
                 IPH_ha = "left"
             else:  # Blueshifted
                 H_dx *= -1
                 H_ha = "left"
 
-        mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, guideline_lbl_y, "IPH",
-                    color=guideline_color, transform=t,
-                    va="top", ha=IPH_ha)
+        mainax.text(fit_params_for_printing['central_wavelength_H'] 
+                    + fit_params_for_printing['delta_wavelength_IPH']
+                    + IPH_dx, 
+                    guideline_lbl_y, "IPH", color=guideline_color, 
+                    transform=t, va="top", ha=IPH_ha)
     
     # Finally set the H label, which needs to adjust based oN IPH
     mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, guideline_lbl_y, "H",
@@ -1060,7 +1066,10 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
             if fit_IPH_component:
                 printme.append(f"IPH: {round(fit_params_for_printing['total_brightness_IPH'], 2)} ± {round(fit_params_for_printing['unc_total_brightness_IPH'], 2)} kR"
                             + f" (SNR: {round(fit_params_for_printing['total_brightness_IPH'] / fit_params_for_printing['unc_total_brightness_IPH'], 1)})")
-                printme.append("\t" + r"at $\lambda =$" + f"{round(fit_params_for_printing['central_wavelength_IPH'], 4)}, ")
+                lam_IPH = round(fit_params_for_printing['delta_wavelength_IPH'] 
+                                + fit_params_for_printing['central_wavelength_H'], 
+                                4)
+                printme.append("\t" + r"at $\lambda =$" + f"{lam_IPH}, ")
                 printme.append(f"        width: {round(fit_params_for_printing['width_IPH'], 4)}")
             else:
                 printme.append(f"IPH component not fit")
@@ -1140,7 +1149,7 @@ def plot_line_fit_comparison(data_wavelengths, data_vals_new, data_vals_BU, mode
                  A dictionary object accessing the parameter fits by name.
                  Keys: total_brightness_H, total_brightness_D, 
                  total_brightness_IPH, central_wavelength_H, 
-                 central_wavelength_D, central_wavelength_IPH, 
+                 central_wavelength_D, delta_wavelength_IPH, 
                  background_m, background_b.
     H_a, H_b, D_a, D_b : ints
                          indices of data_wavelengths over which the line area was integrated.
