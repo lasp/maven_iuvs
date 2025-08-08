@@ -2876,8 +2876,21 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
 
 def predict_IPH_linecenter(light_fits):
     """
+    Predict the line center of the IPH based on spacecraft geometry, motion,
+    and known properties of the IPH.
+
     Exact location of upstream direction not completely certain. 
     Not accounted for: decelreation of IPH across solar system, assumed to be the same.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                 File with light observation
+
+    Returns
+    ----------
+    delta_lambda_iph : array
+                       Δλ for the IPH in each integration
     """
     load_iuvs_spice()
     
