@@ -657,20 +657,42 @@ def subtract_darks(light_fits, dark_fits):
     first_dark = darks[0, :, :]
     second_dark = darks[1, :, :]
 
-    # check darks are valid
-    if np.isnan(first_dark).any() & np.isnan(second_dark).any():
-        raise Exception(f"Missing critical observation data: no valid darks")
-
     # Make the array to store dark-subtracted data
     dark_subtracted = np.zeros_like(light_data)
-    
-    # Get rid of extra frames where light data are bad (broken or nan)
+
+    # Set up tracking arrays
     medians = []
     good_frame_inds = [] # Frames which appear to have valid data
     nan_light_inds = [] # frames with NaN
     bad_light_inds = [] # Light frames which have some problem, i.e. oversaturation, but are not NaN
     nan_dark_inds = []  # Dark frames with NaN 
     light_frames_with_nan_dark = [] # Light frames whose dark frame is NaN
+
+    # CHECK VALIDITY OF DARKS 
+    # =========================================================================
+    first_dark_good = True
+    second_dark_good = True
+
+    # # Check goodness of first dark 
+    if (np.isnan(first_dark).any()) or (np.nanmedian(first_dark) > 1000):  # First dark is bad 
+        first_dark_good = False
+    
+    # Check that second dark exists - early in mission, we didn't always take 2 darks.
+    # In those cases we should use the first dark.
+    second_dark_exists = True 
+    if np.isnan(second_dark).all():
+        second_dark_exists = False 
+
+    if not second_dark_exists: 
+        # mark it as a bad dark, but don't throw out the light frames.
+        second_dark_good = False
+    elif second_dark_exists:
+        # Check it for goodness.
+        if (np.isnan(second_dark).any()) or (np.nanmedian(second_dark) > 1000): # but it has problems...
+            second_dark_good = False
+
+    if not(first_dark_good or second_dark_good):
+        raise Exception(f"Missing critical observation data: both darks are bad")
 
     # TODO: Some of the searching for bad frames can be simplified by applying locate_missing_frames,
     # but this section also contains some additional logic. 
@@ -700,22 +722,22 @@ def subtract_darks(light_fits, dark_fits):
         good_frame_inds.append(i)
         medians.append(np.median(median_this_frame))
 
-    # Handle what to do with the darks based on whether the second exists.
-    second_dark_exists = True 
-    if np.isnan(second_dark).all():
-        second_dark_exists = False 
-
-    # Now handle the first dark
-    if np.isnan(first_dark).any():  # First dark is bad 
+    # Mark frames as bad if they are associated with the first dark, either by
+    # BEING the first dark, or being the first light, or being the 1-nth light
+    # if the second dark doesn't exist.
+    if not first_dark_good:
         nan_dark_inds.append(0)
         light_frames_with_nan_dark.append(0)
-    else:  # First dark is good 
-        if not second_dark_exists: 
+
+        # Ideally we'd use the first dark in this case, but we can't if it sucks.
+        if not second_dark_exists:
             nan_dark_inds.append(1)  # mark it as a bad dark 
-        else:  # second dark exists
-            if np.isnan(second_dark).any():
-                nan_dark_inds.append(1)  # mark it as a bad dark 
-                light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
+            light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
+    
+    # Do the same for the second dark and its associated frames, 1-nth lights.
+    if not second_dark_good:
+        nan_dark_inds.append(1)  # mark it as a bad dark 
+        light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
 
     # Collect indices of frames which can't be processed for whatever reason. 
     # Note that any frames whose associated dark frame is 0 WILL be caught here, unless it's an observation where the second
