@@ -953,3 +953,26 @@ def has_geometry_pvec(hdul):
     nanfrac = n_nan / n_quant
     
     return (nanfrac < 1.0)
+
+
+def get_mean_mrh(light_fits):
+    """
+    Given some fits file, get the mean MRH (minimum ray height) in the spatial
+    direction of the slit at the center of the pixel, producing one mean MRH
+    per integration.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                File with light observation.
+
+    Returns
+    ----------
+    integration_mrh_alt : array
+                          shape (n,), where n = integrations in light_fits.
+
+    """
+    integration_mrh_alt = light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT']
+    integration_mrh_alt = integration_mrh_alt[:, :, -1]  # select center of pixel
+    integration_mrh_alt = np.nanmean(integration_mrh_alt, axis=1)  # average along slit (could do better)
+    return integration_mrh_alt
