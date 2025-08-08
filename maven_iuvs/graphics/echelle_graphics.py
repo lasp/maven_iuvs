@@ -958,76 +958,82 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         else: # show arrays with bg included, plot bg
             plot_data = data_vals 
             plot_model = model_fit
-            mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=4, color=bg_color)
+            if "failed_fit" not in fit_params_for_printing:
+                mainax.plot(data_wavelengths, plot_bg, label="background", linewidth=2, zorder=4, color=bg_color)
+
         med_bg = np.median(plot_bg)
         if print_on_axes:
             mainax.text(0.99, 0.01, f"Median background: ~{round(med_bg)} kR/nm", fontsize=12, transform=mainax.transAxes, ha="right")
-        
+
     residual = (data_vals - model_fit) 
-        
+
     # PLOT THE DATA AND MODEL ARRAYS
     # =========================================================================
     mainax.errorbar(data_wavelengths, plot_data, yerr=data_unc, color=data_color, linewidth=0, elinewidth=1, zorder=3)
     mainax.step(data_wavelengths, plot_data, where="mid", color=data_color, label="processed data", zorder=4, alpha=0.7)
-    mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=4)
-    if make_residual_axis:
-        residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color, zorder=3)
-        residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
 
-    # PLOT GUIDELINES
+    # PLOT THE MODEL AND GUIDELINES - IF THE FIT SUCCEEDED ONLY
     # =========================================================================
-    hshift = 0.0005
-    t = transforms.blended_transform_factory(mainax.transData, mainax.transAxes)
-    # Plot the fit line centers on both residual and main axes
-    mainax.axvline(fit_params_for_printing['central_wavelength_H'], 
-                   color=guideline_color, zorder=2, lw=1)
+    if "failed_fit" not in fit_params_for_printing:
+        mainax.step(data_wavelengths, plot_model, where="mid", color=model_color, label="model", linewidth=2, zorder=4)
+        if make_residual_axis:
+            residax.step(data_wavelengths, residual, where="mid", linewidth=1, color=residual_color, zorder=3)
+            residax.errorbar(data_wavelengths, residual, yerr=data_unc, color=residual_color, linewidth=0, elinewidth=1, zorder=3)
 
-    if make_residual_axis:
-        residax.axvline(fit_params_for_printing['central_wavelength_H'], 
+        # H guideline ---------------------------------------------------------
+        hshift = 0.0005
+        t = transforms.blended_transform_factory(mainax.transData, mainax.transAxes)
+        # Plot the fit line centers on both residual and main axes
+        mainax.axvline(fit_params_for_printing['central_wavelength_H'], 
+                    color=guideline_color, zorder=2, lw=1)
+
+        if make_residual_axis:
+            residax.axvline(fit_params_for_printing['central_wavelength_H'], 
+                            color=guideline_color, zorder=2, lw=1)
+        
+        # D guideline ---------------------------------------------------------
+        if fit_params_for_printing["central_wavelength_D"] is not np.nan:
+            mainax.axvline(fit_params_for_printing['central_wavelength_D'], 
                         color=guideline_color, zorder=2, lw=1)
-    
-    # get index of lambda for D so we can find the value there
-    if fit_params_for_printing["central_wavelength_D"] is not np.nan:
-        mainax.axvline(fit_params_for_printing['central_wavelength_D'], 
-                       color=guideline_color, zorder=2, lw=1)
-        mainax.text(fit_params_for_printing['central_wavelength_D']-hshift, guideline_lbl_y, "D", 
-                    color=guideline_color, transform=t, 
-                    va="top", ha="right")
-        if make_residual_axis:
-            residax.axvline(fit_params_for_printing['central_wavelength_D'], 
-                            color=guideline_color, zorder=2, lw=1)
-
-    # Handle the labels, which may overlap
-    H_dx = -hshift
-    H_ha = "right"
-
-    if 'central_wavelength_IPH' in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing['central_wavelength_IPH']):
-        mainax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
-                       color=guideline_color, zorder=2, lw=1)
-        if make_residual_axis:
-            residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
-                            color=guideline_color, zorder=2, lw=1)
+            mainax.text(fit_params_for_printing['central_wavelength_D']-hshift, guideline_lbl_y, "D", 
+                        color=guideline_color, transform=t, 
+                        va="top", ha="right")
+            if make_residual_axis:
+                residax.axvline(fit_params_for_printing['central_wavelength_D'], 
+                                color=guideline_color, zorder=2, lw=1)
 
         # Handle the labels, which may overlap
-        IPH_dx = -hshift
-        IPH_ha = "right"
-        if abs(fit_params_for_printing['central_wavelength_IPH'] - fit_params_for_printing['central_wavelength_H']) <= 0.01:
-            # Redshifted: IPH on right
-            if fit_params_for_printing['central_wavelength_IPH'] >= fit_params_for_printing['central_wavelength_H']:
-                IPH_dx *= -1
-                IPH_ha = "left"
-            else:  # Blueshifted
-                H_dx *= -1
-                H_ha = "left"
+        H_dx = -hshift
+        H_ha = "right"
 
-        mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, guideline_lbl_y, "IPH",
+        # IPH guideline -------------------------------------------------------
+        if 'central_wavelength_IPH' in fit_params_for_printing.keys() and ~np.isnan(fit_params_for_printing['central_wavelength_IPH']):
+            mainax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
+                        color=guideline_color, zorder=2, lw=1)
+            if make_residual_axis:
+                residax.axvline(fit_params_for_printing['central_wavelength_IPH'], 
+                                color=guideline_color, zorder=2, lw=1)
+
+            # Handle the labels, which may overlap
+            IPH_dx = -hshift
+            IPH_ha = "right"
+            if abs(fit_params_for_printing['central_wavelength_IPH'] - fit_params_for_printing['central_wavelength_H']) <= 0.01:
+                # Redshifted: IPH on right
+                if fit_params_for_printing['central_wavelength_IPH'] >= fit_params_for_printing['central_wavelength_H']:
+                    IPH_dx *= -1
+                    IPH_ha = "left"
+                else:  # Blueshifted
+                    H_dx *= -1
+                    H_ha = "left"
+
+            mainax.text(fit_params_for_printing['central_wavelength_IPH']+IPH_dx, guideline_lbl_y, "IPH",
+                        color=guideline_color, transform=t,
+                        va="top", ha=IPH_ha)
+        
+        # Finally set the H label, which needs to adjust based on IPH
+        mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, guideline_lbl_y, "H",
                     color=guideline_color, transform=t,
-                    va="top", ha=IPH_ha)
-    
-    # Finally set the H label, which needs to adjust based oN IPH
-    mainax.text(fit_params_for_printing['central_wavelength_H']+H_dx, guideline_lbl_y, "H",
-                color=guideline_color, transform=t,
-                va="top", ha=H_ha)
+                    va="top", ha=H_ha)
     
     # Residual axis 0-line
     if make_residual_axis:

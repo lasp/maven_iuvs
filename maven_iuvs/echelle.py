@@ -1701,7 +1701,6 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
             # If the frame is bad, we must manually provide some values so the 
             # plots will still run if plots have been asked for.
             fit_params = [0 for i in fit_params]
-            fit_params[_fit_parameter_names.index('central_wavelength_H')] = 121.567
             fit_1sigma = [0 for i in fit_params]
 
         # Now make into dictionaries
