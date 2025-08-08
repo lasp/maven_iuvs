@@ -1572,7 +1572,7 @@ _fit_parameter_names = ['total_brightness_H',  # DN
                         'total_brightness_D',  # DN
                         'total_brightness_IPH',  # DN
                         'central_wavelength_H',  # nm
-                        'delta_wavelength_IPH',  # nm
+                        'central_wavelength_IPH',  # nm  
                         'width_IPH',  # nm
                         'background_b',
                         'background_m',
@@ -1658,7 +1658,6 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
 
     # Get the mean MRH across integrations for finding if IPH is fittable
     mean_mrh = get_mean_mrh(light_fits)
-    fit_IPH_byint = np.array([check_whether_IPH_fittable(mean_mrh, i) for i in range(ints_to_fit)])
 
     # Loop over integrations to do the fits
     for i in range(0, ints_to_fit):
@@ -1673,12 +1672,11 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         else:
             BU_bg_i = BU_bg
 
-        # Call the fit
-        result_vec = fit_H_and_D(initial_guess, wavelengths, spectrum[i, :],
-                                 light_fits, theCLSF, unc=data_unc[i, :],
-                                 BU_bg=BU_bg_i, 
-                                 fit_IPH_component=fit_IPH_byint[i],
-                                 **kwargs)
+        # Determine whether line-of-sight minimum ray height is large enough to fit an IPH component
+        fit_IPH_component = check_whether_IPH_fittable(mean_mrh, i)
+
+        result_vec = fit_H_and_D(initial_guess, wavelengths, spectrum[i, :], light_fits, theCLSF, unc=data_unc[i, :], \
+                                 BU_bg=BU_bg_i, fit_IPH_component=fit_IPH_component, **kwargs)
 
         if return_each_line_fit:
             fit_params, I_fit, fit_1sigma, H_fit, D_fit, IPH_fit = result_vec
@@ -2299,7 +2297,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
              [pig[1]*a, pig[1]*b],  # DN, D
              [-pig[2]/5, pig[2]*5],  # DN, IPH
              [pig[3]-0.02, pig[3]+0.02],  # λ Ly a center, H
-             [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2], # Δλ IPH
+             [pig[4]-IPH_wv_spread/2, pig[4]+IPH_wv_spread/2],  # IPH λ
              [IPH_minw, IPH_maxw],  # IPH width
              [-1e5, 1e5],  # Background offset
              [-1e5, 1e5],  # background slope
@@ -2497,9 +2495,7 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     fitsum = H_fit + D_fit
 
     # IPH model uses a basic Gaussian for now
-    central_wv_IPH = param_dict['delta_wavelength_IPH'] \
-                     + param_dict['central_wavelength_H']
-    CDF_IPH = jsp.stats.norm.cdf((binedges - central_wv_IPH)
+    CDF_IPH = jsp.stats.norm.cdf((binedges - param_dict['central_wavelength_IPH'])
                                  /
                                  param_dict['width_IPH'])
     normalized_line_shape_IPH = jnp.diff(CDF_IPH)
@@ -2832,6 +2828,11 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
     # in a parent function overlap the D, but that's okay for an initial guess.
     rows = get_n_int(light_fits) if coadded is False else 1
     guesses = np.zeros((rows, num_params))
+    # Line center of IPH is predicted based on the obs geometry;
+    # length is number of integrations.
+    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
+    if coadded:
+        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
 
     #Account for files where H may not be located at usual location
     for i in range(rows):
@@ -2859,11 +2860,6 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
         # Now do IPH.
         DN_IPH_guess = DN_H_guess * 0.05 # wild guess
         width_IPH_guess = (IPH_maxw + IPH_minw) / 2
-        # Line center of IPH is predicted based on the obs geometry;
-        # length is number of integrations.
-        deltalambda_IPH_guess = predict_IPH_deltalambda(light_fits)
-        if coadded: 
-            deltalambda_IPH_guess = [np.mean(deltalambda_IPH_guess)]
 
         # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
         bg_b_guess = np.median(spectrum)
@@ -2871,28 +2867,18 @@ def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
         bg_m2_guess = 0
         # bg_m3_guess = 0
 
-        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess, 
-                         lambda_H_lya_guess, deltalambda_IPH_guess[i],
-                         width_IPH_guess, 
+        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
+                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
+                         width_IPH_guess,
                          bg_b_guess, bg_m_guess, bg_m2_guess]  # , bg_m3_guess]
 
     return guesses
 
 
-def predict_IPH_deltalambda(light_fits):
+def predict_IPH_linecenter(light_fits):
     """
-    Predict the Δλ of the IPH relative to the rest wavelength of H Ly α.
     Exact location of upstream direction not completely certain. 
     Not accounted for: decelreation of IPH across solar system, assumed to be the same.
-    Parameters
-    ----------
-    light_fits : astropy.io.fits instance
-                 File with light observation
-
-    Returns
-    ----------
-    delta_lambda_iph : array
-                       Δλ for the IPH in each integration
     """
     load_iuvs_spice()
     
@@ -2933,7 +2919,7 @@ def predict_IPH_deltalambda(light_fits):
     delta_lambda_iph = v_iph_along_los/3e5*121.567 # doppler shift in nm
     
     return delta_lambda_iph # Line shift per integration
-
+    
 
 # Cosmic ray and hot pixel removal -------------------------------------------
 
