@@ -2332,7 +2332,6 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
              [-1e5, 1e5],  # Background offset
              [-1e5, 1e5],  # background slope
              [-1e5, 1e5],  # background quadratic term
-             # [-1e5, 1e5],  # background cubic term
              ]
         ]
 
@@ -2414,7 +2413,7 @@ def badness_bg(params, wavelength_data, DN_data):
     bg_m_guess, bg_b_guess, bg_lamc_guess = params
 
     # "model"
-    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)  # , bg_m3_guess)
+    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)
 
     # "badness"
     badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
@@ -2551,14 +2550,14 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
                                           param_dict['background_b'],
                                           param_dict['background_m'],
                                           param_dict['background_m2']))
-                                          #param_dict['background_m3']))
+
     # Return the flux per bin
     I_bin = fitsum + fit_background
 
     return I_bin, H_fit, D_fit, IPH_fit
 
 
-def background(lamda, lamda_c, b, m, m2=0):  # , m3=0):
+def background(lamda, lamda_c, b, m, m2=0):
     """
     Construct the functional form of the background emissions for the detector, given the parameters controlling it.
     Currently just a linear fit. Separated out so it can be called in more than one place.
@@ -2585,7 +2584,6 @@ def background(lamda, lamda_c, b, m, m2=0):  # , m3=0):
     return (b
             + m * wavefrac
             + m2 * wavefrac * wavefrac)
-            # + m3 * wavefrac * wavefrac * wavefrac)
 
 
 def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
