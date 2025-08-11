@@ -436,8 +436,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
                                                         coadded_spec,
                                                         light_fits, theCLSF,
                                                         fit_IPH_component=fit_IPH,
-                                                        unc=coadded_unc_spec, solver="Powell", fitter="scipy", hush_warning=True)
-        fit_params_dict = make_fit_param_dict(fit_params)
+                                                        unc=coadded_unc_spec, solver="Powell", fitter="dynesty", hush_warning=True)
+        fit_params_dict = make_fit_param_dict(fit_params[:-1])
         fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False)
 
         bg_fit = background(wl, fit_params_dict['central_wavelength_H'], fit_params_dict['background_b'], fit_params_dict['background_m'], fit_params_dict['background_m2'])  # , fit_params_dict['background_m3'])

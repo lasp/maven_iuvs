@@ -1670,7 +1670,7 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
         # Powell, Nelder-Mead, and then TNC, CG, L-BFGS-B,and trust-constr are all kinda similar
         initial_guess = initial_guesses[i, :]
 
-        if not np.isnan(BU_bg):
+        if not np.isnan(BU_bg).all():
             BU_bg_i = BU_bg[i, :]
         else:
             BU_bg_i = BU_bg
@@ -1706,10 +1706,11 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
             fit_params = [0 for i in fit_params]
             fit_1sigma = [0 for i in fit_1sigma]
 
-        # Now make into dictionaries
-        fit_params_dict = make_fit_param_dict(fit_params, BU_bg=BU_bg)
-        fit_params_dict['maxLL'] = fit_params[-1] # the max log likeilhood gets appended
-        fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False, BU_bg=BU_bg)
+        # Now make into dictionaries, excluding the max log likelihood since 
+        # it's not included in the parameter names
+        fit_params_dict = make_fit_param_dict(fit_params[:-1])
+        fit_params_dict['maxLL'] = fit_params[-1] # Add max log likeilhood 
+        fit_unc_dict = make_fit_param_dict(fit_1sigma, is_fitparams=False)
        
         if i in bad_frames:
             fit_params_dict["failed_fit"] = True
@@ -1731,7 +1732,7 @@ def fit_flat_data(light_fits, spectrum, data_unc, bad_frames=None,
     return I_fit_array, H_fit_array, D_fit_array, IPH_fit_array, fit_params_dicts, fit_unc_dicts
 
 
-def make_fit_param_dict(thelist, is_fitparams=True, BU_bg=np.nan):
+def make_fit_param_dict(thelist, is_fitparams=True):
     """
     Convert a list of either modeled parameters or uncertainties 
     to a dictionary for ease of access.
@@ -1759,12 +1760,30 @@ def make_fit_param_dict(thelist, is_fitparams=True, BU_bg=np.nan):
     name_list = None
 
     if is_fitparams:
-        inds = [i for i, p in enumerate(_fit_parameter_names)] if np.isnan(BU_bg) else _fit_parameter_non_background_idxs
+        if len(thelist) == len(_fit_parameter_names):
+            inds = [i for i,p in enumerate(_fit_parameter_names)]
+
+        # else, if the length of the list is the param names with backgrounds excluded,
+        elif len(thelist) == len(_fit_parameter_non_background_idxs):
+            inds = _fit_parameter_non_background_idxs
+        else: 
+            raise Exception(f"Error: len(thelist) != len(param_names) {len(thelist)} != ({len(_fit_parameter_names)} | {len(_fit_parameter_non_background_idxs)})")
+
+        # Now fill the values 
         for i in inds:
             param_dict[_fit_parameter_names[i]] = thelist[i]
         param_dict['central_wavelength_D'] = param_dict['central_wavelength_H'] - D_offset # nm
+
+    # Uncertainty parameters
     else:
-        inds = [i for i, p in enumerate(_unc_parameter_names)] if np.isnan(BU_bg) else _fit_parameter_non_background_idxs
+        if len(thelist) == len(_unc_parameter_names):
+            inds = [i for i, p in enumerate(_unc_parameter_names)]
+        elif len(thelist) == len(_fit_parameter_non_background_idxs):
+            inds = _fit_parameter_non_background_idxs
+        else: 
+            raise Exception(f"Error: len(thelist) != len(unc_names) {len(thelist)} != ({len(_unc_parameter_names)} | {len(_fit_parameter_non_background_idxs)})")
+        
+        # Now fill values 
         for i in inds:
             param_dict[_unc_parameter_names[i]] = thelist[i]
 
@@ -2173,35 +2192,44 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
     edges = get_bin_edges(light_fits)
 
     # define arguments for objective functions
-    objfn_args = (jnp.array(wavelengths), jnp.array(edges), jnp.array(CLSF), jnp.array(spec), jnp.array(unc), BU_bg, fit_IPH_component)
+    if not np.isnan(BU_bg).all():
+        BU_bg_jnp = jnp.array(BU_bg)
+    else: 
+        BU_bg_jnp = np.nan
+        
+    objfn_args = (jnp.array(wavelengths), jnp.array(edges), jnp.array(CLSF), jnp.array(spec), jnp.array(unc), BU_bg_jnp, fit_IPH_component)
     lineshape_model_args = (wavelengths, edges, CLSF, BU_bg, fit_IPH_component)
 
     # Now call the fitting routine
     if fitter == "scipy":
-        # If doing things with the BU background
-        if not np.isnan(BU_bg):
-            pig = pig[0:-2] # skip the modeled background.
         try:
             bestfit = sp.optimize.minimize(negloglikelihood_jit, pig,
-                                           # jac=negloglikelihood_jacobian_jit,
-                                           # hess=negloglikelihood_hessian_jit,
                                            args=objfn_args,
                                            method=solver,
-                                           options={"xtol":1e-5,  # at least 1e-3 required. 1e-4 is default
+                                           # for xtol and ftol, at least 1e-3 
+                                           # is required for happiness; 
+                                           # 1e-4 is default
+                                           options={"xtol":1e-5,  
                                                    "ftol":1e-5},
                                            bounds=[(None, None),  # DN_H
                                                    (None, None),  # DN_D
                                                    (None, None),  # DN_IPH
                                                    (121.55, 121.58),  # λ H 
+                                                   # IPH λ:
                                                    (pig[4]-IPH_wv_spread/2,
-                                                    pig[4]+IPH_wv_spread/2),  # IPH λ
-                                                   (IPH_minw, IPH_maxw),  # IPH width
-                                                   (None, None), # bg intercept
-                                                   (None, None),  # bg slope
-                                                   (None, None)]  # bg quadratic term
-                                           )
+                                                   pig[4]+IPH_wv_spread/2),
+                                                   # IPH width in nm:
+                                                   (IPH_minw, IPH_maxw),
+                                                   # Background terms:
+                                                   (None, None), # intercept
+                                                   (None, None), # linear term
+                                                   (None, None)] # quadratic
+                        )
 
-        except ValueError:
+        except ValueError as e:
+            print("Warning: caught a ValueError exception, likely just an unfittable" \
+            " spectrum. Recommend checking to make sure it isn't a different" \
+            " unhandled error")
             return nan_results(spec, pig)
         
         # Continue on if everything is ok
@@ -2228,22 +2256,22 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             # New method: compute the hessian using JAX automatic differentiation
             hessian = negloglikelihood_hessian_jit(bestfit.x, *objfn_args)
 
-            if fit_IPH_component:
-                fit_uncert = np.sqrt(np.diag(inv(hessian)))
-                # # Sometimes we get nans if the epsilon of approx_hess2 is chosen
-                # # automatically. Check and recalculate if need be.
-                # if np.isnan(fit_uncert[:-2]).any():
-                #     new_hessian = approx_hess2(bestfit.x, negloglikelihood,
-                #                                epsilon=1e-2*bestfit.x,
-                #                                args=objfn_args)
-                #     fit_uncert = np.sqrt(np.diag(inv(new_hessian)))
-            else:
-                # the hessian including the IPH components is almost
-                # certain to be singular, invert the matrix for the
-                # non-IPH parameters only
-                hessian = np.delete(np.delete(hessian, _fit_parameter_IPH_idxs, axis=0), _fit_parameter_IPH_idxs, axis=1)
-                fit_uncert = np.full_like(bestfit.x, np.nan)
-                fit_uncert[_fit_parameter_non_IPH_idxs] = np.sqrt(np.diag(inv(hessian)))
+            # Remove indices from hessian in case of: Not fitting IPH; not fitting background
+            inds_to_delete = []
+
+            if not fit_IPH_component:
+                inds_to_delete.append(_fit_parameter_IPH_idxs)
+            
+            if not np.isnan(BU_bg).all():
+                inds_to_delete.append(_fit_parameter_background_idxs)
+
+            hessian = np.delete(np.delete(hessian, inds_to_delete, axis=0), inds_to_delete, axis=1)
+            fit_uncert = np.full_like(bestfit.x, np.nan)
+            
+            # Figure out the "good" indices
+            keep_me = np.setdiff1d(range(0, len(_fit_parameter_names)), inds_to_delete)
+            fit_uncert[keep_me] = np.sqrt(np.diag(inv(hessian)))
+
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
 
@@ -2330,12 +2358,18 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                                         bound=bound,
                                         bootstrap=bootstrap
                                         )
-            except (ValueError, RuntimeError):
+            except (ValueError, RuntimeError) as e:
+                print("Warning: caught a ValueError exception, " \
+                      "likely an unfittable spectrum. Recommend checking" \
+                      " to make sure it isn't a different unhandled error")
                 return nan_results(spec, pig)
 
         try:
             dsampler.run_nested()
-        except (ValueError, RuntimeError):
+        except (ValueError, RuntimeError) as e:
+            print("Warning: caught a ValueError exception, " \
+                  "likely an unfittable spectrum. Recommend checking" \
+                  " to make sure it isn't a different unhandled error")
             return nan_results(spec, pig)
 
         # Continue on if all is ok
@@ -2346,9 +2380,11 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
         max_logl = -max(dresults.logl)
 
         modeled_params, covariance = dyfunc.mean_and_cov(samples, weights)
-        modeled_params = [*modeled_params, max_logl]
         fit_uncert = np.sqrt(np.diag(covariance))
         I_bin, H_bin, D_bin, IPH_bin = lineshape_model(modeled_params, *lineshape_model_args)
+
+        # Add the maximum log likelihood for fit uncertainty statistics
+        modeled_params = [*modeled_params, max_logl]
 
         if not fit_IPH_component:
             # replace IPH fit values with nans
@@ -2397,9 +2433,9 @@ def negloglikelihood(params, *args):
     """
     return -loglikelihood(params, *args)
 
-negloglikelihood_jit = jax.jit(negloglikelihood, static_argnums=[6,7])
-negloglikelihood_jacobian_jit = jax.jit(jax.jacobian(negloglikelihood, argnums=0), static_argnums=[6,7])
-negloglikelihood_hessian_jit = jax.jit(jax.hessian(negloglikelihood, argnums=0), static_argnums=[6,7])
+negloglikelihood_jit = jax.jit(negloglikelihood, static_argnums=[7])
+negloglikelihood_jacobian_jit = jax.jit(jax.jacobian(negloglikelihood, argnums=0), static_argnums=[7])
+negloglikelihood_hessian_jit = jax.jit(jax.hessian(negloglikelihood, argnums=0), static_argnums=[7])
 
 def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, BU_bg, fit_IPH_component):
     """
@@ -2450,9 +2486,9 @@ def loglikelihood(params, wavelength_data, binedges, CLSF, data, uncertainty, BU
 
     return L
 
-loglikelihood_jit = jax.jit(loglikelihood, static_argnums=[6,7])
-loglikelihood_jacobian_jit = jax.jit(jax.jacobian(loglikelihood, argnums=0), static_argnums=[6,7])
-loglikelihood_hessian_jit = jax.jit(jax.hessian(loglikelihood, argnums=0), static_argnums=[6,7])
+loglikelihood_jit = jax.jit(loglikelihood, static_argnums=[7])
+loglikelihood_jacobian_jit = jax.jit(jax.jacobian(loglikelihood, argnums=0), static_argnums=[7])
+loglikelihood_hessian_jit = jax.jit(jax.hessian(loglikelihood, argnums=0), static_argnums=[7])
 
 def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_component):
     """
@@ -2479,7 +2515,8 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     I_bin : array
             brightness per bin 
     """
-    param_dict = make_fit_param_dict(params, BU_bg=BU_bg)
+
+    param_dict = make_fit_param_dict(params)
 
     # For H and D, interpolate the CLSF for a given central wavelength
     interpolated_CLSF_H = interpolate_CLSF(param_dict['central_wavelength_H'], binedges,
