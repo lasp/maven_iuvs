@@ -3,6 +3,7 @@ import numpy as np
 import math
 import pkg_resources
 from maven_iuvs.miscellaneous import iuvs_data_product_level_from_fname
+from maven_iuvs.binning import get_npix_per_bin
 
 # instrument variables
 slit_width_deg = 10  # [deg]
@@ -304,34 +305,26 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     ran_DN : Array
              Random DN uncertainty, with the same shape as dark_subtracted_and_cleaned_data.
     """
-    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0]) 
-    n_bins = light_fits['primary'].header['spe_size'] * light_fits['primary'].header['spa_size'] # I believe this is pixels per square bin, spatial x spectral.
-                                                                                                 # For recent data, 11 (spa) x 2 (spe) = 22.
+    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])
+
+    # Get pix per bin, which is  called 'nbins' in Matteo's original workup
+    npix_eachbin = get_npix_per_bin(light_fits)
+    # This is spe_size * spa_size, pixels per bin in spatial x spectral space.
+
+    if ~(np.diff(npix_eachbin) == 0).all():
+        raise ValueError("Some problem with the binning scheme. Unhandled nonlinearly binned file?")
+
+    npix_perbin = npix_eachbin[0, 0]  # Assuming everything is k, we can do this
+
     # Following lines are from the IDL pipeline, file: 
-    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(n_bins/480.)/(2**((850-volt)/50.)) 
+    sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(npix_perbin/480.)/(2**((850-volt)/50.)) 
     fit_function = 40 / (2**((700-volt)/50))
-    
+
     # This is the correct shape, not sure if it's reasonable values though:
-    ran_DN = np.sqrt(dark_subtracted_and_cleaned_data * fit_function + sigma_background**2) # TODO: check if it's okay to do this on the cleaned data. Probably not
-    ran_DN[np.where(np.isnan(ran_DN))] = 0 # TODO: this is not acceptable lol
+    ran_DN_sq = dark_subtracted_and_cleaned_data * fit_function + sigma_background**2
+    # if np.any(ran_DN_sq < 0.):
+    #     raise ValueError("negative values in ran_DN_sq")
+    ran_DN = np.sqrt(ran_DN_sq)  # TODO: check if it's okay to do this on the cleaned data. Probably not
+    ran_DN[np.where(np.isnan(ran_DN))] = 0  # TODO: this is not acceptable lol
 
     return ran_DN
-
-
-def get_wavelengths(light_fits):
-    """
-    Retrieves wavelengths for use from a given light file. This is done in more than one place,
-    so it was useful to make a dedicated function.
-
-    Parameters:
-    -----------
-    light_fits : astropy.io.fits instance
-                 File with light observation
-
-    Returns:
-    -----------
-    wavelength array as defined in the light_fits file.
-    """
-
-    # TODO: build in code that will account for the possible case where wavelengths shift per integration
-    return light_fits["Observation"].data["Wavelength"][0, 1, :]
