@@ -408,13 +408,13 @@ def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
     """
     binning = get_binning_scheme(hdul)
     n_int = get_n_int(hdul)
-    
-    # Retrieve indices at which to index the binned data 
+
+    # Retrieve indices at which to index the binned data
     spalo, spahi = spapixrange
     spabinlo, spabinhi, nspapix = pix_to_bin(hdul,
                                              spalo, spahi, 'SPA')
     spelo, spehi = spepixrange
-    spebinlo, spebinhi, nspepix = pix_to_bin(hdul, 
+    spebinlo, spebinhi, nspepix = pix_to_bin(hdul,
                                              spelo, spehi, 'SPE')
 
     npix = nspapix*nspepix
@@ -425,12 +425,12 @@ def get_avg_pixel_count_rate(hdul, spapixrange, spepixrange, return_npix=True):
     elif n_int == 1:
         # single integration
         countsperpix = np.sum(hdul['Primary'].data[spabinlo:spabinhi, spebinlo:spebinhi])/npix
-    else: # n_int > 1
-        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1,2))/npix    
-        
+    else:  # n_int > 1
+        countsperpix = np.sum(hdul['Primary'].data[:, spabinlo:spabinhi, spebinlo:spebinhi], axis=(1, 2))/npix
+
     countrate = np.atleast_1d(countsperpix)/hdul['Primary'].header['INT_TIME']
-    
+
     if return_npix:
         return countrate, npix
-    
+
     return countrate

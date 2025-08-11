@@ -1,5 +1,4 @@
 import numpy as np
-from maven_iuvs.instrument import get_wavelengths 
 
 def get_bin_edges(light_fits):
     """
@@ -21,6 +20,7 @@ def get_bin_edges(light_fits):
     """    
 
     # Grab the wavelengths 
+    from maven_iuvs.echelle import get_wavelengths 
     wavelengths = get_wavelengths(light_fits)
 
     # First calculate the differences between wavelengths
@@ -80,8 +80,8 @@ def get_binning_scheme(hdul):
 
 def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
     """
-    Converts pixels to bins on the detector in either the spatial or 
-    spectral dimenison. 
+    Converts pixels to bins on the detector in either the spatial or
+    spectral dimenison.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
     pix1 : int
            Highest pixel number in the given dimension to include
     spa_or_spe : string
-                 indicates whether this function will convert spatial or 
+                 indicates whether this function will convert spatial or
                  spectral pixels to bins
     return_npix : boolean
                   whether to return the total number of pixels calculated
@@ -108,51 +108,65 @@ def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
            number of total pixels in the enclosed bins
 
     """
-    binpixlo = hdul['Binning'].data[spa_or_spe+'PIXLO'][0]
-    binpixhi = hdul['Binning'].data[spa_or_spe+'PIXHI'][0]
-    binpixwidth = binpixhi+1 - binpixlo
-    nbins = len(binpixlo)
-    binlo = np.searchsorted(binpixlo, pix0+0.01) - 1
-    binlo = 0 if binlo < 0 else binlo
-    binhi = np.searchsorted(binpixhi, pix1-0.01) + 1
-    binhi = nbins if binhi > nbins else binhi
+    spapixbounds, spapixtransmit = get_bin_pix_boundaries(hdul, which="spatial")
+    i0_allbins = np.searchsorted(spapixbounds, pix0 + 0.01) - 1
+    i1_allbins = np.searchsorted(spapixbounds, pix1 + 0.01) - 1
+
+    # Check that the index found corresponds to a transmitted bin
+    if spapixtransmit[i0_allbins] == 0 or spapixtransmit[i1_allbins] == 0:
+        raise ValueError("selected pixel range falls outside transmitted data range!")
+
+    spapix_not_transmit = 1 - spapixtransmit
+
+    i0_transmitted_bins = i0_allbins - np.cumsum(spapix_not_transmit)[i0_allbins]
+    i1_transmitted_bins = i1_allbins - np.cumsum(spapix_not_transmit)[i1_allbins]
 
     if return_npix:
-        npix = np.sum(binpixwidth[binlo:binhi])
-        return binlo, binhi, npix
-    
-    return binlo, binhi
+        binpixwidth = hdul['Binning'].data[spa_or_spe+'BINWIDTH']
+        npix = np.sum(binpixwidth[i0_allbins:i1_allbins])
+        return i0_transmitted_bins, i1_transmitted_bins, npix
+
+    return i0_transmitted_bins, i1_transmitted_bins
 
 
-def get_pix_range(myfits, which="spatial"):
-    """
-    Given a fits observation, gets the range of pixels
-    for either the spatial or spectral dimension.
-    
+def get_bin_pix_boundaries(myfits, which):
+    """Given a fits observation, gets the bin lower boundaries in pixels,
+    and whether that bin was transmitted, for either the spatial or
+    spectral dimension.
+
     Parameters
     ----------
     myfits : astropy.io.fits instance
              IUVS FITS file in question
     which: string
            "spatial" or "spectral"
-           
+
     Returns
     ----------
-    Array of pixel values for bin edges.
+
+    pixboundaries: numpy array
+                   Inclusive lower pixel boundaries of all bins transmitted.
+                   Always starts with 0 and ends with 1024.
+    pixtransmit: numpy array
+                 Whether the relevant pixel was transmitted to the ground,
+                 and therefore included in the reported IUVS data arrays.
+
     """
-    pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
-    pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
 
-    if not (set((pixhi[:-1]+1)-pixlo[1:]) == {0}):
-        raise ValueError("Error in bin table")
+    pixwidth = myfits['Binning'].data[f'{which[:3]}binwidth'][0]
+    pixtransmit = myfits['Binning'].data[f'{which[:3]}bintransmit'][0]
 
-    pixrange = np.concatenate([[pixlo[0]], pixhi+1])
+    pixboundaries = np.cumsum(pixwidth)
+    pixboundaries = np.concatenate([[0], pixboundaries])
 
-    return pixrange
+    # raise Exception("stop here")
+
+    return pixboundaries, pixtransmit
 
 
-def get_npix_per_bin(myfits):
+def get_npix_per_bin(myfits, transmitted_only=True):
     """Calculates total pixels per bin.
+    Should work for both linear and nonlinear.
 
     Parameters
     ----------
@@ -164,11 +178,67 @@ def get_npix_per_bin(myfits):
     npixperbin : int
                  number of pixels per bin
     """
-    spapixrange = get_pix_range(myfits, which="spatial")
-    spepixrange = get_pix_range(myfits, which="spectral")
 
-    spepixwidth = spepixrange[1:]-spepixrange[:-1]
-    spapixwidth = spapixrange[1:]-spapixrange[:-1]
+    spebinwidth = myfits['Binning'].data['spebinwidth'][0]
+    spebintransmit = myfits['Binning'].data['spebintransmit'][0]
+    if transmitted_only:
+        spebinwidth = spebinwidth[np.where(spebintransmit == 1)]
 
-    npixperbin = np.outer(spapixwidth, spepixwidth)
+    spabinwidth = myfits['Binning'].data['spabinwidth'][0]
+    spabintransmit = myfits['Binning'].data['spabintransmit'][0]
+    if transmitted_only:
+        spabinwidth = spabinwidth[np.where(spabintransmit == 1)]
+
+    npixperbin = np.outer(spabinwidth, spebinwidth)
+
     return npixperbin
+
+
+def get_img_dimensions(myfits, which):
+    """Returns spectral or spatial extent of transmitted detector pixels.
+
+    Parameters
+    ----------
+    myfits: astropy FITS HDUList object
+            IUVS observation data file
+    which: string
+           "spatial" or "spectral"
+
+
+    Returns
+    ----------
+    pixrange : spectral or spatial width of transmitted detector pixels
+
+    """
+    pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
+    pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
+
+    pixrange = pixhi[-1]+1 - pixlo[0]
+
+    return pixrange
+
+def pad_data_with_missing_bins(myfits, data, pad_value=np.nan):
+    """Pads returned data with values for non-transmitted bins.
+
+    Parameters
+    ----------
+    myfits: astropy FITS HDUList object
+            IUVS observation data file
+    data: values to pad (same dimensions as transmitted bins,
+             (len(spepixlo), len(spapixlo))
+    pad_value: value to pad array with
+
+    Returns
+    ----------
+    padded_data: data of dimension (len(spebinwidth), len(spabinwidth))
+    """
+
+    spebounds, spetransmit = get_bin_pix_boundaries(myfits, "spectral")
+    spabounds, spatransmit = get_bin_pix_boundaries(myfits, "spatial")
+
+    padded_data = np.full((len(spatransmit), len(spetransmit)), pad_value)
+    is_spatransmit = (spatransmit == 1)
+    is_spetransmit = (spetransmit == 1)
+    padded_data[np.ix_(is_spatransmit, is_spetransmit)] = data
+
+    return padded_data
