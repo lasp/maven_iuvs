@@ -1759,12 +1759,12 @@ def make_fit_param_dict(thelist, is_fitparams=True, BU_bg=np.nan):
     name_list = None
 
     if is_fitparams:
-        inds = [i for i, p in enumerate(_fit_parameter_names)] if np.isnan(BU_bg) else _parameter_non_background_idxs
+        inds = [i for i, p in enumerate(_fit_parameter_names)] if np.isnan(BU_bg) else _fit_parameter_non_background_idxs
         for i in inds:
             param_dict[_fit_parameter_names[i]] = thelist[i]
         param_dict['central_wavelength_D'] = param_dict['central_wavelength_H'] - D_offset # nm
     else:
-        inds = [i for i, p in enumerate(_unc_parameter_names)] if np.isnan(BU_bg) else _parameter_non_background_idxs
+        inds = [i for i, p in enumerate(_unc_parameter_names)] if np.isnan(BU_bg) else _fit_parameter_non_background_idxs
         for i in inds:
             param_dict[_unc_parameter_names[i]] = thelist[i]
 
