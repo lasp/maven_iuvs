@@ -1368,7 +1368,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # Check if file is previous done
     new_filepath = l1c_savepath + (light_l1a_path.split('/')[-1]).replace('v14', 'v15').replace('l1a', 'l1c')
 
-    if os.path.isfile(new_filepath) and (overwrite==False):
+    if os.path.isfile(new_filepath) and (run_writeout==True) and (overwrite==False):
         print(f"Looking to see if {new_filepath} exists")
         print("file already exists, skipping write out")
         return 
