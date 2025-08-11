@@ -12,7 +12,7 @@ import re
 import gc
 from tqdm.auto import tqdm
 from pathlib import Path
-from maven_iuvs.binning import get_pix_range, get_bin_edges, get_binning_scheme
+from maven_iuvs.binning import get_bin_pix_boundaries, get_bin_edges, get_img_dimensions, get_binning_scheme
 from maven_iuvs.constants import D_offset
 from maven_iuvs.instrument import ech_Lya_slit_start, ech_Lya_slit_end, convert_spectrum_DN_to_photoevents
 from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadrature, background, \
@@ -24,7 +24,7 @@ from maven_iuvs.echelle import make_dark_index, downselect_data, add_in_quadratu
 from maven_iuvs.geometry import get_mean_mrh
 from maven_iuvs.graphics import color_dict, make_sza_plot, \
      make_tangent_lat_lon_plot, make_alt_plot
-from maven_iuvs.graphics.line_fit_plot import detector_image_echelle
+from maven_iuvs.graphics.line_fit_plot import detector_image
 from maven_iuvs.miscellaneous import iuvs_orbno_from_fname, \
     iuvs_segment_from_fname, get_n_int, iuvs_filename_to_datetime, orbno_RE, fn_noext_RE, fn_RE
 from maven_iuvs.search import find_files 
@@ -39,10 +39,11 @@ guideline_color = "xkcd:cool gray"
 
 # QUICKLOOK CODE =========================================================================================
 
+
 def run_quicklooks(ech_l1a_idx, selected_l1a=None, date=None, orbit=None, segment=None, start_k=0, savefolder=None, **kwargs):
     """
     Runs quicklooks for the files in ech_l1a_idx, downselected by either date, orbit, or segment.
-    
+
     Parameters
     ----------
     ech_l1a_idx : list of dictionaries
@@ -59,12 +60,12 @@ def run_quicklooks(ech_l1a_idx, selected_l1a=None, date=None, orbit=None, segmen
                  folder in which to save the quicklook and log file
     **kwargs : dictionary
                kwargs which may be passed to make_one_quicklook
-    
+
     Returns
     ----------
     Saved quicklooks
     """
-    
+
     dark_idx = make_dark_index(ech_l1a_idx)
     if selected_l1a is None:
         selected_l1a = downselect_data(ech_l1a_idx, date=date, orbit=orbit, segment=segment)
@@ -80,7 +81,8 @@ def run_quicklooks(ech_l1a_idx, selected_l1a=None, date=None, orbit=None, segmen
         
     # Files without geometry - list of file names
     no_geometry = [i['name'] for i in find_files_missing_geometry(selected_l1a)]
-           
+
+    # TODO: fix bug if "verbose" flag is missing from call
     lights_and_darks, files_missing_dark = pair_lights_and_darks(selected_l1a, dark_idx, verbose=kwargs["verbose"])
 
     # Arrays to keep track of which files were processed, which were already done, and which had problems
@@ -468,6 +470,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     # Here, the loops reset the percentile value to the maximum extent only if the value is
     # not specified in the function call.
     prange_full = [0, 100]
+    if prange is None:
+        prange = prange_full
     for p in range(len(prange)):
         if prange[p] is None:
             prange[p] = prange_full[p]
@@ -478,12 +482,14 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     if segment == "comm":
         prange = [0, 40]
-            
+
     # Then, if an absolute value has not been set, the code sets the value based on the percentile value.
+    if arange is None:
+        arange = [None, None]
     for a in range(len(arange)):
         if arange[a] is None:
             arange[a] = np.nanpercentile(all_data, prange[a])
-            
+
     if show_DN_histogram:
         pctles = [50, 75, 99, 99.9]
         pctle_vals = np.percentile(all_data, pctles)
@@ -501,15 +507,11 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
         ax.set_xlabel("DN")
         ax.set_ylabel("Freq")
         plt.show()
-    
-    # Collect pixel range, which will define the limits of final image
-    light_spapixrng = get_pix_range(light_fits, which="spatial")
-    light_spepixrng = get_pix_range(light_fits, which="spectral")
 
     # Calculate a multiplier we can use to set an equal aspect ratio
-    spatial_extent = light_spapixrng[-1] - light_spapixrng[0]
-    spectral_extent = light_spepixrng[-1] - light_spepixrng[0]
-    # aspect ratio in matplotlib set_aspect does y_size = x_size * aspect_ratio, so set the aspect ratio 
+    spatial_extent = get_img_dimensions(light_fits, "spatial")
+    spectral_extent = get_img_dimensions(light_fits, "spectral")
+    # aspect ratio in matplotlib set_aspect does y_size = x_size * aspect_ratio, so set the aspect ratio
     # so that spatial is scaled appropriately depending whether its larger or smaller than spectral extent
     if spatial_extent > spectral_extent:
         aspect_ratio = spectral_extent / spatial_extent  
@@ -578,12 +580,12 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     DetAxes[0].set_xlabel("Wavelength (nm)", fontsize=14+fontsizes[fs])
     DetAxes[0].set_ylabel("kR/nm", fontsize=14+fontsizes[fs]) 
     DetAxes[0].legend(fontsize=6+fontsizes[fs])
-    
+
     # Plot the main detector image -------------------------------------------------------------------------
-    detector_image_echelle(light_fits, detector_image_to_plot, light_spapixrng, light_spepixrng,
-                           fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
-                           prange=prange, arange=arange, 
-                           cbar_lbl_size=12+fontsizes[fs], cbar_tick_size=11+fontsizes[fs])
+    detector_image(light_fits, detector_image_to_plot,
+                   fig=QLfig, ax=DetAxes[1], scale="sqrt", plot_full_extent=False,
+                   prange=prange, arange=arange,
+                   cbar_lbl_size=12+fontsizes[fs], cbar_tick_size=11+fontsizes[fs])
 
     # Styling for main detector image axis
     DetAxes[1].axhline(ech_Lya_slit_start, linewidth=0.5, color="gainsboro")
@@ -596,38 +598,36 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     DetAxes[1].set_title(f"{'Median' if useframe=='median' else 'Coadded'} detector image (dark subtracted)", fontsize=17+fontsizes[fs])
     DetAxes[1].tick_params(which="both", labelsize=12+fontsizes[fs])
 
-    # Adjust the spectrum axis so that it's the same width as the coadded detector image axis -- this is necessary because setting the 
-    # aspect ratio of the coadded detector image axis changes its size in unpredictable ways.
+    # Adjust the spectrum axis so that it's the same width as the coadded detector image axis
+    #   -- this is necessary because setting the aspect ratio of the coadded detector image axis
+    #      changes its size in unpredictable ways.
     # left, bottom, width, height
     lm, _, wm, _ = DetAxes[1].get_position().bounds
     _, bs, _, hs = DetAxes[0].get_position().bounds
-    DetAxes[0].set_position([lm, bs, wm, hs]) # constrain the horizontal size using the main axis but keep the original vertical position and height    
- 
-    # Plot the dark frames ----------------------------------------------------------------------------------
-    d1_spapixrng = get_pix_range(dark_fits, which="spatial")
-    d1_spepixrng = get_pix_range(dark_fits, which="spectral")
+    DetAxes[0].set_position([lm, bs, wm, hs])  # constrain the horizontal size using the main axis
+                                               # but keep the original vertical position and height
 
-    detector_image_echelle(dark_fits, first_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
-                           arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
+    # Plot the dark frames ----------------------------------------------------------------------------------
+    detector_image(dark_fits, first_dark, fig=QLfig, ax=DarkAxes[0], scale="sqrt",
+                   arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
     DarkAxes[0].set_title("First dark", fontsize=16+fontsizes[fs])
     DarkAxes[1].set_title("Second dark", fontsize=16+fontsizes[fs])
     DarkAxes[2].set_title("Average dark", fontsize=16+fontsizes[fs])
 
     if n_ints_dark >= 2:
-        detector_image_echelle(dark_fits, second_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
-        # In the case of the average dark, there is no need to pass in num_frames > 1 since it is already accounted for in the creation of the average. 
-        detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
-        
+        detector_image(dark_fits, second_dark, fig=QLfig, ax=DarkAxes[1], scale="sqrt",
+                       arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
+        detector_image(dark_fits, avg_dark, fig=QLfig, ax=DarkAxes[2], scale="sqrt",
+                       arange=arange, show_colorbar=False, plot_full_extent=False, cmap=cmap)
+
     elif n_ints_dark==1:
         template = np.empty_like(second_dark)
         template[:] = np.nan
 
-        detector_image_echelle(dark_fits, template, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[1], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False)
-        detector_image_echelle(dark_fits, avg_dark, d1_spapixrng, d1_spepixrng, fig=QLfig, ax=DarkAxes[2], scale="sqrt", 
-                               arange=arange, show_colorbar=False, plot_full_extent=False)
+        detector_image(dark_fits, template, fig=QLfig, ax=DarkAxes[1], scale="sqrt",
+                       arange=arange, show_colorbar=False, plot_full_extent=False)
+        detector_image(dark_fits, avg_dark, fig=QLfig, ax=DarkAxes[2], scale="sqrt",
+                       arange=arange, show_colorbar=False, plot_full_extent=False)
         # Dark frame error messages 
         DarkAxes[1].text(0.1, 0.5, "No second dark frame", color="white", fontsize=16+fontsizes[fs], transform=DarkAxes[1].transAxes)
         DarkAxes[2].text(0.1, 0.5, "Average = only frame", color="white", fontsize=16+fontsizes[fs], transform=DarkAxes[2].transAxes)
@@ -636,7 +636,7 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
     if len(nan_dark_inds) != 0:
         for i in nan_dark_inds:
             DarkAxes[i].text(0, -0.05, "Dark frame with NaNs not included in dark subtraction.", fontsize=14, transform=DarkAxes[i].transAxes)
-    
+
     # Plot the geometry frames ---------------------------------------------------------------------------------
     if index_data_pair[0]['name'] in no_geo:
         GeoAxes[0].text(0.1, 0.9, "No geometry available", fontsize=14+fontsizes[fs], transform=GeoAxes[0].transAxes)
@@ -662,8 +662,8 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
         this_frame = data[i, :, :]
 
-        detector_image_echelle(light_fits, this_frame, light_spapixrng, light_spepixrng, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
-                               print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
+        detector_image(light_fits, this_frame, fig=QLfig, ax=ThumbAxes[i], scale="sqrt",
+                       print_scale_type=False, show_colorbar=False, arange=arange, plot_full_extent=False,)
         # print the alt
         thisalt = np.nanmean(light_fits['PixelGeometry'].data['PIXEL_CORNER_MRH_ALT'][i, get_ech_slit_indices(light_fits)[0]:get_ech_slit_indices(light_fits)[1]+1, -1])
         if not np.isnan(thisalt):
@@ -672,29 +672,6 @@ def make_one_quicklook(index_data_pair, light_path, dark_path, no_geo=None, show
 
     ThumbAxes[0].text(0, 1.1, f"{n_good_frames} total light frames co-added (pre-dark subtraction frames shown below; listed altitude is mean minimum ray height altitude across spatial dimension on slit):", fontsize=22, transform=ThumbAxes[0].transAxes)
 
-    # Block out the nonlinear bin portions on all the detector images
-    if 'bintbl' in get_binning_scheme(light_fits).keys():
-        bindat = light_fits['binning'].data
-        spabintrans = bindat['spabintransmit']
-        # Remove leading/trailing zeros...
-        spabintrans_trimmed = np.trim_zeros(spabintrans[0])
-        zi = np.array(np.where(spabintrans_trimmed==0))  # Find remaining zeros
-        untransmitted_rng = [bindat['spapixhi'][0, zi-1][0, 0] + 1, 
-                             bindat['spapixhi'][0, zi-1][0, 1]]
-        
-        # Gray-out the untransmitted bins on each detector image
-        axes_list = [DetAxes[1], *[DarkAxes[i] for i in range(3)], 
-                     *[ThumbAxes[i] for i in range(n_ints)]]
-        for a in axes_list:
-            a.fill_between(light_spepixrng, untransmitted_rng[0], 
-                            untransmitted_rng[1], 
-                            color="gray")
-            
-        # Add a text note on the coadded detector image axis
-        DetAxes[1].text(light_spepixrng[0], np.mean(untransmitted_rng),
-                        "Untransmitted bins", color="black", 
-                        fontsize=17+fontsizes[fs])
-        
     # Explanatory text printing ----------------------------------------------------------------------------------
     utc_obj = iuvs_filename_to_datetime(light_fits['Primary'].header['filename'])
     sol, My = utc_to_sol(utc_obj)

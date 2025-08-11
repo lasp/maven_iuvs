@@ -120,36 +120,46 @@ def pix_to_bin(hdul, pix0, pix1, spa_or_spe, return_npix=True):
     if return_npix:
         npix = np.sum(binpixwidth[binlo:binhi])
         return binlo, binhi, npix
-    
+
     return binlo, binhi
 
 
-def get_pix_range(myfits, which="spatial"):
-    """
-    Given a fits observation, gets the range of pixels
-    for either the spatial or spectral dimension. Should work for both
-    linear and nonlinear binning.
-    
+def get_bin_pix_boundaries(myfits, which):
+    """Given a fits observation, gets the bin lower boundaries in pixels,
+    and whether that bin was transmitted, for either the spatial or
+    spectral dimension.
+
     Parameters
     ----------
     myfits : astropy.io.fits instance
              IUVS FITS file in question
     which: string
            "spatial" or "spectral"
-           
+
     Returns
     ----------
-    Array of pixel values for bin edges.
+
+    pixboundaries: numpy array
+                   Inclusive lower pixel boundaries of all bins transmitted.
+                   Always starts with 0 and ends with 1024.
+    pixtransmit: numpy array
+                 Whether the relevant pixel was transmitted to the ground,
+                 and therefore included in the reported IUVS data arrays.
+
     """
-    pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
-    pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
 
-    pixrange = np.concatenate([[pixlo[0]], pixhi+1])
+    pixwidth = myfits['Binning'].data[f'{which[:3]}binwidth'][0]
+    pixtransmit = myfits['Binning'].data[f'{which[:3]}bintransmit'][0]
 
-    return pixrange
+    pixboundaries = np.cumsum(pixwidth)
+    pixboundaries = np.concatenate([[0], pixboundaries])
+
+    # raise Exception("stop here")
+
+    return pixboundaries, pixtransmit
 
 
-def get_npix_per_bin(myfits):
+def get_npix_per_bin(myfits, transmitted_only=True):
     """Calculates total pixels per bin.
     Should work for both linear and nonlinear.
 
@@ -163,11 +173,67 @@ def get_npix_per_bin(myfits):
     npixperbin : int
                  number of pixels per bin
     """
-    spapixrange = get_pix_range(myfits, which="spatial")
-    spepixrange = get_pix_range(myfits, which="spectral")
 
-    spepixwidth = spepixrange[1:]-spepixrange[:-1]
-    spapixwidth = spapixrange[1:]-spapixrange[:-1]
+    spebinwidth = myfits['Binning'].data['spebinwidth'][0]
+    spebintransmit = myfits['Binning'].data['spebintransmit'][0]
+    if transmitted_only:
+        spebinwidth = spebinwidth[np.where(spebintransmit == 1)]
 
-    npixperbin = np.outer(spapixwidth, spepixwidth)
+    spabinwidth = myfits['Binning'].data['spabinwidth'][0]
+    spabintransmit = myfits['Binning'].data['spabintransmit'][0]
+    if transmitted_only:
+        spabinwidth = spabinwidth[np.where(spabintransmit == 1)]
+
+    npixperbin = np.outer(spabinwidth, spebinwidth)
+
     return npixperbin
+
+
+def get_img_dimensions(myfits, which):
+    """Returns spectral or spatial extent of transmitted detector pixels.
+
+    Parameters
+    ----------
+    myfits: astropy FITS HDUList object
+            IUVS observation data file
+    which: string
+           "spatial" or "spectral"
+
+
+    Returns
+    ----------
+    pixrange : spectral or spatial width of transmitted detector pixels
+
+    """
+    pixlo = myfits['Binning'].data[f'{which[:3]}pixlo'][0]
+    pixhi = myfits['Binning'].data[f'{which[:3]}pixhi'][0]
+
+    pixrange = pixhi[-1]+1 - pixlo[0]
+
+    return pixrange
+
+def pad_data_with_missing_bins(myfits, data, pad_value=np.nan):
+    """Pads returned data with values for non-transmitted bins.
+
+    Parameters
+    ----------
+    myfits: astropy FITS HDUList object
+            IUVS observation data file
+    data: values to pad (same dimensions as transmitted bins,
+             (len(spepixlo), len(spapixlo))
+    pad_value: value to pad array with
+
+    Returns
+    ----------
+    padded_data: data of dimension (len(spebinwidth), len(spabinwidth))
+    """
+
+    spebounds, spetransmit = get_bin_pix_boundaries(myfits, "spectral")
+    spabounds, spatransmit = get_bin_pix_boundaries(myfits, "spatial")
+
+    padded_data = np.full((len(spatransmit), len(spetransmit)), pad_value)
+    is_spatransmit = (spatransmit == 1)
+    is_spetransmit = (spetransmit == 1)
+    padded_data[np.ix_(is_spatransmit, is_spetransmit)] = data
+
+    return padded_data

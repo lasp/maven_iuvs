@@ -20,7 +20,7 @@ import subprocess
 from tqdm.auto import tqdm
 from numpy.lib.stride_tricks import sliding_window_view
 import maven_iuvs as iuvs
-from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_pix_range
+from maven_iuvs.binning import get_bin_edges, get_binning_scheme, get_bin_pix_boundaries
 from maven_iuvs.constants import D_offset, IPH_wv_spread, IPH_minw, IPH_maxw
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
@@ -28,7 +28,7 @@ from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoeven
                                    ran_DN_uncertainty
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
-    orbno_RE, find_nearest, fn_RE, orbit_folder, findDiff, \
+    orbno_RE, fn_RE, orbit_folder, findDiff, \
     relative_path_from_fname
 from maven_iuvs.geometry import has_geometry_pvec, get_mean_mrh
 from maven_iuvs.pds import get_pds_dates
@@ -1297,22 +1297,36 @@ def find_files_with_geometry(file_index):
 
 def get_ech_slit_indices(light_fits):
     """
-    Get the indices along the spatial dimension of the detector array that correspond 
-    to the beginning and end of the echelle slit. 
+    Get the indices along the spatial dimension of the transmitted
+    detector array that correspond to the beginning and end of the
+    echelle slit.
 
-    Parameters 
+    Parameters
     ----------
     light_fits : astropy.io.fits instance
                  File with light observation
 
-    Returns 
+    Returns
     ----------
-    list containing slit_i1, slit_i2, the indices of the start and end of the slit. 
+    list containing slit_i1, slit_i2, the indices of the start and end of the slit.
+
     """
-    spapixrng = get_pix_range(light_fits, which="spatial")
-    slit_i1 = find_nearest(spapixrng, ech_Lya_slit_start)[0]  # start of slit
-    slit_i2 = find_nearest(spapixrng, ech_Lya_slit_end)[0]  # end of slit
-    return [slit_i1, slit_i2]
+    # TODO: convert this to use binning.pix_to_bin
+
+    spapixbounds, spapixtransmit = get_bin_pix_boundaries(light_fits, which="spatial")
+    slit_i1_allbins = np.searchsorted(spapixbounds, ech_Lya_slit_start) - 1
+    slit_i2_allbins = np.searchsorted(spapixbounds, ech_Lya_slit_end) - 1
+
+    # Check that the index found corresponds to a transmitted bin
+    if spapixtransmit[slit_i1_allbins] == 0 or spapixtransmit[slit_i2_allbins] == 0:
+        raise ValueError("ends of echelle slit fall outside transmitted data range!")
+
+    spapix_not_transmit = 1 - spapixtransmit
+
+    slit_i1_transmitted_bins = slit_i1_allbins - np.cumsum(spapix_not_transmit)[slit_i1_allbins]
+    slit_i2_transmitted_bins = slit_i2_allbins - np.cumsum(spapix_not_transmit)[slit_i1_allbins]
+
+    return [slit_i1_transmitted_bins, slit_i2_transmitted_bins]
 
 
 # L1c processing ===========================================================

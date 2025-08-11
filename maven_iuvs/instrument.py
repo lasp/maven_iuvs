@@ -305,8 +305,8 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     ran_DN : Array
              Random DN uncertainty, with the same shape as dark_subtracted_and_cleaned_data.
     """
-    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0]) 
-    
+    volt = mcp_dn_to_volt(light_fits['Engineering'].data['MCP_GAIN'][0])
+
     # Get pix per bin, which is  called 'nbins' in Matteo's original workup
     npix_eachbin = get_npix_per_bin(light_fits)
     # This is spe_size * spa_size, pixels per bin in spatial x spectral space.
@@ -314,12 +314,12 @@ def ran_DN_uncertainty(light_fits, dark_subtracted_and_cleaned_data):
     if ~(np.diff(npix_eachbin) == 0).all():
         raise ValueError("Some problem with the binning scheme. Unhandled nonlinearly binned file?")
 
-    npix_perbin = npix_eachbin[0,0] # Assuming everything is k, we can do this
+    npix_perbin = npix_eachbin[0, 0]  # Assuming everything is k, we can do this
 
     # Following lines are from the IDL pipeline, file: 
     sigma_background = 4313 * math.sqrt(light_fits["Primary"].header["INT_TIME"]/60) * math.sqrt(npix_perbin/480.)/(2**((850-volt)/50.)) 
     fit_function = 40 / (2**((700-volt)/50))
-    
+
     # This is the correct shape, not sure if it's reasonable values though:
     ran_DN_sq = dark_subtracted_and_cleaned_data * fit_function + sigma_background**2
     # if np.any(ran_DN_sq < 0.):
