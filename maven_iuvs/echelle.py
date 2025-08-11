@@ -2092,7 +2092,7 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
                                 stdout=outputfile, stderr=errorfile, 
                                 text=True, bufsize=1)
         proc.stdin.write(".com write_l1c_file_from_python.pro\n")
-        time.sleep(3) # Be sure it's compiled 
+        time.sleep(5) # Be sure it's compiled 
         print("IDL is now open and the script should be compiled")
     else:
         if proc_passed_in is None:
