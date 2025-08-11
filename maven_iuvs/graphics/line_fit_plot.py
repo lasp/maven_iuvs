@@ -34,6 +34,10 @@ def detector_image_echelle(myfits, data, spapixrange, spepixrange, num_frames=1,
 
     # Collect number of pixels per bin to correctly display data
     npixperbin = get_npix_per_bin(myfits)
+
+    assert data.shape==npixperbin.shape, \
+           f"Error: Data array shape {data.shape} != " \
+           f"npixperbin array shape {npixperbin.shape}"
     
     # Divide out the number of pix per bin
     # Total frames are already divided out elsewhere (in coadd_lights)   
@@ -74,7 +78,11 @@ def detector_image(myfits, integration=0, **kwargs):
     spapixrange = get_pix_range(myfits, which="spatial")
     spepixrange = get_pix_range(myfits, which="spectral")
     npixperbin = get_npix_per_bin(myfits)
-            
+
+    assert data.shape==npixperbin.shape, \
+           f"Error: Data array shape {data.shape} != " \
+           f"npixperbin array shape {npixperbin.shape}"
+      
     data = data / npixperbin
 
     fig = plot_detector(data, spapixrange, spepixrange, **kwargs)
