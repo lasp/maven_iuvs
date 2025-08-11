@@ -1381,10 +1381,6 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     # ===============================================================================================
     ints_to_fit = {"first": 1}.get(ints_to_fit, get_n_int(light_fits))
 
-    # Collect binning and pixel information
-    # ===============================================================================================
-    binning_df = get_binning_df(calibration=calibration)
-
     # Dark subtraction
     # =========================================================================
     dark_sub_data, _, i_bad = subtract_darks(light_fits, dark_fits)
@@ -1408,9 +1404,12 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
 
     # An alternate fit using a BU-style background
     # ===============================================================================================   
-    if do_BU_background_comparison: 
+
+    if do_BU_background_comparison:
+        # TODO: This can be updated to not use the hand-coded df.
+        binning_df = get_binning_df(calibration=calibration)
         binning_info_dict = binning_df.loc[(binning_df['Nspa'] == get_binning_scheme(light_fits)["nspa"]) & (binning_df['Nspe'] == get_binning_scheme(light_fits)["nspe"])]
-        backgrounds_BU = make_BU_background(nice_data, binning_info_dict['back_rows_arr'].values[0], get_n_int(light_fits), 
+        backgrounds_BU = make_BU_background(processed_data, binning_info_dict['back_rows_arr'].values[0], get_n_int(light_fits), 
                                             binning_info_dict, calibration=calibration)
         I_fit_BUbg, \
             H_fit_BUbg, D_fit_BUbg, IPH_fit_BUbg, \
