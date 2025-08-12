@@ -753,7 +753,9 @@ def subtract_darks(light_fits, dark_fits):
 
     light_data = light_fits['Primary'].data
 
-    # Retrieve dark frames
+    # Retrieve dark frames. Note that get_dark_frames checks to see if the dark
+    # file only has one frame. If that's the case, it creates a second frame, 
+    # but sets it to nan. 
     darks = get_dark_frames(dark_fits)
     first_dark = darks[0, :, :]
     second_dark = darks[1, :, :]
@@ -830,7 +832,8 @@ def subtract_darks(light_fits, dark_fits):
         nan_dark_inds.append(0)
         light_frames_with_nan_dark.append(0)
 
-        # Ideally we'd use the first dark in this case, but we can't if it sucks.
+        # A bad 1st dark can't be used for light frames 1-n_int in early files
+        # that only had 1 dark frame.
         if not second_dark_exists:
             nan_dark_inds.append(1)  # mark it as a bad dark 
             light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
