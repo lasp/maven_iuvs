@@ -482,13 +482,15 @@ def update_filenames_in_light_dark_key(keyfile, ech_l1a_idx, dark_idx,
     return MASTER_KEY, changes, problems
 
 
-def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx, 
+def add_new_files_to_light_dark_key(key_filename, ech_l1a_idx, dark_idx, 
                                 ld_folder=f"{idl_pipeline_dir}light-dark-pair-lists/"):
     """
-    A wrapper for make_light_and_dark_pair_CSV() that, when called, adds new 
-    filest to the light/dark key. Does not update names. This function is 
-    intended to be run periodically as new data come down -- it only ensures 
-    the key is up to date. it does not update older files in any way.
+    Previously named 'update_master_lightdark_key'. A wrapper for 
+    make_light_and_dark_pair_CSV() that, when called, adds new files to the 
+    light/dark key. Does not update names. This function is intended to be run 
+    periodically as new data come down -- it only ensures the key is up to 
+    date. it does not update older files in any way. For that functionality, 
+    use update_filenames_in_light_dark_key().
 
     Parameters
     ----------
