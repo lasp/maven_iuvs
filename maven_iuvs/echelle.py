@@ -724,9 +724,7 @@ def coadd_lights(data, n_good):
            detector image data, size (frames, spatial, wavelength)
     n_good : int
              number of valid frames of data used, calculated by subtract_darks.
-    exclude_frames : list
-                     list of page indices to ignore in the data cube because 
-                     they are saturated or broken in some way
+
     Returns
     ----------
     coadded_lights : array
