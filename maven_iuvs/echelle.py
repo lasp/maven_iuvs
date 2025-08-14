@@ -32,7 +32,8 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     relative_path_from_fname
 from maven_iuvs.geometry import has_geometry_pvec, get_mean_mrh
 from maven_iuvs.pds import get_pds_dates
-from maven_iuvs.search import get_latest_files, find_files
+from maven_iuvs.search import get_latest_files, find_files, dropxml, \
+    get_default_data_directory
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
 from maven_iuvs.user_paths import l1a_dir, idl_pipeline_dir
@@ -344,8 +345,8 @@ def update_filenames_in_light_dark_key(keyfile, ech_l1a_idx, dark_idx,
     Parameters
     ----------
     keyfile : string
-              .csv file containing columns 'Light Folder', 'Light', 'Dark  
-              Folder', 'Dark', 'DTobj, 'Segment'.
+              Full path to .csv file containing columns 'Light Folder', 
+              'Light', 'Dark Folder', 'Dark', 'Segment', 'DTobj'.
     ech_l1a_idx : list of dictionaries
                   Metadata of local files, used to determine newest filename.
     dark_idx : list of dictionaries
@@ -362,124 +363,139 @@ def update_filenames_in_light_dark_key(keyfile, ech_l1a_idx, dark_idx,
     problems : pandas DataFrame
                Files that caused a problem
     """
+     def find_match_on_disk(key_filename, parent_folder):
+        """
+        Subroutine to search for a similarly named file on the local disk.
+
+        Parameters
+        ----------
+        key_filename : string
+                    Filename as stored in the light_dark key
+        parent_folder : string
+                        parent folder of the above
+        Returns
+        ----------
+        disk_filename : string
+                        Name of best-match file on local disk
+        """
+
+        # get the base filename
+        df_fn_base = re.match(iuvs.miscellaneous.fn_no_version_RE, df_filename)[0]
+
+        # Look for the matching file on disk 
+        disk_filename = None
+        for f in orbit_folder_cache[parent_folder]:
+            if df_fn_base in f:
+                disk_filename = f
+                break
+        
+        return disk_filename
+
+    def name_should_be_updated(key_name, disk_name):
+        """
+        Returns true if the filename on disk is production instead of stage, 
+        or if it has the same level as the name in the light/dark key but a 
+        higher revision number.
+        """
+
+        # Order of revisions to prefer - higher is preferred; index will define it
+        r_s = ["s", "r"]
+    
+        key_rev = key_name.split('.fits.gz')[0][-3:]
+        disk_rev = disk_name.split('.fits.gz')[0][-3:]
+
+        if (key_rev != disk_rev): 
+            # Whether disk revision is higher than key
+            disk_rev_newer = r_s.index(disk_rev[0]) > r_s.index(key_rev[0])
+            rev_eq = r_s.index(disk_rev[0]) == r_s.index(key_rev[0])
+            disk_rev_num_newer = int(disk_rev[1:]) > int(key_rev[1:])
+            
+            # Only make an update if the file on disk has a higher total revision than the key 
+            if disk_rev_newer or (rev_eq and disk_rev_num_newer):
+                return True
+            else:
+                return False
+        
     MASTER_KEY = pd.read_csv(keyfile)
 
     changes = {"row": [], "oldname": [], "newname": []}
     problems = {"row": [], "oldname": [], "newname": []}
 
-    # Precompile regex
-    versioned_pat = re.compile(r"^(?P<base>mvn.+?)_(r|s)(?P<rev>\d+)(?P<ext>\.fits\.gz)$")
-
-    # Cache for folder listings
-    light_folder_cache = {}
-    dark_folder_cache = {}
-
     new_lightnames = MASTER_KEY["Light"].copy()
     new_darknames = MASTER_KEY["Dark"].copy()
 
-    for i, row in tqdm(MASTER_KEY.iterrows(), total=len(MASTER_KEY)):
+    # Cache folder list
+    # Get subdirectories
+    whichdir = {"v13": "l1a", "v14": "l1a_full_mission_reprocess"}[v]
+    l1adir = get_default_data_directory(whichdir)
+    orbit_folders = [a.name for a in Path(l1adir).iterdir() if a.is_dir()]
+    if "cruise" in orbit_folders:
+        orbit_folders.remove("cruise")
 
-        # Lights
+    # Cache lists of files on disk
+    orbit_folder_cache = {}
+    for o in orbit_folders:
+        orbit_folder_cache[l1adir + o + "/"] = dropxml(os.listdir(l1adir + o))
+
+    # Keep[ track of any missing lights that seem to have once existed
+    lights_not_on_disk_but_in_key = []
+    
+    for i, row in tqdm(MASTER_KEY.iterrows(), total=len(MASTER_KEY)):
         lfolder = row["Light Folder"]
         dfolder = row["Dark Folder"]
-        original_lightname = row["Light"]
-        original_darkname = row["Dark"]
+        key_lightname = row["Light"]
+        key_darkname = row["Dark"]
 
-        # Cache file list in this folder
-        if lfolder not in light_folder_cache:
-            light_folder_cache[lfolder] = os.listdir(lfolder)
+        # Lights --------------------------------------------------------------
+        disk_lightname = find_match_on_disk(key_lightname, lfolder)
 
-        # Extract base name and extension
-        lmatch = versioned_pat.match(original_lightname)
-        if not lmatch:
-            problems["row"].append(i)
-            problems["oldname"].append(original_lightname)
-            problems["newname"].append("Regex match failed")
+        # Catch scenario where light in keyfile is no longer on disk 
+        # (may occur if a reprocess is done and a file is missed)
+        if disk_lightname is None: 
+            lights_not_on_disk_but_in_key.append(key_lightname)
             continue
-
-        base = lmatch.group("base")
-        rev = int(lmatch.group("rev"))
-        ext = lmatch.group("ext")
-
-        # Find all matching versions in the folder
-        lmatches = []
-        for f in light_folder_cache[lfolder]:
-            m = versioned_pat.match(f)
-            if m:
-                f_base = m.group("base")
-                f_rev = int(m.group("rev"))
-                f_ext = m.group("ext")
         
-                if f_base == base and f_ext == ext:
-                    lmatches.append((f, f_rev))
-        
-        if lmatches:
-            newest_file = max(lmatches, key=lambda x: x[1])[0]
-            if original_lightname != newest_file:
-                new_lightnames.loc[i] = newest_file
-                changes["row"].append(i)
-                changes["oldname"].append(original_lightname)
-                changes["newname"].append(newest_file)
+        if name_should_be_updated(key_lightname, disk_lightname):
+            new_lightnames.loc[i] = disk_lightname
+            changes["row"].append(i)
+            changes["oldname"].append(key_lightname)
+            changes["newname"].append(disk_lightname)
 
-        # DARKS ------------------------------
-        if dfolder not in dark_folder_cache:
-            dark_folder_cache[dfolder] = os.listdir(dfolder)
-           
-         # Extract base name and extension
-        dmatch = versioned_pat.match(original_darkname)
-        if not dmatch:
-            problems["row"].append(i)
-            problems["oldname"].append(original_darkname)
-            problems["newname"].append("Regex match failed")
-            continue
-
-        dbase = dmatch.group("base")
-        drev = int(dmatch.group("rev"))
-        dext = dmatch.group("ext")
-
-        # Find all matching versions in the folder
-        dmatches = []
-        for f in dark_folder_cache[dfolder]:
-            m = versioned_pat.match(f)
-
-            if m:
-                f_base = m.group("base")
-                f_rev = int(m.group("rev"))
-                f_ext = m.group("ext")
-        
-                if f_base == dbase and f_ext == dext:
-                    dmatches.append((f, f_rev))
-        
-        if dmatches:
-            newest_dfile = max(dmatches, key=lambda x: x[1])[0]
-            if original_darkname != newest_dfile:
-                new_darknames.loc[i] = newest_dfile
-                changes["row"].append(i)
-                changes["oldname"].append(original_darkname)
-                changes["newname"].append(newest_dfile)
+        # Darks ---------------------------------------------------------------
+        if key_darkname=="No valid dark found": 
+            # This means we've already investigated this light file 
+            continue 
         else:
-            # IF there is no such file found, go nuclear 
-            # get idx: iuvs.echelle.
-            # iuvs.echelle.find_dark_options(input_light_idx, idx_list_to_search)
-            dpath, dfname = iuvs.echelle.get_dark_path(row["Light Folder"]+row["Light"], 
-                                                       ech_l1a_idx, dark_idx, return_sep=True)
-            if original_darkname != dfname:
-                new_darknames.loc[i] = dfname
+            disk_darkname = find_match_on_disk(key_darkname, dfolder)
+
+            if disk_darkname is None: 
+                 # This is the spot for the biggest potential for slowdown. 
+                 # Luckily, it will only be slow hopefully the first time. 
+                 # The function is fast as long as new darks aren't needed.
+                dpath, disk_darkname = get_dark_path(lfolder + key_lightname, 
+                                                     ech_l1a_idx, dark_idx, 
+                                                     return_sep=True)
+                new_darknames.loc[i] = disk_darkname
                 changes["row"].append(i)
-                changes["oldname"].append(original_darkname)
-                changes["newname"].append(dfname)
+                changes["oldname"].append(key_darkname)
+                changes["newname"].append(disk_darkname)
+            else: 
+                if name_should_be_updated(key_darkname, disk_darkname):
+                    new_darknames.loc[i] = disk_darkname
+                    changes["row"].append(i)
+                    changes["oldname"].append(key_darkname)
+                    changes["newname"].append(disk_darkname)
 
     # Apply updates once
     MASTER_KEY["Light"] = new_lightnames
     MASTER_KEY["Dark"] = new_darknames
     
-
     if verbose and changes["row"]:
         print(f"Updated filenames for {len(changes['row'])} files to current version.")
         for i, o, n in zip(changes["row"], changes["oldname"], changes["newname"]):
             print(f"Row {i}: {o} ---> {n}")
 
-    return MASTER_KEY, changes, problems
+    return MASTER_KEY, changes, problems, lights_not_on_disk_but_in_key
 
 
 def add_new_files_to_light_dark_key(key_filename, ech_l1a_idx, dark_idx, 
