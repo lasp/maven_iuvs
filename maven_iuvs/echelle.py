@@ -797,7 +797,8 @@ def subtract_darks(light_fits, dark_fits):
         first_dark_good = False
     
     # Check that second dark exists - early in mission, we didn't always take 2 darks.
-    # In those cases we should use the first dark.
+    # In those cases we should use the first dark. An all nan second_dark is 
+    # guaranteed by get_dark_frames() above if only one dark frame exists
     second_dark_exists = True 
     if np.isnan(second_dark).all():
         second_dark_exists = False 
