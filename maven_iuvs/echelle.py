@@ -537,7 +537,7 @@ def add_new_files_to_light_dark_key(key_filename, ech_l1a_idx, dark_idx,
     # it the same fn if you want); this version append's today's date
     final_filename = f"{key_filename[:-15]}_{datetime.datetime.now().date()}.csv"
     make_light_and_dark_pair_CSV(ech_l1a_idx, dark_idx, l1a_dir,
-                                 csv_path=ld_folder + final_filename,
+                                 csv_name=final_filename,
                                  make_csv_for="selection",
                                  starting_df=MASTER_KEY_TIMESORT, 
                                  date=[last_time, -1])
@@ -545,6 +545,7 @@ def add_new_files_to_light_dark_key(key_filename, ech_l1a_idx, dark_idx,
 
 
 def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
+                                 csv_path=f"{idl_pipeline_dir}light-dark-pair-lists/",
                                  csv_name="lights_and_darks.csv", 
                                  make_csv_for="PDS", PDS=0, version="v13",
                                  starting_df=None, **kwargs):
