@@ -334,12 +334,15 @@ def get_file_version(orbit_number, data_directory,
 
 def get_latest_files(files):
     """
-    Given a list of input files, return the most recent version of each file.
+    Given a list of input files, return the most recent version of each file
+    from within the list.
 
     Prefers highest version number, then production files to stage files,
     and finally highest revision number.
 
-    NOTE: This only works if multiple versions of the files are in the list.
+    NOTE: This function can't identify newer versions outside the list 
+    (e.g., it can't be used to determine if the echelle metadata index is up 
+    to date with the most recently downloaded files).
 
     Preserves order of initial list.
 
