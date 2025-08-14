@@ -1154,12 +1154,17 @@ def get_lya_countrates(idx_entry):
 def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     """
     Collect the metadata for all files within the_dir. May contain
-    subdirectories.
+    subdirectories. Adds new files to the metadata file, and ensures that only 
+    the most recent verison of the file is stored in the metadata index.
 
     Parameters
     ----------
     the_dir : string
               path to directory containing observation data files
+    geospatial : bool
+                 Whether to work with the metadata file that includes 
+                 a summary of geophysical data such as min/max SZA, lat/lon,
+                 and local time.
     new_files_limit : int
                       Optional restriction on number of new files to add
                       at one time.
@@ -1254,7 +1259,8 @@ def get_file_metadata(fname, geospatial=False):
 
     Returns
     -------
-    dictionary
+    metadata_dict : dictionary
+                    observation metadata for fname.
     """
     
     this_fits = fits.open(fname) 
@@ -1307,7 +1313,8 @@ def get_file_metadata(fname, geospatial=False):
 
 def update_metadata_file(the_data_dir, idx_file, geospatial=False):
     """
-    Updates the index file with either missing keys or geometry information, after it has come in.
+    Updates the index file with either missing keys or geometry information, 
+    after it has come in.
     
     Parameters
     ----------
@@ -1380,9 +1387,10 @@ def update_metadata_file(the_data_dir, idx_file, geospatial=False):
 
 def file_metadata_is_missing_geom(metadata_dict):
     """
-    Similar to has_geometry_pvec(), this function determines if the metadata entry in the .npy 
-    index file has nans entered for the geometry. This is a faster way to determine if geometry
-    is missing and needs to be filled in in the index file.
+    Similar to has_geometry_pvec(), this function determines if the metadata 
+    entry in the .npy metadata file has None entered for the geometry. This is 
+    a faster way to determine if geometry entries are missing and need to be 
+    filled in.
 
     Parameters
     ----------
@@ -1394,16 +1402,23 @@ def file_metadata_is_missing_geom(metadata_dict):
     True / False
 
     """
-    # There may be some entries where a string was stored saying something like 'This entry doesn't exist' so control for that.
-    whether_geom_is_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | (metadata_dict['minmax_SZA'] is None)),
-                                          ((type(metadata_dict['med_SZA']) is str) | (metadata_dict['med_SZA'] is None)),
-                                          ((type(metadata_dict['minmax_lat']) is str) | (metadata_dict['minmax_lat'] is None)),
-                                          ((type(metadata_dict['minmax_lon']) is str) | (metadata_dict['minmax_lon'] is None)),
-                                          ((type(metadata_dict['min_lt']) is str) | (metadata_dict['min_lt'] is None)),
-                                          ((type(metadata_dict['max_lt']) is str) | (metadata_dict['max_lt'] is None))
-                                        ])
+    # There may be some entries where a string was stored, so check for strings
+    # and Nones.
+    geom_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | 
+                                (metadata_dict['minmax_SZA'] is None)),
+                                ((type(metadata_dict['med_SZA']) is str) | 
+                                 (metadata_dict['med_SZA'] is None)),
+                                ((type(metadata_dict['minmax_lat']) is str) | 
+                                 (metadata_dict['minmax_lat'] is None)),
+                                ((type(metadata_dict['minmax_lon']) is str) | 
+                                 (metadata_dict['minmax_lon'] is None)),
+                                ((type(metadata_dict['min_lt']) is str) | 
+                                 (metadata_dict['min_lt'] is None)),
+                                ((type(metadata_dict['max_lt']) is str) | 
+                                 (metadata_dict['max_lt'] is None))
+                            ])
 
-    if whether_geom_is_missing.any():
+    if geom_missing.any():
         return True
     else:
         return False
@@ -1411,7 +1426,8 @@ def file_metadata_is_missing_geom(metadata_dict):
 
 def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     """
-    Updates the index file for rootpath, where the index file has the form <rootpath>_metadata.npy.
+    Updates the index file for rootpath, where the index file has the form 
+    <rootpath>_metadata.npy.
     
     Parameters
     ----------
