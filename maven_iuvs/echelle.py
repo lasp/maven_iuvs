@@ -48,7 +48,8 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import config as jax_config
 #jax_config.update('jax_disable_jit', True)
-
+import threading
+import queue
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -1549,7 +1550,9 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
                        return_each_line_fit=True, do_BU_background_comparison=False, 
                        run_writeout=True, overwrite=False, 
                        make_plots=True, 
-                       idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
+                       idl_process_kwargs = {"open_idl": False, "proc": None, 
+                                             "stderr_queue": None, 
+                                             "stderr_thread": None},
                        clean_data_kwargs = {"clean_method": "new", "remove_rays": True, "remove_hotpix": True},
                        plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
     """
@@ -1582,7 +1585,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     plot_kwargs : dict 
                   kwargs which may be passed to the plotting routines to control plot appearance.
     idl_process_kwargs : dict
-                         kwargs for passing to write_l1c
+                         kwargs for passing to write_l1c_file_from_python
     **kwargs : kwargs
                other kwargs for passing to fit_flat_data()
     
@@ -2148,8 +2151,8 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
 
 def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
                  fit_params_list, fit_unc_list, I_fit, H_fit, D_fit, IPH_fit, bg_fit,
-                 bright_data_ph_per_s_array, 
-                 idl_pipeline_folder=idl_pipeline_dir, open_idl=True, proc_passed_in=None):
+                 bright_data_ph_per_s_array, idl_pipeline_folder=idl_pipeline_dir, 
+                 open_idl=True, proc=None, stderr_queue=None, stderr_thread=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
 
@@ -2175,9 +2178,14 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
                           Location of the IDL pipeline code on the local computer 
     open_idl : bool
                if True, the IDL process will be started inside this function.
-    proc_passed_in : subprocess instance
-                     subprocess process instance, will be written to if open_idl 
-                     is False.
+    proc : subprocess instance
+           subprocess process instance, will be written to if open_idl 
+           is False.
+    stderr_queue: queue.Queue() instance
+                  for keeping track of output to stderr from subprocess
+    stderr_thread: threading.Thread() instance
+                   for watching for the message saying that compilation of 
+                   write_l1c_file_from_python.pro has succeeded
     
     Returns
     ----------
@@ -2280,34 +2288,110 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
 
     # Now call IDL
     if open_idl is True:
-        print("Opening IDL")
-        os.chdir(idl_pipeline_folder) # iuvs.__path__[0]
-        outputfile = open(l1c_savepath + "IDLoutput.txt", "w")
-        errorfile = open(l1c_savepath + "IDLerrors.txt", "w")
-
-        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, 
-                                stdout=outputfile, stderr=errorfile, 
-                                text=True, bufsize=1)
-        proc.stdin.write(".com write_l1c_file_from_python.pro\n")
-        time.sleep(5) # Be sure it's compiled 
-        print("IDL is now open and the script should be compiled")
+        proc, stderr_queue, stderr_thread = open_IDL_and_compile_writeout_script(l1c_savepath)
     else:
-        if proc_passed_in is None:
-            raise Exception("Please pass in the subprocess proc")
-        proc = proc_passed_in
-    
+        if (proc is None) or (stderr_queue is None) or (stderr_thread is None):
+            raise Exception("Please pass in the subprocess proc, stderr_queue, "
+                            "and stderr_thread")
+        proc = proc
+        stderr_queue = stderr_queue
+        stderr_thread = stderr_thread
+
+    output_log = l1c_savepath + "IDLoutput.txt"
+    stdout_queue = queue.Queue()
+    stdout_thread = threading.Thread(target=start_reader, args=(proc.stdout, 
+                                                                stdout_queue, 
+                                                                output_log), 
+                                                          daemon=True)
+    stdout_thread.start()
+
     proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
                      '{dark_l1a_path}', '{l1c_savepath}'\n")
     # The rest of the arguments are provided as default keywords cause the same 
     # files get used over and over again to store the stuff transmitted to IDL
-    time.sleep(1)  # Allow enough time to complete the file writeout
     proc.stdin.flush()
+
+    file_process_success = "FINISHED! If you see this message in the IDL log or terminal when calling from Python, the IDL script succeeded"
+    if wait_for_last_phrase(stdout_queue, file_process_success):
+        print(f"File and label writeout succeeded")
+    else:
+        print(f"Python detects that an error occurred in IDL")
 
     if open_idl is True:
         proc.terminate() 
 
     return 
 
+
+def open_IDL_and_compile_writeout_script(l1c_savepath, errlogname="IDLerrors.txt"):
+    print("Opening IDL")
+    os.chdir(idl_pipeline_dir)
+    
+    err_log = l1c_savepath + errlogname
+    print(f"Creating err log in {l1c_savepath}")
+
+    proc = subprocess.Popen(["stdbuf", "-oL", "-eL", "idl", "-quiet"],
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True, bufsize=1)
+    
+    stderr_queue = queue.Queue()
+    
+    # Start background readers
+    stderr_thread = threading.Thread(target=start_reader, args=(proc.stderr, stderr_queue, err_log), daemon=True)
+    stderr_thread.start()
+
+    proc.stdin.write(".com write_l1c_file_from_python.pro\n")
+    proc.stdin.flush()
+
+    if wait_for_last_phrase(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
+        print("✅ Compiled write_l1c_file_from_python.")
+    else:
+        print("❌ Compile failed.")
+    
+    return proc, stderr_queue, stderr_thread
+
+
+def start_reader(pipe, output_queue, log_file_path):
+    """
+    Continuously read from a pipe (stdout or stderr), line by line,
+    writing to a queue and logging to a file.
+    """
+    with open(log_file_path, 'a', encoding='utf-8') as log_file:
+        for line in iter(pipe.readline, ''):
+            log_file.write(line)
+            log_file.flush()
+            decoded = line.rstrip()
+            output_queue.put(decoded)
+
+    pipe.close()
+
+
+def wait_for_last_phrase(output_queue, target_phrase, timeout=30):
+    """
+    Read lines from a queue until the last one matches the target_phrase.
+    Times out after `timeout` seconds.
+    """
+    start_time = time.time()
+    buffer = []
+
+    while True:
+        try:
+            line = output_queue.get(timeout=0.1)
+            buffer.append(line)
+        except queue.Empty:
+            pass
+
+        # Break if time exceeded
+        if time.time() - start_time > timeout:
+            print("⏰ Timeout waiting for phrase.")
+            return False
+
+        # If buffer is not empty and last line matches
+        if buffer and buffer[-1].strip() == target_phrase:
+            return True
+        
 
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
