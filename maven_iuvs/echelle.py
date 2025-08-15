@@ -22,6 +22,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 import maven_iuvs as iuvs
 from maven_iuvs.binning import get_bin_edges, pix_to_bin, get_binning_scheme, get_bin_pix_boundaries
 from maven_iuvs.constants import D_offset, IPH_wv_spread, IPH_minw, IPH_maxw
+from maven_iuvs.download import get_default_data_directory
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
                                    ech_Lya_slit_start, ech_Lya_slit_end, \
@@ -32,8 +33,7 @@ from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     relative_path_from_fname
 from maven_iuvs.geometry import has_geometry_pvec, get_mean_mrh
 from maven_iuvs.pds import get_pds_dates
-from maven_iuvs.search import get_latest_files, find_files, dropxml, \
-    get_default_data_directory
+from maven_iuvs.search import get_latest_files, find_files, dropxml
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
 from maven_iuvs.user_paths import l1a_dir, idl_pipeline_dir
