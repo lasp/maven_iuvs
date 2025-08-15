@@ -857,7 +857,6 @@ def subtract_darks(light_fits, dark_fits):
     # Do the same for the second dark and its associated frames, 1-nth lights.
     if not second_dark_good:
         nan_dark_inds.append(1)  # mark it as a bad dark 
-        light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
 
     # Collect indices of frames which can't be processed for whatever reason. 
     # Note that any frames whose associated dark frame is 0 WILL be caught here, unless it's an observation where the second
@@ -877,7 +876,7 @@ def subtract_darks(light_fits, dark_fits):
     # Here, we should account for the possibility that no second dark exists 
     # (get_dark_frames() would have set it to all nan). 
     # In that case, let's use the first dark frame for all frames.
-    if not second_dark_exists:
+    if (not second_dark_exists) or (not second_dark_good):
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - first_dark
     else:
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
