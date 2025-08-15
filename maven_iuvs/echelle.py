@@ -1666,6 +1666,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     if return_each_line_fit:
         arrays_in_DN.append(H_fit)
         arrays_in_DN.append(D_fit)
+        arrays_in_DN.append(IPH_fit)
 
     arrays_in_kR_pernm, fit_params_kR, fit_unc_kR = convert_to_physical_units(light_fits, arrays_in_DN, fit_params, fit_uncertainties)
 
@@ -1702,10 +1703,18 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
 
     # Write out the l1c file
     # ===============================================================================================
+    # Unpack for clarity
+    if return_each_line_fit:
+        spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bgs_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, IPH_fit_kR_pernm = arrays_in_kR_pernm
+    else: 
+        spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bgs_kR_pernm = arrays_in_kR_pernm
+
     if run_writeout:
-        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, 
-                        light_fits, fit_params_kR, fit_unc_kR, 
-                        bright_data_ph_per_s, **idl_process_kwargs)
+        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
+                     fit_params_kR, fit_unc_kR, 
+                     I_fit_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, 
+                     IPH_fit_kR_pernm, bgs_kR_pernm,
+                     bright_data_ph_per_s, **idl_process_kwargs)
 
     return
 
@@ -2137,7 +2146,9 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
     return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
 
 
-def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
+def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
+                 fit_params_list, fit_unc_list, I_fit, H_fit, D_fit, IPH_fit, bg_fit,
+                 bright_data_ph_per_s_array, 
                  idl_pipeline_folder=idl_pipeline_dir, open_idl=True, proc_passed_in=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
@@ -2156,6 +2167,8 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
                       Contains model fit parameters for each integration in light_fits, in kR per nm.
     fit_unc_list : list of dictionaries
                    Contains model fit uncertainties for each integration in light_fits, in kR per nm.
+    I_fit, H_fit, D_fit, IPH_fit bg_fit: arrays
+                                         Total model and each component fits
     bright_data_ph_per_s : array
                            data values in photons/sec, needed to maintain continuity with earlier data products.
     idl_pipeline_folder : string
@@ -2179,20 +2192,41 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
     spabinw = iuvs.binning.get_binning_scheme(light_fits)['spabinwidth']
     yMRH = math.floor((yMRH_row-spapix0)/spabinw) #  to get an integer value like IDL does.
 
+    # Collect all the brightnesses and uncertainties into lists 
     H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
     D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
     IPH_brightnesses = [fit_params_list[i]['total_brightness_IPH'] for i in range(n_int)]
     H_1sig = [fit_unc_list[i]['unc_total_brightness_H'] for i in range(n_int)]
     D_1sig = [fit_unc_list[i]['unc_total_brightness_D'] for i in range(n_int)]
     IPH_1sig = [fit_unc_list[i]['unc_total_brightness_IPH'] for i in range(n_int)]
-    
-    dict_for_writeout = {
-        "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
-        "BRIGHT_D_kR": D_brightnesses, # D brightness (BkR_D) in kR
-        "BRIGHT_IPH_kR": IPH_brightnesses, # D brightness (BkR_D) in kR
-        "BRIGHT_H_OneSIGMA_kR": H_1sig,  # 1 sigma uncertainty in H brightness (BkR_U) in kR
-        "BRIGHT_D_OneSIGMA_kR": D_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
-        "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
+
+    # Collect wavelengths
+    H_lya_ctr = [fit_params_list[i]['central_wavelength_H'] for i in range(n_int)]
+    IPH_lya_ctr = [fit_params_list[i]['central_wavelength_IPH'] for i in range(n_int)]
+    H_lya_ctr_1sig = [fit_unc_list[i]['unc_central_wavelength_H'] for i in range(n_int)]
+    IPH_lya_ctr_1sig = [fit_unc_list[i]['unc_central_wavelength_IPH'] for i in range(n_int)]
+
+    linectr_fit_dict = {
+        # NEW - central wavelengths - shape: (n_int,)
+        "H_LYA_CENTER": H_lya_ctr,
+        "D_LYA_CENTER": [i - D_offset for i in H_lya_ctr],
+        "IPH_LYA_CENTER": IPH_lya_ctr,
+        # Uncertainties on centers - shape: (n_int,)
+        "H_LYA_CENTER_OneSIGMA": H_lya_ctr_1sig, 
+        "D_LYA_CENTER_OneSIGMA": H_lya_ctr_1sig, # Same as H bc it's a const
+        "IPH_LYA_CENTER_OneSIGMA": IPH_lya_ctr_1sig,
+    }
+
+    brightness_HDU_dict = {
+        # Brightnesses - shape: (n_int,)
+        "BRIGHT_H_kR": H_brightnesses,
+        "BRIGHT_D_kR": D_brightnesses,
+        "BRIGHT_IPH_kR": IPH_brightnesses,
+        # Uncertainties - shape: (n_int,)
+        "BRIGHT_H_OneSIGMA_kR": H_1sig,
+        "BRIGHT_D_OneSIGMA_kR": D_1sig,
+        "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,
+        # OTHER - shape: (n_int,)
         "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
         "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
         "ET": light_fits["Integration"].data["ET"], 
@@ -2201,7 +2235,9 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
         "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
     }
 
-    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in dict_for_writeout.items() ]) )
+    # handle easy stuff
+    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in brightness_HDU_dict.items() ]) )
+    linectr_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in linectr_fit_dict.items() ]) )
 
     # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
     # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
@@ -2209,12 +2245,38 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
     bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s_array.transpose(),    # values
                                         columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
     
+    # Save the model fit arrays
+    I_fit_df = pd.DataFrame(data=I_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    H_fit_df = pd.DataFrame(data=H_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    D_fit_df = pd.DataFrame(data=D_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    IPH_fit_df = pd.DataFrame(data=IPH_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    bg_df = pd.DataFrame(data=bg_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    
+    
     # Save the output to some temporary files that will be saved outside the Python module.
     # TODO: Make these actual temp files.
-    brightness_csv_path = idl_pipeline_folder + "brightness.csv"
-    ph_per_s_csv_path = idl_pipeline_folder + "ph_per_s.csv"
+    brightness_csv_path = idl_pipeline_folder + "transfer_to_IDL/brightness.csv"
+    ph_per_s_csv_path = idl_pipeline_folder + "transfer_to_IDL/ph_per_s.csv"
+    total_model_csv_path =  idl_pipeline_folder + "transfer_to_IDL/total_model.csv"
+    H_csv_path =  idl_pipeline_folder + "transfer_to_IDL/H_fit.csv"
+    D_csv_path =  idl_pipeline_folder + "transfer_to_IDL/D_fit.csv"
+    IPH_csv_path =  idl_pipeline_folder + "transfer_to_IDL/IPH_fit.csv"
+    bg_csv_path =  idl_pipeline_folder + "transfer_to_IDL/background.csv"
+    linectr_csv_path = idl_pipeline_folder + "transfer_to_IDL/linectr.csv"
+
     brightness_writeout.to_csv(brightness_csv_path, index=False)
     bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
+    linectr_writeout.to_csv(linectr_csv_path, index=False)
+    I_fit_df.to_csv(total_model_csv_path, index=False)
+    H_fit_df.to_csv(H_csv_path, index=False)
+    D_fit_df.to_csv(D_csv_path, index=False)
+    IPH_fit_df.to_csv(IPH_csv_path, index=False)
+    bg_df.to_csv(bg_csv_path, index=False)
 
     # Now call IDL
     if open_idl is True:
@@ -2235,8 +2297,9 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_pa
         proc = proc_passed_in
     
     proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
-                     '{dark_l1a_path}', '{l1c_savepath}', \
-                     '{brightness_csv_path}', '{ph_per_s_csv_path}'\n")
+                     '{dark_l1a_path}', '{l1c_savepath}'\n")
+    # The rest of the arguments are provided as default keywords cause the same 
+    # files get used over and over again to store the stuff transmitted to IDL
     time.sleep(1)  # Allow enough time to complete the file writeout
     proc.stdin.flush()
 
