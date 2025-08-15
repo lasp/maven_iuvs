@@ -363,7 +363,7 @@ def update_filenames_in_light_dark_key(keyfile, ech_l1a_idx, dark_idx,
     problems : pandas DataFrame
                Files that caused a problem
     """
-     def find_match_on_disk(key_filename, parent_folder):
+    def find_match_on_disk(key_filename, parent_folder):
         """
         Subroutine to search for a similarly named file on the local disk.
 
