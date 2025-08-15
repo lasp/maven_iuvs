@@ -808,7 +808,7 @@ def subtract_darks(light_fits, dark_fits):
         second_dark_good = False
     elif second_dark_exists:
         # Check it for goodness.
-        if (np.isnan(second_dark).any()) or (np.nanmedian(second_dark) > 1000): # but it has problems...
+        if (np.isnan(second_dark).any()) or (np.nanmedian(second_dark) > 5000): # but it has problems...
             second_dark_good = False
 
     if not(first_dark_good or second_dark_good):
@@ -1545,6 +1545,7 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, 
+                       process_timestamp,
                        calibration="new", ints_to_fit="all", remove_artifacts=True,
                        save_arrays=False, place_for_arrays=None, 
                        return_each_line_fit=True, do_BU_background_comparison=False, 
@@ -1712,12 +1713,13 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     else: 
         spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bgs_kR_pernm = arrays_in_kR_pernm
 
+
     if run_writeout:
         writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
                      fit_params_kR, fit_unc_kR, 
                      I_fit_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, 
                      IPH_fit_kR_pernm, bgs_kR_pernm,
-                     bright_data_ph_per_s, **idl_process_kwargs)
+                     bright_data_ph_per_s, process_timestamp,  **idl_process_kwargs)
 
     return
 
@@ -2151,7 +2153,7 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
 
 def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
                  fit_params_list, fit_unc_list, I_fit, H_fit, D_fit, IPH_fit, bg_fit,
-                 bright_data_ph_per_s_array, idl_pipeline_folder=idl_pipeline_dir, 
+                 bright_data_ph_per_s_array, process_timestamp, idl_pipeline_folder=idl_pipeline_dir, 
                  open_idl=True, proc=None, stderr_queue=None, stderr_thread=None):
     """
     Writes out result of model fitting to an l1c file via a call to IDL.
@@ -2304,9 +2306,8 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
                                                                 output_log), 
                                                           daemon=True)
     stdout_thread.start()
-
     proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
-                     '{dark_l1a_path}', '{l1c_savepath}'\n")
+                     '{dark_l1a_path}', '{l1c_savepath}', '{process_timestamp}'\n")
     # The rest of the arguments are provided as default keywords cause the same 
     # files get used over and over again to store the stuff transmitted to IDL
     proc.stdin.flush()
