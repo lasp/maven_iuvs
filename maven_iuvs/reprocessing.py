@@ -2,16 +2,17 @@ from astropy.io import fits, ascii
 import re
 import os
 import glob
+import numpy as np
 from maven_iuvs.miscellaneous import orbit_folder, fn_RE, orbno_RE, gen_error_RE
 
 # Function to validate the results of a reprocess, checking for header continuity -----
 def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True, verbose=False):
     """
     Compare the common HDUs between two fits files to find differences. 
-    Typical use case is to compare the same file in two versions; in that scenario,
-    there should be no or minimal differences because you are trying to preserve information. 
-    (Differences may exist for things like the filename and such).
-
+    The fits files should be for the same observation, differing only in 
+    version, so there should be no or minimal differences, other than fields
+    like filename, etc. 
+    
     Parameters
     ----------
     fits1 : astropy fits instance 
@@ -36,17 +37,26 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
     f1_hdus = [hdu.name.upper() for hdu in fits1]
     f2_hdus = [hdu.name.upper() for hdu in fits2]
     common_hdus = list(set(f1_hdus) & set(f2_hdus))
+    new_hdus = list(set(f2_hdus).difference(set(f1_hdus)) )
+
+    for hduname in new_hdus:
+        print(f"{hduname} HDU: New in {labels[1]} products.")
+        print()
     
     for hduname in common_hdus:
         if hduname != "PRIMARY": # The primary will usually be different between different versions.
             print(f"{hduname} HDU")
             print("============================================")
             for n in fits1[hduname].data.names:
-                # print(f"Now checking {n}:")
                 if (n=="KERNELS") & (skip_kernels):
                     print("Skipping kernels because they're definitely different due to pipeline changes upstream")
+                    print()
                     continue
-                elif (n=="BRIGHT_H_ONESIGMA_KR") or (n=="BRIGHT_D_ONESIGMA_KR") or (n=="BRIGHT_ONESIGMA_KR"):
+                # Uncertainties have changed:
+                elif (n=="BRIGHT_H_ONESIGMA_KR") \
+                     or (n=="BRIGHT_D_ONESIGMA_KR") \
+                     or (n=="BRIGHT_IPH_ONESIGMA_KR") \
+                     or (n=="BRIGHT_ONESIGMA_KR"):
                     # for comparing v15 (done with python) to earlier versions:
                     print("Brightness uncertainty processing changed:")
                     if n=="BRIGHT_ONESIGMA_KR":
@@ -60,10 +70,21 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
                 elif n not in fits2[hduname].data.names:
                     print(f"Header {n} has no equivalent in {labels[1]} products.")
                 else:
-                    if (fits1[hduname].data[n] == fits2[hduname].data[n]).all():
+                    # Compare arrays; different behavior for numbers vs. strings.
+                    if fits1[hduname].data[n].dtype in [">f8", "float64", "int64"]:
+                        mask = ~(np.isnan(fits1[hduname].data[n]) | np.isnan(fits2[hduname].data[n]))
+                        all_equal = np.allclose(fits1[hduname].data[n][mask], 
+                                                fits2[hduname].data[n][mask])
+                    else:
+                        all_equal = (fits1[hduname].data[n] ==
+                                     fits2[hduname].data[n]).all()
+
+
+                    if all_equal:
                         if verbose:
                             print(f"{n} entry is equal")
                     else:
+                        # Some files have a screwed up segment
                         if (n=="ORBIT_SEGMENT"): 
                             if not (isinstance(fits1[hduname].data[n], str) and isinstance(fits2[hduname].data[n], str)):
                                 # In some files the segment is inexplicably a number instead of a string.
@@ -71,19 +92,27 @@ def compare_fits_headers(fits1, fits2, labels=["v13", "v14"], skip_kernels=True,
                                 print(f"{labels[0]}: {fits1[hduname].data[n]}")
                                 print(f"{labels[1]}: {fits2[hduname].data[n]}")
                                 print()
-                        else:
-                            if (fits1[hduname].data[n] != fits2[hduname].data[n]).all():
-                                print(f"{n} discrepancy")
-                                print(f"{labels[0]}: {fits1[hduname].data[n]}")
-                                print(f"{labels[1]}: {fits2[hduname].data[n]}")
-                                print()
-                            else:
-                                print(f"{n} has discrepancies, but may just be floating point errors. Investigate further by hand.")
-                        
+                        else: 
+                            print(f"{n} discrepancy")
+                            print(f"{labels[0]}: {fits1[hduname].data[n]}")
+                            print(f"{labels[1]}: {fits2[hduname].data[n]}")
+                            print()
+            
+            for n in fits2[hduname].data.names:
+                if n not in fits1[hduname].data.names \
+                        and (n!="BRIGHT_H_ONESIGMA_KR") \
+                        and (n!="BRIGHT_D_ONESIGMA_KR"):
+                    print("***************NEW***************")
+                    print(f"{n} is new in {labels[1]} products:")
+                    print(fits2[hduname].data[n])
+                    print()
+                    
+                # print(f"Now checking {n}:") 
+
     print("Finished")
 
 
-# Function to compare full results of the reprocess wit PDS files ---------------------
+# Function to compare full results of the reprocess with PDS-archived files ---
 def compare_PDS_with_reprocess(l1c_root, pds_filelist, maxorbit=50000):
     """
     Parameters
@@ -227,7 +256,7 @@ def determine_if_l1a_is_missing(missed_files, l1a_folder):
     return no_l1a, l1a_found
 
 
-def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data", with_this="FMR_l1av13_to_l1cv14"):
+def translate_l1a_folder_to_l1c_folder(l1a_folders, replace_this="l1a_ech_data", with_this="l1c_ech_data/FMR_l1av13_to_l1cv14"):
     """
     Generates l1c folder paths from l1a folder paths by casting replace over the whole list.
 

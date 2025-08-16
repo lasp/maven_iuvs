@@ -1100,6 +1100,10 @@ def plot_line_fit(data_wavelengths, data_vals, model_fit, fit_params_for_printin
         plt.show()
 
     if fig_savepath is not None:
+        rootdir = fig_savepath.split('frame')[0]
+        if not os.path.isdir(rootdir):
+            os.makedirs(rootdir)
+
         plt.savefig(fig_savepath, dpi=img_dpi, bbox_inches="tight")
     if new_ax:
         return fig
