@@ -2366,7 +2366,7 @@ def open_IDL_and_compile_writeout_script(l1c_savepath, errlogname="IDLerrors.txt
     proc.stdin.write(".com write_l1c_file_from_python.pro\n")
     proc.stdin.flush()
 
-    if hc(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
+    if check_for_success_msg(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
         print("Compiled write_l1c_file_from_python.")
     else:
         print("Compile failed.")
