@@ -2313,7 +2313,7 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
     proc.stdin.flush()
 
     file_process_success = "FINISHED! If you see this message in the IDL log or terminal when calling from Python, the IDL script succeeded"
-    if wait_for_last_phrase(stdout_queue, file_process_success):
+    if check_for_success_msg(stdout_queue, file_process_success):
         print(f"File and label writeout succeeded")
     else:
         print(f"Python detects that an error occurred in IDL")
@@ -2325,11 +2325,31 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
 
 
 def open_IDL_and_compile_writeout_script(l1c_savepath, errlogname="IDLerrors.txt"):
+    """
+    Opens IDL with subprocess, and starts a thread to monitor the output to 
+    check for when the script to writeout files in IDL has been compiled.
+
+    Parameters
+    ----------
+    l1c_savepath : string
+                Location in which to save the error log
+    errlogname : string
+                filename for the error log 
+    Returns
+    ----------
+    proc : subprocess Popen instance
+        subprocess containing the call to IDL 
+    stderr_queue : Queue() instance
+                   Lets content be read from the pipe while it's also written 
+                   out to a log. 
+    stderr_thread : threading.Thread() instance
+                    with start_reader(), keeps track of output from IDL to 
+                    watch for the key message to tell when script is compiled
+    """
     print("Opening IDL")
     os.chdir(idl_pipeline_dir)
     
     err_log = l1c_savepath + errlogname
-    print(f"Creating err log in {l1c_savepath}")
 
     proc = subprocess.Popen(["stdbuf", "-oL", "-eL", "idl", "-quiet"],
                             stdin=subprocess.PIPE,
@@ -2346,10 +2366,10 @@ def open_IDL_and_compile_writeout_script(l1c_savepath, errlogname="IDLerrors.txt
     proc.stdin.write(".com write_l1c_file_from_python.pro\n")
     proc.stdin.flush()
 
-    if wait_for_last_phrase(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
-        print("✅ Compiled write_l1c_file_from_python.")
+    if hc(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
+        print("Compiled write_l1c_file_from_python.")
     else:
-        print("❌ Compile failed.")
+        print("Compile failed.")
     
     return proc, stderr_queue, stderr_thread
 
@@ -2358,21 +2378,44 @@ def start_reader(pipe, output_queue, log_file_path):
     """
     Continuously read from a pipe (stdout or stderr), line by line,
     writing to a queue and logging to a file.
+
+    Parameters
+    ----------
+    pipe : subprocess.pipe instance
+    output_queue : Queue() instance
+                keeps track of IDL output while also allowing it to be written out to a file
+    log_file_path : string
+                    name of log file to which to write IDL output
+    
+    Returns
+    ----------
+    none
     """
     with open(log_file_path, 'a', encoding='utf-8') as log_file:
         for line in iter(pipe.readline, ''):
             log_file.write(line)
             log_file.flush()
-            decoded = line.rstrip()
-            output_queue.put(decoded)
+            output_queue.put(line.rstrip())
 
     pipe.close()
 
 
-def wait_for_last_phrase(output_queue, target_phrase, timeout=30):
+def check_for_success_msg(output_queue, target_phrase, timeout=30):
     """
     Read lines from a queue until the last one matches the target_phrase.
     Times out after `timeout` seconds.
+
+    Parameters
+    ----------
+    output_queue : Queue() instance
+                keeps track of IDL output for reading while also allowing it to be written to file
+    target_phrase : string
+                    Key phrase to look for in IDL output to tell when a certain milestone has been achieved.
+    timeout : int
+            Time in seconds after which to give up waiting.
+    Returns
+    ----------
+    boolean - whether the goal is achieved
     """
     start_time = time.time()
     buffer = []
