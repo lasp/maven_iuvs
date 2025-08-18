@@ -2251,6 +2251,9 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
         "IPH_LYA_CENTER_OneSIGMA": IPH_lya_ctr_1sig,
     }
 
+    product_creation_date = datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC')
+    seg = iuvs_segment_from_fname(light_fits["Primary"].header['Filename'])
+    # in IDL the microseconds are only 5 digits long and 0, so idk.
     brightness_HDU_dict = {
         # Brightnesses - shape: (n_int,)
         "BRIGHT_H_kR": H_brightnesses,
@@ -2265,8 +2268,8 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
         "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, i_MRH], # SZA in degrees
         "ET": light_fits["Integration"].data["ET"], 
         "UTC": light_fits["Integration"].data["UTC"],
-        "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
-        "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
+        "PRODUCT_CREATION_DATE": [product_creation_date for i in range(len(H_brightnesses))],
+        "ORBIT_SEGMENT": [seg for i in range(len(H_brightnesses))],
     }
 
     # handle easy stuff
@@ -2303,14 +2306,15 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
     bg_csv_path =  idl_pipeline_folder + "transfer_to_IDL/background.csv"
     linectr_csv_path = idl_pipeline_folder + "transfer_to_IDL/linectr.csv"
 
-    brightness_writeout.to_csv(brightness_csv_path, index=False)
-    bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
-    linectr_writeout.to_csv(linectr_csv_path, index=False)
-    I_fit_df.to_csv(total_model_csv_path, index=False)
-    H_fit_df.to_csv(H_csv_path, index=False)
-    D_fit_df.to_csv(D_csv_path, index=False)
-    IPH_fit_df.to_csv(IPH_csv_path, index=False)
-    bg_df.to_csv(bg_csv_path, index=False)
+    narep = -9999
+    brightness_writeout.to_csv(brightness_csv_path, index=False, na_rep=narep)
+    bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False, na_rep=narep)
+    linectr_writeout.to_csv(linectr_csv_path, index=False, na_rep=narep)
+    I_fit_df.to_csv(total_model_csv_path, index=False, na_rep=narep)
+    H_fit_df.to_csv(H_csv_path, index=False, na_rep=narep)
+    D_fit_df.to_csv(D_csv_path, index=False, na_rep=narep)
+    IPH_fit_df.to_csv(IPH_csv_path, index=False, na_rep=narep)
+    bg_df.to_csv(bg_csv_path, index=False, na_rep=narep)
 
     # Now call IDL
     if open_idl is True:
