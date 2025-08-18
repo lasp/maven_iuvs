@@ -253,6 +253,10 @@ def relative_path_from_fname(l1a_fname, v="v13"):
     Parent l1a folder including orbit set folder : string
     """
 
+    # First check to see if it's an early file.
+    if 'orbit' not in l1a_fname:
+        return l1a_dir + "cruise/"
+
     # Get orbit folder
     orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
     if v=="v14":
