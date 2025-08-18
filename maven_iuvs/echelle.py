@@ -1545,17 +1545,22 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, 
-                       process_timestamp,
+                       process_timestamp=None,
                        calibration="new", ints_to_fit="all", remove_artifacts=True,
                        save_arrays=False, place_for_arrays=None, 
-                       return_each_line_fit=True, do_BU_background_comparison=False, 
-                       run_writeout=True, overwrite=False, 
-                       make_plots=True, 
+                       return_each_line_fit=True, 
+                       do_BU_background_comparison=False, 
+                       run_writeout=True, overwrite=False, make_plots=True, 
                        idl_process_kwargs = {"open_idl": False, "proc": None, 
                                              "stderr_queue": None, 
                                              "stderr_thread": None},
-                       clean_data_kwargs = {"clean_method": "new", "remove_rays": True, "remove_hotpix": True},
-                       plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
+                       clean_data_kwargs = {"clean_method": "new", 
+                                            "remove_rays": True, 
+                                            "remove_hotpix": True},
+                       plot_kwargs = {"plot_subtract_bg": False, 
+                                      "plot_bg_separately": False, 
+                                      "make_example_plot": False, 
+                                      "print_fn_on_plot": True}, **kwargs):
     """
     Takes an l1a file through the process of calibration, cleaning, fitting the data, and saving an l1c file.
 
@@ -1567,6 +1572,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
                 File with associated dark observation for light_fits
     light_l1a_path : string
                      Path to the original source file
+    dark_l1a_path : string
+                    Path to the original dark file 
+    l1c_savepath : string
+                   Folder in which to save any output files 
+    process_timestamp : None or string
+                        Required for file writeout. Of a format like 
+                        20170131T050459. Will be added to IDL-produced log files.
+                        Easier to determine in Python.
     calibration : string
                   "new" or "old": whether to compare use new or old calibration values 
                   for the LSF and binning.
@@ -1574,11 +1587,21 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
                   Number of integrations to run the fit for.
                   "first" will do the fit on the 0th frame (useful for testing).
                   Any other value will just automatically fit all frames.
-    do_BU_background_comparison : boolean
+    remove_artifacts : bool
+                       Whether to do the data cleanup routines.
+    save_arrays : bool
+                  whether to write out data fitting arrays to CSVs for inspection.
+    place_for_arrays : string
+                       location to save the above
+    return_each_line_fit : bool        
+                           whether to return components of model fit
+    do_BU_background_comparison : bool
                                   whether to include an alternate fit using a background as per Mayyasi+2023.
-    run_writeout : boolean
+    run_writeout : bool
                    if true, will trigger a call to IDL to run the full file writeout.
-    make_plots : boolean
+    overwrite : bool
+                Whether to overwrite existing data product files if they exist.
+    make_plots : bool
                  if true, plots showing the fits will be produced.
     clean_data_kwargs : dict
                         kwargs which may be passed to clean_data relating to data cleaning. 
@@ -1715,6 +1738,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
 
 
     if run_writeout:
+        assert process_timestamp is not None
         writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
                      fit_params_kR, fit_unc_kR, 
                      I_fit_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, 
