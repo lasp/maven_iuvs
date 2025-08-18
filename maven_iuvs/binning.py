@@ -159,8 +159,6 @@ def get_bin_pix_boundaries(myfits, which):
     pixboundaries = np.cumsum(pixwidth)
     pixboundaries = np.concatenate([[0], pixboundaries])
 
-    # raise Exception("stop here")
-
     return pixboundaries, pixtransmit
 
 
