@@ -26,7 +26,7 @@ from maven_iuvs.download import get_default_data_directory
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
                                    ech_Lya_slit_start, ech_Lya_slit_end, \
-                                   ran_DN_uncertainty
+                                   ran_DN_uncertainty, ech_best_MRH_pixel
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
     orbno_RE, fn_RE, orbit_folder, findDiff, \
@@ -2195,12 +2195,12 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
     """
 
     n_int = get_n_int(light_fits)
-    # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
+
+    # Collect index of the best spatial row representing MRH of the observation
     center_idx = 4
-    yMRH_row = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
-    spapix0 = iuvs.binning.get_binning_scheme(light_fits)['spapix0']
-    spabinw = iuvs.binning.get_binning_scheme(light_fits)['spabinwidth']
-    yMRH = math.floor((yMRH_row-spapix0)/spabinw) #  to get an integer value like IDL does.
+    spapixlo_arr = light_fits["binning"].data['spapixlo'][0]
+    i_MRH = iuvs.miscellaneous.find_nearest(spapixlo_arr, ech_best_MRH_pixel,
+                                            price_is_right=True)[0] 
 
     # Collect all the brightnesses and uncertainties into lists 
     H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
@@ -2237,8 +2237,8 @@ def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits,
         "BRIGHT_D_OneSIGMA_kR": D_1sig,
         "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,
         # OTHER - shape: (n_int,)
-        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
-        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
+        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, i_MRH, center_idx], # MRH in km
+        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, i_MRH], # SZA in degrees
         "ET": light_fits["Integration"].data["ET"], 
         "UTC": light_fits["Integration"].data["UTC"],
         "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
