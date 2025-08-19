@@ -2079,101 +2079,7 @@ def make_array_of_fitted_backgrounds(light_fits, fit_params):
     return bg_fits
 
 
-def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
-    """
-    The echelle l1c files typically report a quantity referred to in IDL pipeline as bright_data_ph_per_s, 
-    e.g. photoevents per second. This function computes this value so that it can continue to be reported.
-    
-    Parameters
-    ----------
-    light_fits : astropy.io.fits instance
-                File with light observation
-    spectrum : array, shape (n_ints, n_wavelengths)
-               The flattened data spectra for each integration in light_fits
-    fit_params : dictionary
-                 Contains the best-fit parameters for the lineshape model fit to flattened spectra
-                 in light_fits. 
-    bg_fits : array, shape (n_ints, n_wavelengths)
-              Each row is the fitted background for a particular spectrum. Output from make_array_of_fitted_backgrounds.
-    Returns
-    ----------
-    bright_data_ph_per_s : array, shape (n_ints, n_wavelengths)
-                           Data at each recorded wavelength, in units of photons/sec with the background subtracted off.
-    """
-    t_int = light_fits["Primary"].header["INT_TIME"] 
-    wavelengths = get_wavelengths(light_fits)
-    n_int = get_n_int(light_fits)
-    bright_data_ph_per_s = np.zeros((n_int, wavelengths.shape[0]))
-
-    # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
-    spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spectrum) / (t_int)
-    background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fits) / (t_int)
-
-    for i in range(len(fit_params)):
-        # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
-        popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s[i, :],
-                                           p0=[121.567, 0, 0, 0],  # , 0],
-                                           bounds=([121.5, -np.inf, -np.inf, -np.inf],  # , -np.inf],
-                                                   [121.6, np.inf, np.inf, np.inf]))  # , np.inf]))
-        bg_ph_s = background(wavelengths, *popt)
-        bright_data_ph_per_s[i, :] = spec_ph_s[i, :] - bg_ph_s
-
-    return bright_data_ph_per_s
-
-
-def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_params, fit_uncertainties, calibration="new"): 
-    """
-    Given model fitting output, this converts it to physical units.
-
-    Parameters
-    ----------
-    light_fits : astropy.io.fits instance
-                File with light observation
-    arrays_to_convert_to_kR_pernm : list
-                                    Including the spectrum data, data uncertainties, model fit array and background fit array
-    fit_params : list of dictionaries 
-                 Each dictionary contains the best-fit parameters for the lineshape model fit to flattened spectra in light_fits. 
-    fit_uncertainties : list
-                        the fit uncertainties on the parameters in fit_params. 
-    calibration : string
-                  "new" or "old": controls the conversion factors, as these differ in the original IDL pipeline
-    
-    Returns
-    ----------
-    arrays_in_kR_pernm : list of arrays
-                         The same as arrays_to_convert_to_kR_pernm, but now converted.
-    fit_params_converted : list of dictionaries
-                           Same as fit_params, but now converted to kR.
-    fit_unc_converted : list of dictionaries
-                        same as fit_uncertainties, converted to kR
-    """
-    # Conversion factors
-    # ============================================================================================
-    t_int = light_fits["Primary"].header["INT_TIME"] 
-    binwidth_nm = np.diff(get_bin_edges(light_fits))
-    
-    conv_to_kR_per_nm, _, conv_to_kR = get_conversion_factors(t_int, binwidth_nm, calibration=calibration)
-
-    # Convert the data and model fit arrays to physical units.
-    arrays_in_kR_pernm = []
-    for arr_DN in arrays_to_convert_to_kR_pernm:
-        arrays_in_kR_pernm.append(convert_spectrum_DN_to_photoevents(light_fits, arr_DN) * conv_to_kR_per_nm)
-    
-    # Set up storage for converted values
-    fit_params_converted = copy.deepcopy(fit_params)
-    fit_unc_converted = copy.deepcopy(fit_uncertainties)
-    
-    for i in range(len(fit_params)):  # Because it's now a list of dicts
-        fit_params_converted[i]['total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_H']) * conv_to_kR # H brightness
-        fit_params_converted[i]['total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_D']) * conv_to_kR # D brightness
-        fit_unc_converted[i]['unc_total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_H']) * conv_to_kR
-        fit_unc_converted[i]['unc_total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_D']) * conv_to_kR
-        
-        fit_params_converted[i]['total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_IPH']) * conv_to_kR
-        fit_unc_converted[i]['unc_total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_IPH']) * conv_to_kR
-
-    return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
-
+# Write out with IDL ==========================================================
 
 def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
                  fit_params_list, fit_unc_list, I_fit, H_fit, D_fit, IPH_fit, bg_fit,
@@ -2465,6 +2371,103 @@ def check_for_success_msg(output_queue, target_phrase, timeout=30):
             return True
         
 
+def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
+    """
+    The echelle l1c files typically report a quantity referred to in IDL pipeline as bright_data_ph_per_s, 
+    e.g. photoevents per second. This function computes this value so that it can continue to be reported.
+    
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                File with light observation
+    spectrum : array, shape (n_ints, n_wavelengths)
+               The flattened data spectra for each integration in light_fits
+    fit_params : dictionary
+                 Contains the best-fit parameters for the lineshape model fit to flattened spectra
+                 in light_fits. 
+    bg_fits : array, shape (n_ints, n_wavelengths)
+              Each row is the fitted background for a particular spectrum. Output from make_array_of_fitted_backgrounds.
+    Returns
+    ----------
+    bright_data_ph_per_s : array, shape (n_ints, n_wavelengths)
+                           Data at each recorded wavelength, in units of photons/sec with the background subtracted off.
+    """
+    t_int = light_fits["Primary"].header["INT_TIME"] 
+    wavelengths = get_wavelengths(light_fits)
+    n_int = get_n_int(light_fits)
+    bright_data_ph_per_s = np.zeros((n_int, wavelengths.shape[0]))
+
+    # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
+    spec_ph_s = convert_spectrum_DN_to_photoevents(light_fits, spectrum) / (t_int)
+    background_array_ph_s = convert_spectrum_DN_to_photoevents(light_fits, bg_fits) / (t_int)
+
+    for i in range(len(fit_params)):
+        # The existing l1c files keep track of the spectra in "photons per second" (with bg subtracted) so we have to also
+        popt, pcov = sp.optimize.curve_fit(background, wavelengths, background_array_ph_s[i, :],
+                                           p0=[121.567, 0, 0, 0],  # , 0],
+                                           bounds=([121.5, -np.inf, -np.inf, -np.inf],  # , -np.inf],
+                                                   [121.6, np.inf, np.inf, np.inf]))  # , np.inf]))
+        bg_ph_s = background(wavelengths, *popt)
+        bright_data_ph_per_s[i, :] = spec_ph_s[i, :] - bg_ph_s
+
+    return bright_data_ph_per_s
+
+# Conversion functions ========================================================
+
+def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_params, fit_uncertainties, calibration="new"): 
+    """
+    Given model fitting output, this converts it to physical units.
+
+    Parameters
+    ----------
+    light_fits : astropy.io.fits instance
+                File with light observation
+    arrays_to_convert_to_kR_pernm : list
+                                    Including the spectrum data, data uncertainties, model fit array and background fit array
+    fit_params : list of dictionaries 
+                 Each dictionary contains the best-fit parameters for the lineshape model fit to flattened spectra in light_fits. 
+    fit_uncertainties : list
+                        the fit uncertainties on the parameters in fit_params. 
+    calibration : string
+                  "new" or "old": controls the conversion factors, as these differ in the original IDL pipeline
+    
+    Returns
+    ----------
+    arrays_in_kR_pernm : list of arrays
+                         The same as arrays_to_convert_to_kR_pernm, but now converted.
+    fit_params_converted : list of dictionaries
+                           Same as fit_params, but now converted to kR.
+    fit_unc_converted : list of dictionaries
+                        same as fit_uncertainties, converted to kR
+    """
+    # Conversion factors
+    # ============================================================================================
+    t_int = light_fits["Primary"].header["INT_TIME"] 
+    binwidth_nm = np.diff(get_bin_edges(light_fits))
+    
+    conv_to_kR_per_nm, _, conv_to_kR = get_conversion_factors(t_int, binwidth_nm, calibration=calibration)
+
+    # Convert the data and model fit arrays to physical units.
+    arrays_in_kR_pernm = []
+    for arr_DN in arrays_to_convert_to_kR_pernm:
+        arrays_in_kR_pernm.append(convert_spectrum_DN_to_photoevents(light_fits, arr_DN) * conv_to_kR_per_nm)
+    
+    # Set up storage for converted values
+    fit_params_converted = copy.deepcopy(fit_params)
+    fit_unc_converted = copy.deepcopy(fit_uncertainties)
+    
+    for i in range(len(fit_params)):  # Because it's now a list of dicts
+        fit_params_converted[i]['total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_H']) * conv_to_kR # H brightness
+        fit_params_converted[i]['total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_D']) * conv_to_kR # D brightness
+        fit_unc_converted[i]['unc_total_brightness_H'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_H']) * conv_to_kR
+        fit_unc_converted[i]['unc_total_brightness_D'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_D']) * conv_to_kR
+        
+        fit_params_converted[i]['total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_params[i]['total_brightness_IPH']) * conv_to_kR
+        fit_unc_converted[i]['unc_total_brightness_IPH'] = convert_spectrum_DN_to_photoevents(light_fits, fit_uncertainties[i]['unc_total_brightness_IPH']) * conv_to_kR
+
+    return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
+
+
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
     Identify and return the appropriate conversion factors for the data.
@@ -2529,37 +2532,7 @@ def get_binning_df(calibration="new"):
                         })
 
 
-# Line fitting =============================================================
-
-   
-def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
-    """
-    Computes the mean minimum ray height altitude in an observation at the
-    center of the pixel, and uses this to determine if the IPH is likely to be 
-    contaminating the observation. 
-
-    Parameters
-    ----------
-    mrh_alts : array
-               average MRH altitudes across the slit in each integration.
-    integration : int
-                  Integration (frame) to select
-    z_min : int
-            Altitude in integers below which we consider there to be no IPH
-            contamination by default
-
-    Returns
-    ----------
-    fit_IPH_component: array of bools or bool
-                       Whether IPH can be expected to be present in the data.
-                       Shape is (n_int,) where n_int is number of integrations 
-                       in the observation, unless integration is passed, in 
-                       which case it's just a single bool.
-    """
-    integration_mrh_alt = mrh_alts[integration]
-    fit_IPH_component = (integration_mrh_alt > z_min)
-    return fit_IPH_component
-
+# Line fitting ================================================================
 
 def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                 fit_IPH_component=False, BU_bg=np.nan,
@@ -2834,35 +2807,151 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
 
+# Components
 
-def badness_bg(params, wavelength_data, DN_data):
+def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
+                           H_a=20, H_b=170, D_a=80, D_b=100):
     """
-    Similar to badness, but for a linear fit to the background on the detector.
-    Used so we can fit the background in off-slit regions and dark files for
-    determining how good the fit is at representing the background.
+    Parameters
+    ----------
+    spectrum : array
+                Data in DN/sec/px 
+    a, b : int
+            indices in the spectrum over which to integrate to get an initial guess 
+            at total flux of the line.
+    Returns
+    ----------
+    Vector of initial guess values
+    """
+    num_params = len(_fit_parameter_names)
+
+    # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
+    # in a parent function overlap the D, but that's okay for an initial guess.
+    rows = get_n_int(light_fits) if coadded is False else 1
+    guesses = np.zeros((rows, num_params))
+    # Line center of IPH is predicted based on the obs geometry;
+    # length is number of integrations.
+    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
+    if coadded:
+        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
+
+    #Account for files where H may not be located at usual location
+    for i in range(rows):
+        spectrum = spectra[i, :]
+        if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
+            H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
+            H_b = min(np.argmax(spectrum) + 50, len(spectrum))
+            D_a = max(0, np.argmax(spectrum) - 30)
+            D_b = min(np.argmax(spectrum) - 10, len(spectrum))
+            # Now control for either of these both somehow being accidentally set to 0
+            if D_a == D_b == 0:
+                D_b += 20
+
+        # Now integrate to get an initial area guess
+        DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
+        DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
+
+        # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
+        # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
+        lambda_H_lya_guess = 121.567
+        # Account for cases with huge wavelength shift
+        if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
+            lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
+
+        # Now do IPH.
+        DN_IPH_guess = DN_H_guess * 0.05 # wild guess
+        width_IPH_guess = (IPH_maxw + IPH_minw) / 2
+
+        # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
+        bg_b_guess = np.median(spectrum)
+        bg_m_guess = 0
+        bg_m2_guess = 0
+        # bg_m3_guess = 0
+
+        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
+                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
+                         width_IPH_guess,
+                         bg_b_guess, bg_m_guess, bg_m2_guess]  # , bg_m3_guess]
+
+    return guesses
+
+
+def background(lamda, lamda_c, b, m, m2=0):
+    """
+    Construct the functional form of the background emissions for the detector, given the parameters controlling it.
+    Currently just a linear fit. Separated out so it can be called in more than one place.
 
     Parameters
     ----------
-    params : array
-             Parameters for the line in the format M, B, lambda_c (of hydrogen).
-    wavelength_data : array
-             wavelength that will be fit; nm 
-    DN_data : array
-              DN of the spectrum that will be fit 
+    m : float
+        Slope of the line. 
+    lamda_c : float
+        Central wavelength of Lyman alpha, to set the intercept to occur closer to where the emissions do.
+    b : float
+        Constant term to determine y-difference from 0.
+    lamda : array
+        array of wavelengths.
+
+    Returns
+    ----------
+    Array of DN per wavelength for the background.
+    """
+    lamda = jnp.array(lamda)
+    lrange = 0.5*(jnp.max(lamda) - jnp.min(lamda))
+    wavefrac = (lamda - lamda_c)/lrange
+
+    return (b
+            + m * wavefrac
+            + m2 * wavefrac * wavefrac)
+
+
+def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
+    """
+    Construct a BU-style background.
     """
 
-    # initial guess
-    bg_m_guess, bg_b_guess, bg_lamc_guess = params
+    # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
+    # note that the actual background will be different from what IDL spits out because the
+    # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
+    # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
 
-    # "model"
-    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)
+    if calibration=="new":
+        back_below = np.sum(data_cube[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
+        back_above = np.sum(data_cube[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
 
-    # "badness"
-    badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
+        backgrounds_newcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
 
-    return badness
+        # Set up stuff for median filter
+        bg_newcal_median_filtered = np.zeros_like(backgrounds_newcal) # equivalent to IDL's "med_bk"
+        margin = 7 # for a total window size of 15. 
+
+        for i in range(n_int):
+            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # equivalent to IDL "avg_bk" .average the above-slit and below-slit slices
+
+            # Now do the sliding median window (width 15)
+            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin] # IDL ignores the first margin points and doesn't change them.
+            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:] # It also ignores the last margin points.
+            for k in range(margin, len(backgrounds_newcal[i, :])-margin):
+                # The window size is 15 in IDL, so this usage of median should return the same values.
+                # There is only a discrepancy if the window size is even, since /EVEN is not set in the IDL pipeline.
+                bg_newcal_median_filtered[i, k] = np.median(backgrounds_newcal[i, k-margin:k+margin+1])
+            bg_newcal_median_filtered[i, :] *= (binning_param_dict['aprow2'].values[0] - binning_param_dict['aprow1'].values[0] + 1)
+
+        return bg_newcal_median_filtered
+
+    elif calibration=="old":
+        # This one is currently not returning the right values, I think
+        Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
+        backgrounds_oldcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
+        for i in range(n_int):
+            back_below_i = np.sum(data_cube[i, bg_inds[0]:bg_inds[1]+1, :], axis=0)  # Yes it really is axis 0 not 1
+            back_above_i = np.sum(data_cube[i, bg_inds[2]:bg_inds[3]+1, :], axis=0) 
+            backgrounds_oldcal[i, :] = ( back_below_i + back_above_i ) / Nbacks 
+
+        return backgrounds_oldcal
 
 
+# Objective functions
 def negloglikelihood(params, *args):
     """
     Returns the negative of loglikelihood(). Since loglikelihood() includes
@@ -2999,81 +3088,35 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     return I_bin, H_fit, D_fit, IPH_fit
 
 
-def background(lamda, lamda_c, b, m, m2=0):
+def badness_bg(params, wavelength_data, DN_data):
     """
-    Construct the functional form of the background emissions for the detector, given the parameters controlling it.
-    Currently just a linear fit. Separated out so it can be called in more than one place.
+    Similar to badness, but for a linear fit to the background on the detector.
+    Used so we can fit the background in off-slit regions and dark files for
+    determining how good the fit is at representing the background.
 
     Parameters
     ----------
-    m : float
-        Slope of the line. 
-    lamda_c : float
-        Central wavelength of Lyman alpha, to set the intercept to occur closer to where the emissions do.
-    b : float
-        Constant term to determine y-difference from 0.
-    lamda : array
-        array of wavelengths.
-
-    Returns
-    ----------
-    Array of DN per wavelength for the background.
-    """
-    lamda = jnp.array(lamda)
-    lrange = 0.5*(jnp.max(lamda) - jnp.min(lamda))
-    wavefrac = (lamda - lamda_c)/lrange
-
-    return (b
-            + m * wavefrac
-            + m2 * wavefrac * wavefrac)
-
-
-def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
-    """
-    Construct a BU-style background.
+    params : array
+             Parameters for the line in the format M, B, lambda_c (of hydrogen).
+    wavelength_data : array
+             wavelength that will be fit; nm 
+    DN_data : array
+              DN of the spectrum that will be fit 
     """
 
-    # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
-    # note that the actual background will be different from what IDL spits out because the
-    # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
-    # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
+    # initial guess
+    bg_m_guess, bg_b_guess, bg_lamc_guess = params
 
-    if calibration=="new":
-        back_below = np.sum(data_cube[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
-        back_above = np.sum(data_cube[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    # "model"
+    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)
 
-        backgrounds_newcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
+    # "badness"
+    badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
 
-        # Set up stuff for median filter
-        bg_newcal_median_filtered = np.zeros_like(backgrounds_newcal) # equivalent to IDL's "med_bk"
-        margin = 7 # for a total window size of 15. 
-
-        for i in range(n_int):
-            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # equivalent to IDL "avg_bk" .average the above-slit and below-slit slices
-
-            # Now do the sliding median window (width 15)
-            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin] # IDL ignores the first margin points and doesn't change them.
-            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:] # It also ignores the last margin points.
-            for k in range(margin, len(backgrounds_newcal[i, :])-margin):
-                # The window size is 15 in IDL, so this usage of median should return the same values.
-                # There is only a discrepancy if the window size is even, since /EVEN is not set in the IDL pipeline.
-                bg_newcal_median_filtered[i, k] = np.median(backgrounds_newcal[i, k-margin:k+margin+1])
-            bg_newcal_median_filtered[i, :] *= (binning_param_dict['aprow2'].values[0] - binning_param_dict['aprow1'].values[0] + 1)
-
-        return bg_newcal_median_filtered
-
-    elif calibration=="old":
-        # This one is currently not returning the right values, I think
-        Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
-        backgrounds_oldcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
-        for i in range(n_int):
-            back_below_i = np.sum(data_cube[i, bg_inds[0]:bg_inds[1]+1, :], axis=0)  # Yes it really is axis 0 not 1
-            back_above_i = np.sum(data_cube[i, bg_inds[2]:bg_inds[3]+1, :], axis=0) 
-            backgrounds_oldcal[i, :] = ( back_below_i + back_above_i ) / Nbacks 
-
-        return backgrounds_oldcal
+    return badness
 
 
+# LSF loading and interpolation
 def interpolate_CLSF(lambda_c, binedges, CLSF):
     """
     Given a particular lambda_c, this function computes the CLSF as a
@@ -3175,6 +3218,7 @@ def load_lsf(calibration="new"):
     return lsfx_nm, lsf_f
 
 
+# Functions that help flatten arrays
 def get_wavelengths(light_fits):
     """
     Retrieves wavelengths for use from a given light file. This is done in more than one place,
@@ -3287,71 +3331,35 @@ def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=None
     return total_uncert
 
 
-def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
-                           H_a=20, H_b=170, D_a=80, D_b=100):
+# Functions to help fit the IPH
+
+def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
     """
+    Computes the mean minimum ray height altitude in an observation at the
+    center of the pixel, and uses this to determine if the IPH is likely to be 
+    contaminating the observation. 
+
     Parameters
     ----------
-    spectrum : array
-                Data in DN/sec/px 
-    a, b : int
-            indices in the spectrum over which to integrate to get an initial guess 
-            at total flux of the line.
+    mrh_alts : array
+               average MRH altitudes across the slit in each integration.
+    integration : int
+                  Integration (frame) to select
+    z_min : int
+            Altitude in integers below which we consider there to be no IPH
+            contamination by default
+
     Returns
     ----------
-    Vector of initial guess values
+    fit_IPH_component: array of bools or bool
+                       Whether IPH can be expected to be present in the data.
+                       Shape is (n_int,) where n_int is number of integrations 
+                       in the observation, unless integration is passed, in 
+                       which case it's just a single bool.
     """
-    num_params = len(_fit_parameter_names)
-
-    # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
-    # in a parent function overlap the D, but that's okay for an initial guess.
-    rows = get_n_int(light_fits) if coadded is False else 1
-    guesses = np.zeros((rows, num_params))
-    # Line center of IPH is predicted based on the obs geometry;
-    # length is number of integrations.
-    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
-    if coadded:
-        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
-
-    #Account for files where H may not be located at usual location
-    for i in range(rows):
-        spectrum = spectra[i, :]
-        if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
-            H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
-            H_b = min(np.argmax(spectrum) + 50, len(spectrum))
-            D_a = max(0, np.argmax(spectrum) - 30)
-            D_b = min(np.argmax(spectrum) - 10, len(spectrum))
-            # Now control for either of these both somehow being accidentally set to 0
-            if D_a == D_b == 0:
-                D_b += 20
-
-        # Now integrate to get an initial area guess
-        DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
-        DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
-
-        # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
-        # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
-        lambda_H_lya_guess = 121.567
-        # Account for cases with huge wavelength shift
-        if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
-            lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
-
-        # Now do IPH.
-        DN_IPH_guess = DN_H_guess * 0.05 # wild guess
-        width_IPH_guess = (IPH_maxw + IPH_minw) / 2
-
-        # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
-        bg_b_guess = np.median(spectrum)
-        bg_m_guess = 0
-        bg_m2_guess = 0
-        # bg_m3_guess = 0
-
-        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
-                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
-                         width_IPH_guess,
-                         bg_b_guess, bg_m_guess, bg_m2_guess]  # , bg_m3_guess]
-
-    return guesses
+    integration_mrh_alt = mrh_alts[integration]
+    fit_IPH_component = (integration_mrh_alt > z_min)
+    return fit_IPH_component
 
 
 def predict_IPH_linecenter(light_fits):
@@ -3413,8 +3421,7 @@ def predict_IPH_linecenter(light_fits):
     return delta_lambda_iph # Line shift per integration
     
 
-# Cosmic ray and hot pixel removal -------------------------------------------
-
+# Cosmic ray and hot pixel removal --------------------------------------------
 
 def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"): 
     """
