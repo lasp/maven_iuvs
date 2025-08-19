@@ -2661,9 +2661,13 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             fit_uncert = np.sqrt(np.diag(bestfit.hess_inv))
         except Exception as y:
             if not hush_warning:
-                print(f"Warning: algorithm {solver} doesn't return an inverse hessian. The uncertainties will be estimated using an approximate hessian.")
-            # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives.
-            # Old fallback method: We can estimate the Hessian using stattools per this link.
+                print(f"Warning: algorithm {solver} doesn't return an " \
+                       "inverse hessian. The uncertainties will be estimated" \
+                       " using an approximate hessian.")
+            # Algorithms such as the Powell method don't return inverse hessian; 
+            # for Powell it's because it doesn't take any derivatives.
+            # Old fallback method: We can estimate the Hessian using stattools 
+            # approx_hess2 per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
             # hessian = approx_hess2(bestfit.x, negloglikelihood,
             #                        args=objfn_args)
@@ -2671,7 +2675,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             # New method: compute the hessian using JAX automatic differentiation
             hessian = negloglikelihood_hessian_jit(bestfit.x, *objfn_args)
 
-            # Remove indices from hessian in case of: Not fitting IPH; not fitting background
+            # Remove indices from hessian when not fitting IPH or background
             inds_to_delete = []
 
             if not fit_IPH_component:
