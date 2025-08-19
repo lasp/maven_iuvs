@@ -4,20 +4,25 @@ import re
 import os
 from maven_iuvs.user_paths import l1a_dir, l1a_full_mission_reprocess_dir
 
-# Common regular expressions for parsing filenames
-orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)"
-orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)"
-datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}"
-fn_RE = r"mvn.+" #r"(?<=00/).+"
-fn_no_version_RE = r"mvn.+(?=_v)"
-fn_noext_RE = r"mvn.+[r|s]\d{2}"
-folder_RE = r".+(?=mvn)"
-uniqueID_RE = r"(?<=l[0-2][a-c]\_).+(?=_v[\d]{0,2})"
-looser_uniqueID_RE = r"orbit.+(?=_v)"
+# Common regular expressions for parsing filenames, with examples commented
 gen_error_RE = r"(?<=ERROR:\s)[\s\S]*?with file mvn.+\.fits\.gz"
-version_RE = r"(?<=_)v\d{2}(?=_)" 
-revision_RE = r"(?<=_)[r|s]\d{2}(?=\.)"
+folder_RE = r".+(?=mvn)" # e.g. /full/path/to/l1a_ech_data/
+datetime_RE = r"(?<=-ech_)[0-9]{8}[tT][0-9]{6}" # e.g. 20250704T110137
+orbit_set_RE = r"(?<=/orbit)[0-9]{5}(?=/)" # e.g. 14500
+orbno_RE = r"(?<=-orbit)[0-9]{5}(?=-)" # e.g. 14522
+version_RE = r"(?<=_)v\d{2}(?=_)" # e.g. v14
+revision_RE = r"(?<=_)[r|s]\d{2}(?=\.)" # e.g. r01 or s02
 
+fn_RE = r"mvn.+" 
+# e.g. mvn_iuv_l1a_indisk-orbit06798-echdark_20180329T140808_v13_r02.fits.gz
+fn_noext_RE = r"mvn.+[r|s]\d{2}" 
+# e.g. mvn_iuv_l1a_indisk-orbit06798-echdark_20180329T140808_v13_r02
+fn_no_version_RE = r"mvn.+(?=_v)" # everything up to version tag
+# e.g. mvn_iuv_l1a_indisk-orbit06798-echdark_20180329T140808
+uniqueID_RE = r"(?<=l[0-2][a-c]\_).+(?=_v[\d]{0,2})" 
+# e.g. indisk-orbit06798-echdark_20180329T140808
+looser_uniqueID_RE = r"orbit.+(?=_v)"
+# e.g. orbit06798-echdark_20180329T140808
 
 def clear_line(n=100):
     """
@@ -69,12 +74,22 @@ def mirror_dn_to_deg(dn, inverse=False):
     return value
 
 
-def find_nearest(array, value):
+def find_nearest(array, value, price_is_right=False):
     """
     Find the closest entry in array to value. 
+
+    Parameters
+    array : array
+    value : float
+    price_is_right : bool
+                     If true, finds the nearest entry to v in array that isn't 
+                     larger than value.
     """
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
+    if price_is_right:
+        idx = np.argmax(array[np.where(array - value <= 0)[0]] - value)
+    else:
+        array = np.asarray(array)
+        idx = (np.abs(array - value)).argmin()
     return idx, array[idx]
 
 
@@ -238,14 +253,16 @@ def relative_path_from_fname(l1a_fname, v="v13"):
     Parent l1a folder including orbit set folder : string
     """
 
+    # First check to see if it's an early file.
+    if 'orbit' not in l1a_fname:
+        return l1a_dir + "cruise/"
+
     # Get orbit folder
     orbfold = orbit_folder(iuvs_orbno_from_fname(l1a_fname))
-    if v=="v13":
-        return l1a_dir + orbfold + "/"
-    elif v=="v14":
+    if v=="v14":
         return l1a_full_mission_reprocess_dir + orbfold + "/"
-    else:
-        raise Exception("Invalid version number for data products! Please choose 'v13' or 'v14'")
+    
+    return l1a_dir + orbfold + "/"
 
 
 def findDiff(d1, d2, path=""):

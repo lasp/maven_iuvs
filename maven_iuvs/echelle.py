@@ -22,17 +22,18 @@ from numpy.lib.stride_tricks import sliding_window_view
 import maven_iuvs as iuvs
 from maven_iuvs.binning import get_bin_edges, pix_to_bin, get_binning_scheme, get_bin_pix_boundaries
 from maven_iuvs.constants import D_offset, IPH_wv_spread, IPH_minw, IPH_maxw
+from maven_iuvs.download import get_default_data_directory
 import maven_iuvs.graphics.echelle_graphics as echgr # Avoids circular import problem
 from maven_iuvs.instrument import ech_LSF_unit, convert_spectrum_DN_to_photoevents, \
                                    ech_Lya_slit_start, ech_Lya_slit_end, \
-                                   ran_DN_uncertainty
+                                   ran_DN_uncertainty, ech_best_MRH_pixel
 from maven_iuvs.miscellaneous import get_n_int, locate_missing_frames, \
     iuvs_orbno_from_fname, iuvs_filename_to_datetime, iuvs_segment_from_fname, \
     orbno_RE, fn_RE, orbit_folder, findDiff, \
     relative_path_from_fname
 from maven_iuvs.geometry import has_geometry_pvec, get_mean_mrh
 from maven_iuvs.pds import get_pds_dates
-from maven_iuvs.search import get_latest_files, find_files
+from maven_iuvs.search import get_latest_files, find_files, dropxml
 from maven_iuvs.integration import get_avg_pixel_count_rate
 from statistics import median_high
 from maven_iuvs.user_paths import l1a_dir, idl_pipeline_dir
@@ -47,7 +48,8 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import config as jax_config
 #jax_config.update('jax_disable_jit', True)
-
+import threading
+import queue
 
 # WEEKLY REPORT CODE ==================================================
 
@@ -334,11 +336,178 @@ def downselect_data(index, light_dark=None, orbit=None, date=None, segment=None,
 
 # Relating to dark vs. light observations -----------------------------
 
-def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx, 
+def update_filenames_in_light_dark_key(keyfile, ech_l1a_idx, dark_idx, 
+                                       verbose=True):
+    """
+    Searches the light/dark key csv (keyfile) for any filenames that have since 
+    had a revision update. In that sense, the "copy of record" is the copy on 
+    the user's local hard drive. 
+
+    Parameters
+    ----------
+    keyfile : string
+              Full path to .csv file containing columns 'Light Folder', 
+              'Light', 'Dark Folder', 'Dark', 'Segment', 'DTobj'.
+    ech_l1a_idx : list of dictionaries
+                  Metadata of local files, used to determine newest filename.
+    dark_idx : list of dictionaries
+               Same as above but the dark files only.
+    verbose : bool
+              If True will print result messages.
+
+    Returns
+    ----------
+    MASTER_KEY : pandas DataFrame
+                 New master key. 10s of thouasnds of lines
+    changes : pandas DataFrame
+              Lists old files and what they were replaced with
+    problems : pandas DataFrame
+               Files that caused a problem
+    """
+    def find_match_on_disk(key_filename, parent_folder):
+        """
+        Subroutine to search for a similarly named file on the local disk.
+
+        Parameters
+        ----------
+        key_filename : string
+                    Filename as stored in the light_dark key
+        parent_folder : string
+                        parent folder of the above
+        Returns
+        ----------
+        disk_filename : string
+                        Name of best-match file on local disk
+        """
+
+        # get the base filename
+        df_fn_base = re.match(iuvs.miscellaneous.fn_no_version_RE, df_filename)[0]
+
+        # Look for the matching file on disk 
+        disk_filename = None
+        for f in orbit_folder_cache[parent_folder]:
+            if df_fn_base in f:
+                disk_filename = f
+                break
+        
+        return disk_filename
+
+    def name_should_be_updated(key_name, disk_name):
+        """
+        Returns true if the filename on disk is production instead of stage, 
+        or if it has the same level as the name in the light/dark key but a 
+        higher revision number.
+        """
+
+        # Order of revisions to prefer - higher is preferred; index will define it
+        r_s = ["s", "r"]
+    
+        key_rev = key_name.split('.fits.gz')[0][-3:]
+        disk_rev = disk_name.split('.fits.gz')[0][-3:]
+
+        if (key_rev != disk_rev): 
+            # Whether disk revision is higher than key
+            disk_rev_newer = r_s.index(disk_rev[0]) > r_s.index(key_rev[0])
+            rev_eq = r_s.index(disk_rev[0]) == r_s.index(key_rev[0])
+            disk_rev_num_newer = int(disk_rev[1:]) > int(key_rev[1:])
+            
+            # Only make an update if the file on disk has a higher total revision than the key 
+            if disk_rev_newer or (rev_eq and disk_rev_num_newer):
+                return True
+            else:
+                return False
+        
+    MASTER_KEY = pd.read_csv(keyfile)
+
+    changes = {"row": [], "oldname": [], "newname": []}
+    problems = {"row": [], "oldname": [], "newname": []}
+
+    new_lightnames = MASTER_KEY["Light"].copy()
+    new_darknames = MASTER_KEY["Dark"].copy()
+
+    # Cache folder list
+    # Get subdirectories
+    whichdir = {"v13": "l1a", "v14": "l1a_full_mission_reprocess"}[v]
+    l1adir = get_default_data_directory(whichdir)
+    orbit_folders = [a.name for a in Path(l1adir).iterdir() if a.is_dir()]
+    if "cruise" in orbit_folders:
+        orbit_folders.remove("cruise")
+
+    # Cache lists of files on disk
+    orbit_folder_cache = {}
+    for o in orbit_folders:
+        orbit_folder_cache[l1adir + o + "/"] = dropxml(os.listdir(l1adir + o))
+
+    # Keep[ track of any missing lights that seem to have once existed
+    lights_not_on_disk_but_in_key = []
+    
+    for i, row in tqdm(MASTER_KEY.iterrows(), total=len(MASTER_KEY)):
+        lfolder = row["Light Folder"]
+        dfolder = row["Dark Folder"]
+        key_lightname = row["Light"]
+        key_darkname = row["Dark"]
+
+        # Lights --------------------------------------------------------------
+        disk_lightname = find_match_on_disk(key_lightname, lfolder)
+
+        # Catch scenario where light in keyfile is no longer on disk 
+        # (may occur if a reprocess is done and a file is missed)
+        if disk_lightname is None: 
+            lights_not_on_disk_but_in_key.append(key_lightname)
+            continue
+        
+        if name_should_be_updated(key_lightname, disk_lightname):
+            new_lightnames.loc[i] = disk_lightname
+            changes["row"].append(i)
+            changes["oldname"].append(key_lightname)
+            changes["newname"].append(disk_lightname)
+
+        # Darks ---------------------------------------------------------------
+        if key_darkname=="No valid dark found": 
+            # This means we've already investigated this light file 
+            continue 
+        else:
+            disk_darkname = find_match_on_disk(key_darkname, dfolder)
+
+            if disk_darkname is None: 
+                 # This is the spot for the biggest potential for slowdown. 
+                 # Luckily, it will only be slow hopefully the first time. 
+                 # The function is fast as long as new darks aren't needed.
+                dpath, disk_darkname = get_dark_path(lfolder + key_lightname, 
+                                                     ech_l1a_idx, dark_idx, 
+                                                     return_sep=True)
+                new_darknames.loc[i] = disk_darkname
+                changes["row"].append(i)
+                changes["oldname"].append(key_darkname)
+                changes["newname"].append(disk_darkname)
+            else: 
+                if name_should_be_updated(key_darkname, disk_darkname):
+                    new_darknames.loc[i] = disk_darkname
+                    changes["row"].append(i)
+                    changes["oldname"].append(key_darkname)
+                    changes["newname"].append(disk_darkname)
+
+    # Apply updates once
+    MASTER_KEY["Light"] = new_lightnames
+    MASTER_KEY["Dark"] = new_darknames
+    
+    if verbose and changes["row"]:
+        print(f"Updated filenames for {len(changes['row'])} files to current version.")
+        for i, o, n in zip(changes["row"], changes["oldname"], changes["newname"]):
+            print(f"Row {i}: {o} ---> {n}")
+
+    return MASTER_KEY, changes, problems, lights_not_on_disk_but_in_key
+
+
+def add_new_files_to_light_dark_key(key_filename, ech_l1a_idx, dark_idx, 
                                 ld_folder=f"{idl_pipeline_dir}light-dark-pair-lists/"):
     """
-    A wrapper for make_light_and_dark_pair_CSV() that, when called, adds new 
-    filest to the light/dark key. Does not update names. 
+    Previously named 'update_master_lightdark_key'. A wrapper for 
+    make_light_and_dark_pair_CSV() that, when called, adds new files to the 
+    light/dark key. Does not update names. This function is intended to be run 
+    periodically as new data come down -- it only ensures the key is up to 
+    date. it does not update older files in any way. For that functionality, 
+    use update_filenames_in_light_dark_key().
 
     Parameters
     ----------
@@ -355,21 +524,21 @@ def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx,
     ----------
     null - updates and writes out a new CSV.
     """
-    MASTER_KEY =  ld_folder + key_filename # "ONE_KEY_TO_RULE_THEM_ALL_nodups_v13.csv"
+    MASTER_KEY =  ld_folder + key_filename 
     MASTER_KEY = pd.read_csv(MASTER_KEY)
     
     # Sort list by the datetime object column (should exist, but if not, it will be created)
     MASTER_KEY_TIMESORT = sort_ldkey_by_date(MASTER_KEY)
     
     # Figure out point at which it was last updated
-    last_time_str = MASTER_KEY_TIMESORT.iloc[-1]["DTobj"]
+    last_time_str = str(MASTER_KEY_TIMESORT.iloc[-1]["DTobj"])
     last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
 
     # Call the CSV maker which will update it (you can do it in place by giving 
     # it the same fn if you want); this version append's today's date
     final_filename = f"{key_filename[:-15]}_{datetime.datetime.now().date()}.csv"
     make_light_and_dark_pair_CSV(ech_l1a_idx, dark_idx, l1a_dir,
-                                 csv_path=ld_folder + final_filename,
+                                 csv_name=final_filename,
                                  make_csv_for="selection",
                                  starting_df=MASTER_KEY_TIMESORT, 
                                  date=[last_time, -1])
@@ -377,7 +546,8 @@ def update_master_lightdark_key(key_filename, ech_l1a_idx, dark_idx,
 
 
 def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
-                                 csv_path="lights_and_darks.csv",  
+                                 csv_path=f"{idl_pipeline_dir}light-dark-pair-lists/",
+                                 csv_name="lights_and_darks.csv", 
                                  make_csv_for="PDS", PDS=0, version="v13",
                                  starting_df=None, **kwargs):
     """
@@ -406,6 +576,9 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
     
     writes out a CSV file with lights and matching darks. 
     """
+    # csv path
+    csv_folder = idl_pipeline_dir + "light-dark-pair-lists/"
+    csv_path = csv_folder + csv_name
 
     # Enforce slash.
     if l1a_dir[-1] != "/":
@@ -449,12 +622,17 @@ def make_light_and_dark_pair_CSV(ech_l1a_idx, dark_index, l1a_dir,
     # Add to existing frame (works even if starting_df = None)
     complete_df = pd.concat([starting_df, newfiles_df_sorted], axis=0)
 
+    # Sort it one last time just in case
+    complete_df_sorted = sort_ldkey_by_date(complete_df)
+
     print("Writing out light/dark pair file")
-    complete_df.to_csv(csv_path, index=False)
+    complete_df_sorted.to_csv(csv_path, index=False)
 
     if files_missing_dark:
-        print("Warning: Some files didn't have a valid dark. Here they are:")
-        print(files_missing_dark)
+        print(f"Warning: {len(files_missing_dark)} files did not have a matching dark.")
+        filenames_no_dark = [f['name'] for f in files_missing_dark]
+        no_dark_df = pd.DataFrame({"Filename": filenames_no_dark})
+        no_dark_df.to_csv(csv_folder + "missing_dark.csv", index=False)
 
     print("Done!")
     return
@@ -480,6 +658,9 @@ def sort_ldkey_by_date(pair_df):
         dt_objs = [iuvs_filename_to_datetime(f) for f in lights]
         pair_df["DTobj"] = dt_objs
 
+    # Ensure everything is a dtobj
+    dt_objs = [iuvs_filename_to_datetime(f) for f in pair_df["Light"]]
+    pair_df["DTobj"] = dt_objs
     pair_df_timesorted = pair_df.sort_values("DTobj", ignore_index=True)
 
     return pair_df_timesorted
@@ -551,7 +732,7 @@ def coadd_lights(data, n_good):
     coadded_lights : array
                      Essentially the mean-frame of the detector
     """
-
+    
     # Do the co-adding
     coadded_lights = np.nansum(data, axis=0)
 
@@ -588,25 +769,50 @@ def subtract_darks(light_fits, dark_fits):
 
     light_data = light_fits['Primary'].data
 
-    # Retrieve dark frames
+    # Retrieve dark frames. Note that get_dark_frames checks to see if the dark
+    # file only has one frame. If that's the case, it creates a second frame, 
+    # but sets it to nan. 
     darks = get_dark_frames(dark_fits)
     first_dark = darks[0, :, :]
     second_dark = darks[1, :, :]
 
-    # check darks are valid
-    if np.isnan(first_dark).any() & np.isnan(second_dark).any():
-        raise Exception(f"Missing critical observation data: no valid darks")
-
     # Make the array to store dark-subtracted data
     dark_subtracted = np.zeros_like(light_data)
-    
-    # Get rid of extra frames where light data are bad (broken or nan)
+
+    # Set up tracking arrays
     medians = []
     good_frame_inds = [] # Frames which appear to have valid data
     nan_light_inds = [] # frames with NaN
     bad_light_inds = [] # Light frames which have some problem, i.e. oversaturation, but are not NaN
     nan_dark_inds = []  # Dark frames with NaN 
     light_frames_with_nan_dark = [] # Light frames whose dark frame is NaN
+
+    # CHECK VALIDITY OF DARKS 
+    # =========================================================================
+    first_dark_good = True
+    second_dark_good = True
+
+    # # Check goodness of first dark 
+    if (np.isnan(first_dark).any()) or (np.nanmedian(first_dark) > 1000):  # First dark is bad 
+        first_dark_good = False
+    
+    # Check that second dark exists - early in mission, we didn't always take 2 darks.
+    # In those cases we should use the first dark. An all nan second_dark is 
+    # guaranteed by get_dark_frames() above if only one dark frame exists
+    second_dark_exists = True 
+    if np.isnan(second_dark).all():
+        second_dark_exists = False 
+
+    if not second_dark_exists: 
+        # mark it as a bad dark, but don't throw out the light frames.
+        second_dark_good = False
+    elif second_dark_exists:
+        # Check it for goodness.
+        if (np.isnan(second_dark).any()) or (np.nanmedian(second_dark) > 5000): # but it has problems...
+            second_dark_good = False
+
+    if not(first_dark_good or second_dark_good):
+        raise Exception(f"Missing critical observation data: both darks are bad")
 
     # TODO: Some of the searching for bad frames can be simplified by applying locate_missing_frames,
     # but this section also contains some additional logic. 
@@ -636,22 +842,22 @@ def subtract_darks(light_fits, dark_fits):
         good_frame_inds.append(i)
         medians.append(np.median(median_this_frame))
 
-    # Handle what to do with the darks based on whether the second exists.
-    second_dark_exists = True 
-    if np.isnan(second_dark).all():
-        second_dark_exists = False 
-
-    # Now handle the first dark
-    if np.isnan(first_dark).any():  # First dark is bad 
+    # Mark frames as bad if they are associated with the first dark, either by
+    # BEING the first dark, or being the first light, or being the 1-nth light
+    # if the second dark doesn't exist.
+    if not first_dark_good:
         nan_dark_inds.append(0)
         light_frames_with_nan_dark.append(0)
-    else:  # First dark is good 
-        if not second_dark_exists: 
+
+        # A bad 1st dark can't be used for light frames 1-n_int in early files
+        # that only had 1 dark frame.
+        if not second_dark_exists:
             nan_dark_inds.append(1)  # mark it as a bad dark 
-        else:  # second dark exists
-            if np.isnan(second_dark).any():
-                nan_dark_inds.append(1)  # mark it as a bad dark 
-                light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
+            light_frames_with_nan_dark.extend([i for i in range(1, light_data.shape[0]) if i not in bad_light_inds])  # Mark light frames as bad
+    
+    # Do the same for the second dark and its associated frames, 1-nth lights.
+    if not second_dark_good:
+        nan_dark_inds.append(1)  # mark it as a bad dark 
 
     # Collect indices of frames which can't be processed for whatever reason. 
     # Note that any frames whose associated dark frame is 0 WILL be caught here, unless it's an observation where the second
@@ -671,11 +877,12 @@ def subtract_darks(light_fits, dark_fits):
     # Here, we should account for the possibility that no second dark exists 
     # (get_dark_frames() would have set it to all nan). 
     # In that case, let's use the first dark frame for all frames.
-    if not second_dark_exists:
+    if (not second_dark_exists) or (not second_dark_good):
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - first_dark
     else:
         dark_subtracted[i_good_except_0th, :, :] = light_data[i_good_except_0th, :, :] - second_dark
 
+    # Set any light frames with problems to entirely nan. TODO: This may not be the best thing to do
     dark_subtracted[i_bad, :, :] = np.nan
 
     # Throw an error if there are no acceptable light frames
@@ -963,12 +1170,17 @@ def get_lya_countrates(idx_entry):
 def get_dir_metadata(the_dir, geospatial=True, new_files_limit=None):
     """
     Collect the metadata for all files within the_dir. May contain
-    subdirectories.
+    subdirectories. Adds new files to the metadata file, and ensures that only 
+    the most recent verison of the file is stored in the metadata index.
 
     Parameters
     ----------
     the_dir : string
               path to directory containing observation data files
+    geospatial : bool
+                 Whether to work with the metadata file that includes 
+                 a summary of geophysical data such as min/max SZA, lat/lon,
+                 and local time.
     new_files_limit : int
                       Optional restriction on number of new files to add
                       at one time.
@@ -1063,7 +1275,8 @@ def get_file_metadata(fname, geospatial=False):
 
     Returns
     -------
-    dictionary
+    metadata_dict : dictionary
+                    observation metadata for fname.
     """
     
     this_fits = fits.open(fname) 
@@ -1116,7 +1329,8 @@ def get_file_metadata(fname, geospatial=False):
 
 def update_metadata_file(the_data_dir, idx_file, geospatial=False):
     """
-    Updates the index file with either missing keys or geometry information, after it has come in.
+    Updates the index file with either missing keys or geometry information, 
+    after it has come in.
     
     Parameters
     ----------
@@ -1189,9 +1403,10 @@ def update_metadata_file(the_data_dir, idx_file, geospatial=False):
 
 def file_metadata_is_missing_geom(metadata_dict):
     """
-    Similar to has_geometry_pvec(), this function determines if the metadata entry in the .npy 
-    index file has nans entered for the geometry. This is a faster way to determine if geometry
-    is missing and needs to be filled in in the index file.
+    Similar to has_geometry_pvec(), this function determines if the metadata 
+    entry in the .npy metadata file has None entered for the geometry. This is 
+    a faster way to determine if geometry entries are missing and need to be 
+    filled in.
 
     Parameters
     ----------
@@ -1203,16 +1418,23 @@ def file_metadata_is_missing_geom(metadata_dict):
     True / False
 
     """
-    # There may be some entries where a string was stored saying something like 'This entry doesn't exist' so control for that.
-    whether_geom_is_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | (metadata_dict['minmax_SZA'] is None)),
-                                          ((type(metadata_dict['med_SZA']) is str) | (metadata_dict['med_SZA'] is None)),
-                                          ((type(metadata_dict['minmax_lat']) is str) | (metadata_dict['minmax_lat'] is None)),
-                                          ((type(metadata_dict['minmax_lon']) is str) | (metadata_dict['minmax_lon'] is None)),
-                                          ((type(metadata_dict['min_lt']) is str) | (metadata_dict['min_lt'] is None)),
-                                          ((type(metadata_dict['max_lt']) is str) | (metadata_dict['max_lt'] is None))
-                                        ])
+    # There may be some entries where a string was stored, so check for strings
+    # and Nones.
+    geom_missing = np.asarray([((type(metadata_dict['minmax_SZA']) is str) | 
+                                (metadata_dict['minmax_SZA'] is None)),
+                                ((type(metadata_dict['med_SZA']) is str) | 
+                                 (metadata_dict['med_SZA'] is None)),
+                                ((type(metadata_dict['minmax_lat']) is str) | 
+                                 (metadata_dict['minmax_lat'] is None)),
+                                ((type(metadata_dict['minmax_lon']) is str) | 
+                                 (metadata_dict['minmax_lon'] is None)),
+                                ((type(metadata_dict['min_lt']) is str) | 
+                                 (metadata_dict['min_lt'] is None)),
+                                ((type(metadata_dict['max_lt']) is str) | 
+                                 (metadata_dict['max_lt'] is None))
+                            ])
 
-    if whether_geom_is_missing.any():
+    if geom_missing.any():
         return True
     else:
         return False
@@ -1220,7 +1442,8 @@ def file_metadata_is_missing_geom(metadata_dict):
 
 def update_index(rootpath, geospatial=False, new_files_limit_per_run=1000):
     """
-    Updates the index file for rootpath, where the index file has the form <rootpath>_metadata.npy.
+    Updates the index file for rootpath, where the index file has the form 
+    <rootpath>_metadata.npy.
     
     Parameters
     ----------
@@ -1322,14 +1545,22 @@ def get_ech_slit_indices(light_fits):
 # L1c processing ===========================================================
 
 def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c_savepath, 
+                       process_timestamp=None,
                        calibration="new", ints_to_fit="all", remove_artifacts=True,
                        save_arrays=False, place_for_arrays=None, 
-                       return_each_line_fit=True, do_BU_background_comparison=False, 
-                       run_writeout=True, overwrite=False, 
-                       make_plots=True, 
-                       idl_process_kwargs = {"open_idl": False, "proc_passed_in": None},
-                       clean_data_kwargs = {"clean_method": "new", "remove_rays": True, "remove_hotpix": True},
-                       plot_kwargs = {"plot_subtract_bg": False, "plot_bg_separately": False, "make_example_plot": False, "print_fn_on_plot": True}, **kwargs):
+                       return_each_line_fit=True, 
+                       do_BU_background_comparison=False, 
+                       run_writeout=True, overwrite=False, make_plots=True, 
+                       idl_process_kwargs = {"open_idl": False, "proc": None, 
+                                             "stderr_queue": None, 
+                                             "stderr_thread": None},
+                       clean_data_kwargs = {"clean_method": "new", 
+                                            "remove_rays": True, 
+                                            "remove_hotpix": True},
+                       plot_kwargs = {"plot_subtract_bg": False, 
+                                      "plot_bg_separately": False, 
+                                      "make_example_plot": False, 
+                                      "print_fn_on_plot": True}, **kwargs):
     """
     Takes an l1a file through the process of calibration, cleaning, fitting the data, and saving an l1c file.
 
@@ -1341,6 +1572,14 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
                 File with associated dark observation for light_fits
     light_l1a_path : string
                      Path to the original source file
+    dark_l1a_path : string
+                    Path to the original dark file 
+    l1c_savepath : string
+                   Folder in which to save any output files 
+    process_timestamp : None or string
+                        Required for file writeout. Of a format like 
+                        20170131T050459. Will be added to IDL-produced log files.
+                        Easier to determine in Python.
     calibration : string
                   "new" or "old": whether to compare use new or old calibration values 
                   for the LSF and binning.
@@ -1348,11 +1587,21 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
                   Number of integrations to run the fit for.
                   "first" will do the fit on the 0th frame (useful for testing).
                   Any other value will just automatically fit all frames.
-    do_BU_background_comparison : boolean
+    remove_artifacts : bool
+                       Whether to do the data cleanup routines.
+    save_arrays : bool
+                  whether to write out data fitting arrays to CSVs for inspection.
+    place_for_arrays : string
+                       location to save the above
+    return_each_line_fit : bool        
+                           whether to return components of model fit
+    do_BU_background_comparison : bool
                                   whether to include an alternate fit using a background as per Mayyasi+2023.
-    run_writeout : boolean
+    run_writeout : bool
                    if true, will trigger a call to IDL to run the full file writeout.
-    make_plots : boolean
+    overwrite : bool
+                Whether to overwrite existing data product files if they exist.
+    make_plots : bool
                  if true, plots showing the fits will be produced.
     clean_data_kwargs : dict
                         kwargs which may be passed to clean_data relating to data cleaning. 
@@ -1360,7 +1609,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     plot_kwargs : dict 
                   kwargs which may be passed to the plotting routines to control plot appearance.
     idl_process_kwargs : dict
-                         kwargs for passing to write_l1c
+                         kwargs for passing to write_l1c_file_from_python
     **kwargs : kwargs
                other kwargs for passing to fit_flat_data()
     
@@ -1444,6 +1693,7 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
     if return_each_line_fit:
         arrays_in_DN.append(H_fit)
         arrays_in_DN.append(D_fit)
+        arrays_in_DN.append(IPH_fit)
 
     arrays_in_kR_pernm, fit_params_kR, fit_unc_kR = convert_to_physical_units(light_fits, arrays_in_DN, fit_params, fit_uncertainties)
 
@@ -1480,10 +1730,20 @@ def convert_l1a_to_l1c(light_fits, dark_fits, light_l1a_path, dark_l1a_path, l1c
 
     # Write out the l1c file
     # ===============================================================================================
+    # Unpack for clarity
+    if return_each_line_fit:
+        spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bgs_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, IPH_fit_kR_pernm = arrays_in_kR_pernm
+    else: 
+        spec_kR_pernm, data_unc_kR_pernm, I_fit_kR_pernm, bgs_kR_pernm = arrays_in_kR_pernm
+
+
     if run_writeout:
-        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, 
-                        light_fits, fit_params_kR, fit_unc_kR, 
-                        bright_data_ph_per_s, **idl_process_kwargs)
+        assert process_timestamp is not None
+        writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
+                     fit_params_kR, fit_unc_kR, 
+                     I_fit_kR_pernm, H_fit_kR_pernm, D_fit_kR_pernm, 
+                     IPH_fit_kR_pernm, bgs_kR_pernm,
+                     bright_data_ph_per_s, process_timestamp,  **idl_process_kwargs)
 
     return
 
@@ -1819,6 +2079,298 @@ def make_array_of_fitted_backgrounds(light_fits, fit_params):
     return bg_fits
 
 
+# Write out with IDL ==========================================================
+
+def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, 
+                 fit_params_list, fit_unc_list, I_fit, H_fit, D_fit, IPH_fit, bg_fit,
+                 bright_data_ph_per_s_array, process_timestamp, idl_pipeline_folder=idl_pipeline_dir, 
+                 open_idl=True, proc=None, stderr_queue=None, stderr_thread=None):
+    """
+    Writes out result of model fitting to an l1c file via a call to IDL.
+
+    Parameters
+    ----------
+    light_l1a_path : string
+                     Location of the source l1a data product on the local computer
+    dark_l1a_path : string
+                    Location of the associated dark file on the local computer
+    l1c_savepath : string
+                   Path to which to save the l1c file
+    light_fits : astropy.io.fits instance
+                File with light observation
+    fit_params_list : list of dictionaries
+                      Contains model fit parameters for each integration in light_fits, in kR per nm.
+    fit_unc_list : list of dictionaries
+                   Contains model fit uncertainties for each integration in light_fits, in kR per nm.
+    I_fit, H_fit, D_fit, IPH_fit bg_fit: arrays
+                                         Total model and each component fits
+    bright_data_ph_per_s : array
+                           data values in photons/sec, needed to maintain continuity with earlier data products.
+    idl_pipeline_folder : string
+                          Location of the IDL pipeline code on the local computer 
+    open_idl : bool
+               if True, the IDL process will be started inside this function.
+    proc : subprocess instance
+           subprocess process instance, will be written to if open_idl 
+           is False.
+    stderr_queue: queue.Queue() instance
+                  for keeping track of output to stderr from subprocess
+    stderr_thread: threading.Thread() instance
+                   for watching for the message saying that compilation of 
+                   write_l1c_file_from_python.pro has succeeded
+    
+    Returns
+    ----------
+    an l1c .fits.gz file, written out from IDL.
+    """
+
+    n_int = get_n_int(light_fits)
+
+    # Collect index of the best spatial row representing MRH of the observation
+    center_idx = 4
+    spapixlo_arr = light_fits["binning"].data['spapixlo'][0]
+    i_MRH = iuvs.miscellaneous.find_nearest(spapixlo_arr, ech_best_MRH_pixel,
+                                            price_is_right=True)[0] 
+
+    # Collect all the brightnesses and uncertainties into lists 
+    H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
+    D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
+    IPH_brightnesses = [fit_params_list[i]['total_brightness_IPH'] for i in range(n_int)]
+    H_1sig = [fit_unc_list[i]['unc_total_brightness_H'] for i in range(n_int)]
+    D_1sig = [fit_unc_list[i]['unc_total_brightness_D'] for i in range(n_int)]
+    IPH_1sig = [fit_unc_list[i]['unc_total_brightness_IPH'] for i in range(n_int)]
+
+    # Collect wavelengths
+    H_lya_ctr = [fit_params_list[i]['central_wavelength_H'] for i in range(n_int)]
+    IPH_lya_ctr = [fit_params_list[i]['central_wavelength_IPH'] for i in range(n_int)]
+    H_lya_ctr_1sig = [fit_unc_list[i]['unc_central_wavelength_H'] for i in range(n_int)]
+    IPH_lya_ctr_1sig = [fit_unc_list[i]['unc_central_wavelength_IPH'] for i in range(n_int)]
+
+    linectr_fit_dict = {
+        # NEW - central wavelengths - shape: (n_int,)
+        "H_LYA_CENTER": H_lya_ctr,
+        "D_LYA_CENTER": [i - D_offset for i in H_lya_ctr],
+        "IPH_LYA_CENTER": IPH_lya_ctr,
+        # Uncertainties on centers - shape: (n_int,)
+        "H_LYA_CENTER_OneSIGMA": H_lya_ctr_1sig, 
+        "D_LYA_CENTER_OneSIGMA": H_lya_ctr_1sig, # Same as H bc it's a const
+        "IPH_LYA_CENTER_OneSIGMA": IPH_lya_ctr_1sig,
+    }
+
+    product_creation_date = datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC')
+    seg = iuvs_segment_from_fname(light_fits["Primary"].header['Filename'])
+    # in IDL the microseconds are only 5 digits long and 0, so idk.
+    brightness_HDU_dict = {
+        # Brightnesses - shape: (n_int,)
+        "BRIGHT_H_kR": H_brightnesses,
+        "BRIGHT_D_kR": D_brightnesses,
+        "BRIGHT_IPH_kR": IPH_brightnesses,
+        # Uncertainties - shape: (n_int,)
+        "BRIGHT_H_OneSIGMA_kR": H_1sig,
+        "BRIGHT_D_OneSIGMA_kR": D_1sig,
+        "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,
+        # OTHER - shape: (n_int,)
+        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, i_MRH, center_idx], # MRH in km
+        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, i_MRH], # SZA in degrees
+        "ET": light_fits["Integration"].data["ET"], 
+        "UTC": light_fits["Integration"].data["UTC"],
+        "PRODUCT_CREATION_DATE": [product_creation_date for i in range(len(H_brightnesses))],
+        "ORBIT_SEGMENT": [seg for i in range(len(H_brightnesses))],
+    }
+
+    # handle easy stuff
+    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in brightness_HDU_dict.items() ]) )
+    linectr_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in linectr_fit_dict.items() ]) )
+
+    # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
+    # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
+    # This error has been corrected in this version. 
+    bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s_array.transpose(),    # values
+                                        columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
+    
+    # Save the model fit arrays
+    I_fit_df = pd.DataFrame(data=I_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    H_fit_df = pd.DataFrame(data=H_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    D_fit_df = pd.DataFrame(data=D_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    IPH_fit_df = pd.DataFrame(data=IPH_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    bg_df = pd.DataFrame(data=bg_fit.transpose(),
+                            columns=[f"i={j}" for j in range(n_int)])
+    
+    
+    # Save the output to some temporary files that will be saved outside the Python module.
+    # TODO: Make these actual temp files.
+    brightness_csv_path = idl_pipeline_folder + "transfer_to_IDL/brightness.csv"
+    ph_per_s_csv_path = idl_pipeline_folder + "transfer_to_IDL/ph_per_s.csv"
+    total_model_csv_path =  idl_pipeline_folder + "transfer_to_IDL/total_model.csv"
+    H_csv_path =  idl_pipeline_folder + "transfer_to_IDL/H_fit.csv"
+    D_csv_path =  idl_pipeline_folder + "transfer_to_IDL/D_fit.csv"
+    IPH_csv_path =  idl_pipeline_folder + "transfer_to_IDL/IPH_fit.csv"
+    bg_csv_path =  idl_pipeline_folder + "transfer_to_IDL/background.csv"
+    linectr_csv_path = idl_pipeline_folder + "transfer_to_IDL/linectr.csv"
+
+    narep = -9999
+    brightness_writeout.to_csv(brightness_csv_path, index=False, na_rep=narep)
+    bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False, na_rep=narep)
+    linectr_writeout.to_csv(linectr_csv_path, index=False, na_rep=narep)
+    I_fit_df.to_csv(total_model_csv_path, index=False, na_rep=narep)
+    H_fit_df.to_csv(H_csv_path, index=False, na_rep=narep)
+    D_fit_df.to_csv(D_csv_path, index=False, na_rep=narep)
+    IPH_fit_df.to_csv(IPH_csv_path, index=False, na_rep=narep)
+    bg_df.to_csv(bg_csv_path, index=False, na_rep=narep)
+
+    # Now call IDL
+    if open_idl is True:
+        proc, stderr_queue, stderr_thread = open_IDL_and_compile_writeout_script(l1c_savepath)
+    else:
+        if (proc is None) or (stderr_queue is None) or (stderr_thread is None):
+            raise Exception("Please pass in the subprocess proc, stderr_queue, "
+                            "and stderr_thread")
+        proc = proc
+        stderr_queue = stderr_queue
+        stderr_thread = stderr_thread
+
+    output_log = l1c_savepath + "IDLoutput.txt"
+    stdout_queue = queue.Queue()
+    stdout_thread = threading.Thread(target=start_reader, args=(proc.stdout, 
+                                                                stdout_queue, 
+                                                                output_log), 
+                                                          daemon=True)
+    stdout_thread.start()
+    proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
+                     '{dark_l1a_path}', '{l1c_savepath}', '{process_timestamp}'\n")
+    # The rest of the arguments are provided as default keywords cause the same 
+    # files get used over and over again to store the stuff transmitted to IDL
+    proc.stdin.flush()
+
+    file_process_success = "FINISHED! If you see this message in the IDL log or terminal when calling from Python, the IDL script succeeded"
+    if check_for_success_msg(stdout_queue, file_process_success):
+        print(f"File and label writeout succeeded")
+    else:
+        print(f"Python detects that an error occurred in IDL")
+
+    if open_idl is True:
+        proc.terminate() 
+
+    return 
+
+
+def open_IDL_and_compile_writeout_script(l1c_savepath, errlogname="IDLerrors.txt"):
+    """
+    Opens IDL with subprocess, and starts a thread to monitor the output to 
+    check for when the script to writeout files in IDL has been compiled.
+
+    Parameters
+    ----------
+    l1c_savepath : string
+                Location in which to save the error log
+    errlogname : string
+                filename for the error log 
+    Returns
+    ----------
+    proc : subprocess Popen instance
+        subprocess containing the call to IDL 
+    stderr_queue : Queue() instance
+                   Lets content be read from the pipe while it's also written 
+                   out to a log. 
+    stderr_thread : threading.Thread() instance
+                    with start_reader(), keeps track of output from IDL to 
+                    watch for the key message to tell when script is compiled
+    """
+    print("Opening IDL")
+    os.chdir(idl_pipeline_dir)
+    
+    err_log = l1c_savepath + errlogname
+
+    proc = subprocess.Popen(["stdbuf", "-oL", "-eL", "idl", "-quiet"],
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True, bufsize=1)
+    
+    stderr_queue = queue.Queue()
+    
+    # Start background readers
+    stderr_thread = threading.Thread(target=start_reader, args=(proc.stderr, stderr_queue, err_log), daemon=True)
+    stderr_thread.start()
+
+    proc.stdin.write(".com write_l1c_file_from_python.pro\n")
+    proc.stdin.flush()
+
+    if check_for_success_msg(stderr_queue, "% Compiled module: WRITE_L1C_FILE_FROM_PYTHON.", timeout=5):
+        print("Compiled write_l1c_file_from_python.")
+    else:
+        print("Compile failed.")
+    
+    return proc, stderr_queue, stderr_thread
+
+
+def start_reader(pipe, output_queue, log_file_path):
+    """
+    Continuously read from a pipe (stdout or stderr), line by line,
+    writing to a queue and logging to a file.
+
+    Parameters
+    ----------
+    pipe : subprocess.pipe instance
+    output_queue : Queue() instance
+                keeps track of IDL output while also allowing it to be written out to a file
+    log_file_path : string
+                    name of log file to which to write IDL output
+    
+    Returns
+    ----------
+    none
+    """
+    with open(log_file_path, 'a', encoding='utf-8') as log_file:
+        for line in iter(pipe.readline, ''):
+            log_file.write(line)
+            log_file.flush()
+            output_queue.put(line.rstrip())
+
+    pipe.close()
+
+
+def check_for_success_msg(output_queue, target_phrase, timeout=30):
+    """
+    Read lines from a queue until the last one matches the target_phrase.
+    Times out after `timeout` seconds.
+
+    Parameters
+    ----------
+    output_queue : Queue() instance
+                keeps track of IDL output for reading while also allowing it to be written to file
+    target_phrase : string
+                    Key phrase to look for in IDL output to tell when a certain milestone has been achieved.
+    timeout : int
+            Time in seconds after which to give up waiting.
+    Returns
+    ----------
+    boolean - whether the goal is achieved
+    """
+    start_time = time.time()
+    buffer = []
+
+    while True:
+        try:
+            line = output_queue.get(timeout=0.1)
+            buffer.append(line)
+        except queue.Empty:
+            pass
+
+        # Break if time exceeded
+        if time.time() - start_time > timeout:
+            print("⏰ Timeout waiting for phrase.")
+            return False
+
+        # If buffer is not empty and last line matches
+        if buffer and buffer[-1].strip() == target_phrase:
+            return True
+        
+
 def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
     """
     The echelle l1c files typically report a quantity referred to in IDL pipeline as bright_data_ph_per_s, 
@@ -1860,6 +2412,7 @@ def compute_ph_per_s_data(light_fits, spectrum, fit_params, bg_fits):
 
     return bright_data_ph_per_s
 
+# Conversion functions ========================================================
 
 def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_params, fit_uncertainties, calibration="new"): 
     """
@@ -1915,122 +2468,14 @@ def convert_to_physical_units(light_fits, arrays_to_convert_to_kR_pernm, fit_par
     return arrays_in_kR_pernm, fit_params_converted, fit_unc_converted
 
 
-def writeout_l1c(light_l1a_path, dark_l1a_path, l1c_savepath, light_fits, fit_params_list, fit_unc_list, bright_data_ph_per_s_array, 
-                 idl_pipeline_folder=idl_pipeline_dir, open_idl=True, proc_passed_in=None):
-    """
-    Writes out result of model fitting to an l1c file via a call to IDL.
-
-    Parameters
-    ----------
-    light_l1a_path : string
-                     Location of the source l1a data product on the local computer
-    dark_l1a_path : string
-                    Location of the associated dark file on the local computer
-    l1c_savepath : string
-                   Path to which to save the l1c file
-    light_fits : astropy.io.fits instance
-                File with light observation
-    fit_params_list : list of dictionaries
-                      Contains model fit parameters for each integration in light_fits, in kR per nm.
-    fit_unc_list : list of dictionaries
-                   Contains model fit uncertainties for each integration in light_fits, in kR per nm.
-    bright_data_ph_per_s : array
-                           data values in photons/sec, needed to maintain continuity with earlier data products.
-    idl_pipeline_folder : string
-                          Location of the IDL pipeline code on the local computer 
-    open_idl : bool
-               if True, the IDL process will be started inside this function.
-    proc_passed_in : subprocess instance
-                     subprocess process instance, will be written to if open_idl 
-                     is False.
-    
-    Returns
-    ----------
-    an l1c .fits.gz file, written out from IDL.
-    """
-
-    n_int = get_n_int(light_fits)
-    # Mostly destined for the BRIGHTNESSES HDU, but orbit_segment and product_creation_date are also needed in Observation.
-    center_idx = 4
-    yMRH_row = 485 # the location of the row most-accurately representing the MRH altitudes across the aperture center (to be used by all emissions)
-    spapix0 = iuvs.binning.get_binning_scheme(light_fits)['spapix0']
-    spabinw = iuvs.binning.get_binning_scheme(light_fits)['spabinwidth']
-    yMRH = math.floor((yMRH_row-spapix0)/spabinw) #  to get an integer value like IDL does.
-
-    H_brightnesses = [fit_params_list[i]['total_brightness_H'] for i in range(n_int)]
-    D_brightnesses = [fit_params_list[i]['total_brightness_D'] for i in range(n_int)]
-    IPH_brightnesses = [fit_params_list[i]['total_brightness_IPH'] for i in range(n_int)]
-    H_1sig = [fit_unc_list[i]['unc_total_brightness_H'] for i in range(n_int)]
-    D_1sig = [fit_unc_list[i]['unc_total_brightness_D'] for i in range(n_int)]
-    IPH_1sig = [fit_unc_list[i]['unc_total_brightness_IPH'] for i in range(n_int)]
-    
-    dict_for_writeout = {
-        "BRIGHT_H_kR": H_brightnesses, #  H brightness (BkR_H) in kR
-        "BRIGHT_D_kR": D_brightnesses, # D brightness (BkR_D) in kR
-        "BRIGHT_IPH_kR": IPH_brightnesses, # D brightness (BkR_D) in kR
-        "BRIGHT_H_OneSIGMA_kR": H_1sig,  # 1 sigma uncertainty in H brightness (BkR_U) in kR
-        "BRIGHT_D_OneSIGMA_kR": D_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
-        "BRIGHT_IPH_OneSIGMA_kR": IPH_1sig,  # 1 sigma uncertainty in D brightness (BkR_U) in kR
-        "MRH_ALTITUDE_km": light_fits["PixelGeometry"].data["pixel_corner_mrh_alt"][:, yMRH, center_idx], # MRH in km
-        "TANGENT_SZA_deg": light_fits["PixelGeometry"].data["pixel_solar_zenith_angle"][:, yMRH], # SZA in degrees
-        "ET": light_fits["Integration"].data["ET"], 
-        "UTC": light_fits["Integration"].data["UTC"],
-        "PRODUCT_CREATION_DATE": datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%j %b %d %H:%M:%S.%fUTC'), # in IDL the microseconds are only 5 digits long and 0, so idk.
-        "ORBIT_SEGMENT": iuvs_segment_from_fname(light_fits["Primary"].header['Filename']),
-    }
-
-    brightness_writeout = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in dict_for_writeout.items() ]) )
-
-    # The following is the spectrum with the background subtracted as stated. It needs its own file because we need to write out 
-    # 10 different arrays. The IDL pipeline only writes out the last integration's spectrum 10 times, for some reason. 
-    # This error has been corrected in this version. 
-    bright_data_ph_per_s = pd.DataFrame(data=bright_data_ph_per_s_array.transpose(),    # values
-                                        columns=[f"i={j}" for j in range(n_int)])  # 1st row as the column names
-    
-    # Save the output to some temporary files that will be saved outside the Python module.
-    # TODO: Make these actual temp files.
-    brightness_csv_path = idl_pipeline_folder + "brightness.csv"
-    ph_per_s_csv_path = idl_pipeline_folder + "ph_per_s.csv"
-    brightness_writeout.to_csv(brightness_csv_path, index=False)
-    bright_data_ph_per_s.to_csv(ph_per_s_csv_path, index=False)
-
-    # Now call IDL
-    if open_idl is True:
-        print("Opening IDL")
-        os.chdir(idl_pipeline_folder) # iuvs.__path__[0]
-        outputfile = open(l1c_savepath + "IDLoutput.txt", "w")
-        errorfile = open(l1c_savepath + "IDLerrors.txt", "w")
-
-        proc = subprocess.Popen("idl", stdin=subprocess.PIPE, 
-                                stdout=outputfile, stderr=errorfile, 
-                                text=True, bufsize=1)
-        proc.stdin.write(".com write_l1c_file_from_python.pro\n")
-        time.sleep(3) # Be sure it's compiled 
-        print("IDL is now open and the script should be compiled")
-    else:
-        if proc_passed_in is None:
-            raise Exception("Please pass in the subprocess proc")
-        proc = proc_passed_in
-    
-    proc.stdin.write(f"write_l1c_file_from_python, '{light_l1a_path}', \
-                     '{dark_l1a_path}', '{l1c_savepath}', \
-                     '{brightness_csv_path}', '{ph_per_s_csv_path}'\n")
-    time.sleep(1)  # Allow enough time to complete the file writeout
-    proc.stdin.flush()
-
-    if open_idl is True:
-        proc.terminate() 
-
-    return 
-
-
 def get_conversion_factors(t_int, binwidth_nm, calibration="new"):
     """
     Identify and return the appropriate conversion factors for the data.
     """
-    Aeff =  32.327455  # Acquired by testing on one file in the IDL pipeline, 16910 outdisk. 
-                       # DOES change with different files but is small.
-                       # TODO: account for this changing
+    Aeff =  32.327455  # Median and mode value of effective area of the 
+                       # instrument. In reality the value shouldn't change, 
+                       # but does somewhat probably due to other variations in
+                       # the IDL pipeline process.
 
     if calibration=="new":
         conv_to_kR_with_LSFunit = ech_LSF_unit / (t_int)
@@ -2087,37 +2532,7 @@ def get_binning_df(calibration="new"):
                         })
 
 
-# Line fitting =============================================================
-
-   
-def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
-    """
-    Computes the mean minimum ray height altitude in an observation at the
-    center of the pixel, and uses this to determine if the IPH is likely to be 
-    contaminating the observation. 
-
-    Parameters
-    ----------
-    mrh_alts : array
-               average MRH altitudes across the slit in each integration.
-    integration : int
-                  Integration (frame) to select
-    z_min : int
-            Altitude in integers below which we consider there to be no IPH
-            contamination by default
-
-    Returns
-    ----------
-    fit_IPH_component: array of bools or bool
-                       Whether IPH can be expected to be present in the data.
-                       Shape is (n_int,) where n_int is number of integrations 
-                       in the observation, unless integration is passed, in 
-                       which case it's just a single bool.
-    """
-    integration_mrh_alt = mrh_alts[integration]
-    fit_IPH_component = (integration_mrh_alt > z_min)
-    return fit_IPH_component
-
+# Line fitting ================================================================
 
 def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
                 fit_IPH_component=False, BU_bg=np.nan,
@@ -2246,9 +2661,13 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             fit_uncert = np.sqrt(np.diag(bestfit.hess_inv))
         except Exception as y:
             if not hush_warning:
-                print(f"Warning: algorithm {solver} doesn't return an inverse hessian. The uncertainties will be estimated using an approximate hessian.")
-            # Algorithms such as the Powell method don't return inverse hessian; for Powell it's because it doesn't take any derivatives.
-            # Old fallback method: We can estimate the Hessian using stattools per this link.
+                print(f"Warning: algorithm {solver} doesn't return an " \
+                       "inverse hessian. The uncertainties will be estimated" \
+                       " using an approximate hessian.")
+            # Algorithms such as the Powell method don't return inverse hessian; 
+            # for Powell it's because it doesn't take any derivatives.
+            # Old fallback method: We can estimate the Hessian using stattools 
+            # approx_hess2 per this link.
             # https://stackoverflow.com/questions/75988408/how-to-get-errors-from-solved-basin-hopping-results-using-powell-method-for-loc
             # hessian = approx_hess2(bestfit.x, negloglikelihood,
             #                        args=objfn_args)
@@ -2256,7 +2675,7 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
             # New method: compute the hessian using JAX automatic differentiation
             hessian = negloglikelihood_hessian_jit(bestfit.x, *objfn_args)
 
-            # Remove indices from hessian in case of: Not fitting IPH; not fitting background
+            # Remove indices from hessian when not fitting IPH or background
             inds_to_delete = []
 
             if not fit_IPH_component:
@@ -2392,35 +2811,151 @@ def fit_H_and_D(pig, wavelengths, spec, light_fits, CLSF, unc=1,
 
         return modeled_params, I_bin, fit_uncert, H_bin, D_bin, IPH_bin
 
+# Components
 
-def badness_bg(params, wavelength_data, DN_data):
+def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
+                           H_a=20, H_b=170, D_a=80, D_b=100):
     """
-    Similar to badness, but for a linear fit to the background on the detector.
-    Used so we can fit the background in off-slit regions and dark files for
-    determining how good the fit is at representing the background.
+    Parameters
+    ----------
+    spectrum : array
+                Data in DN/sec/px 
+    a, b : int
+            indices in the spectrum over which to integrate to get an initial guess 
+            at total flux of the line.
+    Returns
+    ----------
+    Vector of initial guess values
+    """
+    num_params = len(_fit_parameter_names)
+
+    # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
+    # in a parent function overlap the D, but that's okay for an initial guess.
+    rows = get_n_int(light_fits) if coadded is False else 1
+    guesses = np.zeros((rows, num_params))
+    # Line center of IPH is predicted based on the obs geometry;
+    # length is number of integrations.
+    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
+    if coadded:
+        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
+
+    #Account for files where H may not be located at usual location
+    for i in range(rows):
+        spectrum = spectra[i, :]
+        if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
+            H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
+            H_b = min(np.argmax(spectrum) + 50, len(spectrum))
+            D_a = max(0, np.argmax(spectrum) - 30)
+            D_b = min(np.argmax(spectrum) - 10, len(spectrum))
+            # Now control for either of these both somehow being accidentally set to 0
+            if D_a == D_b == 0:
+                D_b += 20
+
+        # Now integrate to get an initial area guess
+        DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
+        DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
+
+        # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
+        # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
+        lambda_H_lya_guess = 121.567
+        # Account for cases with huge wavelength shift
+        if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
+            lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
+
+        # Now do IPH.
+        DN_IPH_guess = DN_H_guess * 0.05 # wild guess
+        width_IPH_guess = (IPH_maxw + IPH_minw) / 2
+
+        # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
+        bg_b_guess = np.median(spectrum)
+        bg_m_guess = 0
+        bg_m2_guess = 0
+        # bg_m3_guess = 0
+
+        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
+                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
+                         width_IPH_guess,
+                         bg_b_guess, bg_m_guess, bg_m2_guess]  # , bg_m3_guess]
+
+    return guesses
+
+
+def background(lamda, lamda_c, b, m, m2=0):
+    """
+    Construct the functional form of the background emissions for the detector, given the parameters controlling it.
+    Currently just a linear fit. Separated out so it can be called in more than one place.
 
     Parameters
     ----------
-    params : array
-             Parameters for the line in the format M, B, lambda_c (of hydrogen).
-    wavelength_data : array
-             wavelength that will be fit; nm 
-    DN_data : array
-              DN of the spectrum that will be fit 
+    m : float
+        Slope of the line. 
+    lamda_c : float
+        Central wavelength of Lyman alpha, to set the intercept to occur closer to where the emissions do.
+    b : float
+        Constant term to determine y-difference from 0.
+    lamda : array
+        array of wavelengths.
+
+    Returns
+    ----------
+    Array of DN per wavelength for the background.
+    """
+    lamda = jnp.array(lamda)
+    lrange = 0.5*(jnp.max(lamda) - jnp.min(lamda))
+    wavefrac = (lamda - lamda_c)/lrange
+
+    return (b
+            + m * wavefrac
+            + m2 * wavefrac * wavefrac)
+
+
+def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
+    """
+    Construct a BU-style background.
     """
 
-    # initial guess
-    bg_m_guess, bg_b_guess, bg_lamc_guess = params
+    # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
+    # note that the actual background will be different from what IDL spits out because the
+    # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
+    # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
 
-    # "model"
-    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)
+    if calibration=="new":
+        back_below = np.sum(data_cube[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
+        back_above = np.sum(data_cube[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
 
-    # "badness"
-    badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
+        backgrounds_newcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
 
-    return badness
+        # Set up stuff for median filter
+        bg_newcal_median_filtered = np.zeros_like(backgrounds_newcal) # equivalent to IDL's "med_bk"
+        margin = 7 # for a total window size of 15. 
+
+        for i in range(n_int):
+            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # equivalent to IDL "avg_bk" .average the above-slit and below-slit slices
+
+            # Now do the sliding median window (width 15)
+            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin] # IDL ignores the first margin points and doesn't change them.
+            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:] # It also ignores the last margin points.
+            for k in range(margin, len(backgrounds_newcal[i, :])-margin):
+                # The window size is 15 in IDL, so this usage of median should return the same values.
+                # There is only a discrepancy if the window size is even, since /EVEN is not set in the IDL pipeline.
+                bg_newcal_median_filtered[i, k] = np.median(backgrounds_newcal[i, k-margin:k+margin+1])
+            bg_newcal_median_filtered[i, :] *= (binning_param_dict['aprow2'].values[0] - binning_param_dict['aprow1'].values[0] + 1)
+
+        return bg_newcal_median_filtered
+
+    elif calibration=="old":
+        # This one is currently not returning the right values, I think
+        Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
+        backgrounds_oldcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
+        for i in range(n_int):
+            back_below_i = np.sum(data_cube[i, bg_inds[0]:bg_inds[1]+1, :], axis=0)  # Yes it really is axis 0 not 1
+            back_above_i = np.sum(data_cube[i, bg_inds[2]:bg_inds[3]+1, :], axis=0) 
+            backgrounds_oldcal[i, :] = ( back_below_i + back_above_i ) / Nbacks 
+
+        return backgrounds_oldcal
 
 
+# Objective functions
 def negloglikelihood(params, *args):
     """
     Returns the negative of loglikelihood(). Since loglikelihood() includes
@@ -2557,81 +3092,35 @@ def lineshape_model(params, wavelength_data, binedges, theCLSF, BU_bg, fit_IPH_c
     return I_bin, H_fit, D_fit, IPH_fit
 
 
-def background(lamda, lamda_c, b, m, m2=0):
+def badness_bg(params, wavelength_data, DN_data):
     """
-    Construct the functional form of the background emissions for the detector, given the parameters controlling it.
-    Currently just a linear fit. Separated out so it can be called in more than one place.
+    Similar to badness, but for a linear fit to the background on the detector.
+    Used so we can fit the background in off-slit regions and dark files for
+    determining how good the fit is at representing the background.
 
     Parameters
     ----------
-    m : float
-        Slope of the line. 
-    lamda_c : float
-        Central wavelength of Lyman alpha, to set the intercept to occur closer to where the emissions do.
-    b : float
-        Constant term to determine y-difference from 0.
-    lamda : array
-        array of wavelengths.
-
-    Returns
-    ----------
-    Array of DN per wavelength for the background.
-    """
-    lamda = jnp.array(lamda)
-    lrange = 0.5*(jnp.max(lamda) - jnp.min(lamda))
-    wavefrac = (lamda - lamda_c)/lrange
-
-    return (b
-            + m * wavefrac
-            + m2 * wavefrac * wavefrac)
-
-
-def make_BU_background(data_cube, bg_inds, n_int, binning_param_dict, calibration="new"):
-    """
-    Construct a BU-style background.
+    params : array
+             Parameters for the line in the format M, B, lambda_c (of hydrogen).
+    wavelength_data : array
+             wavelength that will be fit; nm 
+    DN_data : array
+              DN of the spectrum that will be fit 
     """
 
-    # BU BG - construct an alternative background the same way as is done in the BU pipeline. ~~~~~~~~~~~~~~~~~~~~
-    # note that the actual background will be different from what IDL spits out because the
-    # process of cleaning the data of rays and hot pixels produces ever so slightly different results, 
-    # but it's done this way because the background is constructed after cleanup in the IDL pipeline.
+    # initial guess
+    bg_m_guess, bg_b_guess, bg_lamc_guess = params
 
-    if calibration=="new":
-        back_below = np.sum(data_cube[:, bg_inds[0]:bg_inds[1]+1, :], axis=1) / (bg_inds[1] - bg_inds[0] + 1)
-        back_above = np.sum(data_cube[:, bg_inds[2]:bg_inds[3]+1, :], axis=1) / (bg_inds[3] - bg_inds[2] + 1)
+    # "model"
+    DN_model = background(wavelength_data, bg_lamc_guess, bg_b_guess, bg_m_guess, bg_m2_guess)
 
-        backgrounds_newcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
+    # "badness"
+    badness = np.sum((DN_model - DN_data)**2 / 1)  # No uncertainty on this since it's not a real fit.
 
-        # Set up stuff for median filter
-        bg_newcal_median_filtered = np.zeros_like(backgrounds_newcal) # equivalent to IDL's "med_bk"
-        margin = 7 # for a total window size of 15. 
-
-        for i in range(n_int):
-            backgrounds_newcal[i, :] = (back_above[i, :] + back_below[i, :]) / 2. # equivalent to IDL "avg_bk" .average the above-slit and below-slit slices
-
-            # Now do the sliding median window (width 15)
-            bg_newcal_median_filtered[i, 0:margin] = backgrounds_newcal[i, 0:margin] # IDL ignores the first margin points and doesn't change them.
-            bg_newcal_median_filtered[i, -margin:] = backgrounds_newcal[i, -margin:] # It also ignores the last margin points.
-            for k in range(margin, len(backgrounds_newcal[i, :])-margin):
-                # The window size is 15 in IDL, so this usage of median should return the same values.
-                # There is only a discrepancy if the window size is even, since /EVEN is not set in the IDL pipeline.
-                bg_newcal_median_filtered[i, k] = np.median(backgrounds_newcal[i, k-margin:k+margin+1])
-            bg_newcal_median_filtered[i, :] *= (binning_param_dict['aprow2'].values[0] - binning_param_dict['aprow1'].values[0] + 1)
-
-        return bg_newcal_median_filtered
-
-    elif calibration=="old":
-        # This one is currently not returning the right values, I think
-        Nbacks = bg_inds[1] - bg_inds[0] + 1 + bg_inds[3] - bg_inds[2] + 1 # these correspond to yback1 ...yback 4 in IDL
-        backgrounds_oldcal = np.zeros((data_cube.shape[0], data_cube.shape[2]))
-        for i in range(n_int):
-            back_below_i = np.sum(data_cube[i, bg_inds[0]:bg_inds[1]+1, :], axis=0)  # Yes it really is axis 0 not 1
-            back_above_i = np.sum(data_cube[i, bg_inds[2]:bg_inds[3]+1, :], axis=0) 
-            backgrounds_oldcal[i, :] = ( back_below_i + back_above_i ) / Nbacks 
-
-        return backgrounds_oldcal
+    return badness
 
 
+# LSF loading and interpolation
 def interpolate_CLSF(lambda_c, binedges, CLSF):
     """
     Given a particular lambda_c, this function computes the CLSF as a
@@ -2733,6 +3222,7 @@ def load_lsf(calibration="new"):
     return lsfx_nm, lsf_f
 
 
+# Functions that help flatten arrays
 def get_wavelengths(light_fits):
     """
     Retrieves wavelengths for use from a given light file. This is done in more than one place,
@@ -2845,71 +3335,35 @@ def add_in_quadrature(uncertainties, light_fits, coadded=False, integration=None
     return total_uncert
 
 
-def line_fit_initial_guess(light_fits, wavelengths, spectra, coadded=False,
-                           H_a=20, H_b=170, D_a=80, D_b=100):
+# Functions to help fit the IPH
+
+def check_whether_IPH_fittable(mrh_alts, integration, z_min=100):
     """
+    Computes the mean minimum ray height altitude in an observation at the
+    center of the pixel, and uses this to determine if the IPH is likely to be 
+    contaminating the observation. 
+
     Parameters
     ----------
-    spectrum : array
-                Data in DN/sec/px 
-    a, b : int
-            indices in the spectrum over which to integrate to get an initial guess 
-            at total flux of the line.
+    mrh_alts : array
+               average MRH altitudes across the slit in each integration.
+    integration : int
+                  Integration (frame) to select
+    z_min : int
+            Altitude in integers below which we consider there to be no IPH
+            contamination by default
+
     Returns
     ----------
-    Vector of initial guess values
+    fit_IPH_component: array of bools or bool
+                       Whether IPH can be expected to be present in the data.
+                       Shape is (n_int,) where n_int is number of integrations 
+                       in the observation, unless integration is passed, in 
+                       which case it's just a single bool.
     """
-    num_params = len(_fit_parameter_names)
-
-    # Total flux of H and D in DN, initial guess: get by integrating around the line. Note that the H bounds as defined
-    # in a parent function overlap the D, but that's okay for an initial guess.
-    rows = get_n_int(light_fits) if coadded is False else 1
-    guesses = np.zeros((rows, num_params))
-    # Line center of IPH is predicted based on the obs geometry;
-    # length is number of integrations.
-    lambda_IPH_lya_guess = 121.567 + predict_IPH_linecenter(light_fits)
-    if coadded:
-        lambda_IPH_lya_guess = [np.mean(lambda_IPH_lya_guess)]
-
-    #Account for files where H may not be located at usual location
-    for i in range(rows):
-        spectrum = spectra[i, :]
-        if (np.argmax(spectrum) < H_a) or (np.argmax(spectrum) > H_b):
-            H_a = max(0, np.argmax(spectrum) - 50) # Ensure we don't wrap into a negative index.
-            H_b = min(np.argmax(spectrum) + 50, len(spectrum))
-            D_a = max(0, np.argmax(spectrum) - 30)
-            D_b = min(np.argmax(spectrum) - 10, len(spectrum))
-            # Now control for either of these both somehow being accidentally set to 0
-            if D_a == D_b == 0:
-                D_b += 20
-
-        # Now integrate to get an initial area guess
-        DN_H_guess = sp.integrate.simpson(spectrum[H_a:H_b])
-        DN_D_guess = sp.integrate.simpson(spectrum[D_a:D_b])
-
-        # central wavelength initial guess - go with the canonical value. There is no need to return a guess for D
-        # because it will be calculated as a constant offset from the H central line, per advice from Mike Stevens.
-        lambda_H_lya_guess = 121.567
-        # Account for cases with huge wavelength shift
-        if np.abs(wavelengths[np.argmax(spectrum)]-121.567) > 0.05:
-            lambda_H_lya_guess = wavelengths[np.argmax(spectrum)]
-
-        # Now do IPH.
-        DN_IPH_guess = DN_H_guess * 0.05 # wild guess
-        width_IPH_guess = (IPH_maxw + IPH_minw) / 2
-
-        # Background initial guess: assume a form y = mx + b. If m = 0, assume a constant offset.
-        bg_b_guess = np.median(spectrum)
-        bg_m_guess = 0
-        bg_m2_guess = 0
-        # bg_m3_guess = 0
-
-        guesses[i, :] = [DN_H_guess, DN_D_guess, DN_IPH_guess,
-                         lambda_H_lya_guess, lambda_IPH_lya_guess[i],
-                         width_IPH_guess,
-                         bg_b_guess, bg_m_guess, bg_m2_guess]  # , bg_m3_guess]
-
-    return guesses
+    integration_mrh_alt = mrh_alts[integration]
+    fit_IPH_component = (integration_mrh_alt > z_min)
+    return fit_IPH_component
 
 
 def predict_IPH_linecenter(light_fits):
@@ -2971,8 +3425,7 @@ def predict_IPH_linecenter(light_fits):
     return delta_lambda_iph # Line shift per integration
     
 
-# Cosmic ray and hot pixel removal -------------------------------------------
-
+# Cosmic ray and hot pixel removal --------------------------------------------
 
 def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"): 
     """
@@ -3006,7 +3459,8 @@ def remove_cosmic_rays(data, Ns=2, std_or_mad="mad"):
     medhighval = np.min(np.ma.masked_array(data, mask=(data<medval)), axis=0).data
 
     if std_or_mad=="std":
-        sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. This sets the normalization constant of the variance to 1/(N-1
+        sigma = np.std(data, axis=0, ddof=1) # ddof = 1 is required to match the result of this calculation from IDL. 
+                                             # This sets the normalization constant of the variance to 1/(N-1)
     else:
         sigma = sp.stats.median_abs_deviation(data, axis=0)
     

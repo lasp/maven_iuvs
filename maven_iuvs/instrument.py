@@ -52,6 +52,10 @@ detector."""
 
 ech_Lya_slit_start = 346  # Starting pixel of slit in echelle mode for H/D Ly alpha
 
+ech_best_MRH_pixel = 485 
+"""The location of the row most-accurately representing the MRH altitudes 
+across the aperture center (to be used by all emissions)"""
+
 ech_Lya_slit_end = 535  # Ending pixel of slit in echelle mode for H/D Ly alpha
 
 ech_LSF_unit = 0.35540982 # LSF units: kR / ph / s
