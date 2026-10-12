@@ -41,7 +41,12 @@ def detector_image(myfits,
         integration = 0
     if data is None:
         try:
-            data = myfits['detector_dark_subtracted'].data[integration]
+            # Handle case where NAXIS3 (integration dimension) is missing in
+            # files with only one integration.
+            if myfits['engineering'].data['number'][0] == 1:
+                data = myfits['detector_dark_subtracted'].data
+            else:
+                data = myfits['detector_dark_subtracted'].data[integration]
         except KeyError:
             data = myfits['Primary'].data[integration]
 

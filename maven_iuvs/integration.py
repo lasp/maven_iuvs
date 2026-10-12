@@ -2,11 +2,13 @@ import os
 import warnings
 import numpy as np
 from scipy.interpolate import interp1d
+from scipy.optimize import curve_fit
 from astropy.io import fits
+from copy import deepcopy
 from maven_iuvs import anc_dir
 from maven_iuvs.instrument import calculate_calibration_curve
 from maven_iuvs.graphics import LineFitPlot
-from maven_iuvs.miscellaneous import get_n_int
+from maven_iuvs.miscellaneous import get_n_int, iuvs_data_product_level_from_fname
 from maven_iuvs.binning import get_binning_scheme, pix_to_bin
 
 def get_lsf_from_bins(spatial_binning):
@@ -209,6 +211,19 @@ def fit_line(myfits, wavelength,
         If plot = True, the figure object of the plot of line fits.
     """
 
+    def force3D(a, new_permuted_axes_order=[2, 0, 1]):
+        """
+        Force an array 'a' into 3D and make the last dimension the 0th
+        dimension (accommodating some IUVS standard resolution data cubes
+        which have the integration dimension collapsed).
+        
+        Returns original array if it was already the right dimension.
+        """
+        a3d = np.atleast_3d(a)
+        if a.shape!=a3d.shape:
+            a = deepcopy(np.permute_dims(a3d, axes=new_permuted_axes_order))
+        return a
+
     if not isinstance(myfits, fits.hdu.hdulist.HDUList):
         myfits = fits.open(myfits)
 
@@ -232,9 +247,12 @@ def fit_line(myfits, wavelength,
 
         flatfield = get_lya_flatfield(myfits)
 
-    filedims = myfits['Primary'].shape
-    n_int = filedims[0]
-    n_spa = filedims[1]
+    # Get file dimensions rigorously from the recorded values in the HDUs,
+    # rather than the primary shape. Some standard res l1b files have 
+    # the integration dimension completely removed if only 1 integration was 
+    # taken, which changes which dimension number matches spatial and spectral.
+    n_int = myfits['engineering'].data['NUMBER'][0]
+    n_spa = get_binning_scheme(myfits)['nspa']
 
     lsf = get_lsf_interp(myfits)
 
@@ -257,9 +275,19 @@ def fit_line(myfits, wavelength,
             waves = myfits['Observation'].data['WAVELENGTH'][0, ispa]
 
             if datalevel=="l1b":
-                DN = myfits['detector_dark_subtracted'].data[iint, ispa]
-                DN_unc = myfits['Random_dn_unc'].data[iint, ispa] 
+                # Control for a problem where some files have the integrations
+                # dimension completely removed if n_int = 1
+                DNdata = force3D(myfits['detector_dark_subtracted'].data,
+                                  new_permuted_axes_order=[2, 0, 1])
+                DN = DNdata[iint, ispa]
+
+                DN_unc_data = force3D(myfits['Random_dn_unc'].data,
+                                       new_permuted_axes_order=[2, 0, 1])
+                    
+                DN_unc = DN_unc_data[iint, ispa] 
             elif datalevel=="l1a":
+                # NOTE: May need to introduce 3D fix above here as well. 
+                # Not tested though.
                 DN = myfits['Primary'].data[iint, ispa] 
                 DN_unc = np.empty_like(DN) 
                 DN_unc[:] = np.nan
@@ -267,9 +295,8 @@ def fit_line(myfits, wavelength,
             if correct_muv:
                 muv = muv_contamination_templates[ispa]
             else:
-                muv = np.empty_like(DN)
-                muv[:] = np.nan
-
+                muv = np.full_like(DN, np.nan)
+        
             # subset the data to be fitted to the vicinity of the spectral line
             d_lambda = 2.5
             fitwaves, fitDN, fitDN_unc, fitmuv = \
@@ -312,8 +339,6 @@ def fit_line(myfits, wavelength,
 
             # do the fit
             try:
-                from scipy.optimize import curve_fit
-
                 # Reasonable bounds for the fit parameters
                 parms_bounds = ([     0,  0.0, wavelength-d_lambda, -np.inf, -np.inf],
                                 [np.inf, 10.0, wavelength+d_lambda,  np.inf,  np.inf])
